@@ -10,16 +10,17 @@ import { requireAuth } from "../middleware/auth.js";
 import { safeHandler } from "../middleware/safeHandler.js";
 import { pool } from "../db.js";
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js";
+import { portalUrl, serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 const router = Router();
 const AUTH_BASE = "https://login.microsoftonline.com";
 const SCOPE = "User.Read Mail.ReadWrite Mail.Read.Shared Mail.Send Mail.Send.Shared Calendars.ReadWrite Calendars.Read.Shared Tasks.ReadWrite Contacts.ReadWrite MailboxSettings.ReadWrite People.Read Presence.Read Files.ReadWrite offline_access"; // BF_SERVER_BLOCK_v_O365_SCOPES_WAVE2_v1
 
 function redirectUri(): string {
-  return (process.env.O365_OAUTH_REDIRECT_URI || "https://server.boreal.financial/api/o365-oauth/callback").trim();
+  return (process.env.O365_OAUTH_REDIRECT_URI || serverUrl() + "/api/o365-oauth/callback").trim();
 }
 function returnUrl(suffix: string): string {
-  const base = (process.env.O365_OAUTH_RETURN_URL || "https://staff.boreal.financial/communications").trim();
+  const base = (process.env.O365_OAUTH_RETURN_URL || portalUrl() + "/communications").trim();
   return base + (base.includes("?") ? "&" : "?") + suffix;
 }
 

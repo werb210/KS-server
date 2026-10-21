@@ -72,11 +72,11 @@ describe("testSendVars", () => {
   });
 
   it("keeps the silo filter on both lookups", async () => {
-    await emailTest(null, "BI");
-    await request(app).post("/api/marketing/sms/send").set("Authorization", `Bearer ${token}`).set("X-Silo", "BI").send({ body: "x", test: "+14035550101" });
+    await emailTest(null, "BF");
+    await request(app).post("/api/marketing/sms/send").set("Authorization", `Bearer ${token}`).set("X-Silo", "BF").send({ body: "x", test: "+14035550101" });
     for (const [sql, params] of callsMatching(queryMock, LOOKUP)) {
       expect(String(sql)).toContain("WHERE c.silo = $1");
-      expect((params as unknown[])[0]).toBe("BI");
+      expect((params as unknown[])[0]).toBe("BF");
     }
   });
 });

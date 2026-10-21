@@ -122,12 +122,12 @@ describe("standalone Watch server contract", () => {
     const req = (silo: string, silos: string[]) => ({ user: { silo, silos } }) as any;
     expect(allowedLine(req("BF", []), "bf")).toBe("BF");
     expect(allowedLine(req("BF", []), "BI")).toBeNull();
-    expect(allowedLine(req("BF", ["BI"]), "BI")).toBe("BI");
+    expect(allowedLine(req("BF", ["BI"]), "BI")).toBeNull(); // KS_SERVER_v1_NO_BI - BF is the only line
     expect(allowedLine(req("BF", ["BI"]), "XX")).toBeNull();
 
     const auth = { Authorization: `Bearer ${watchToken()}` };
     const forbidden = await request(app()).get("/api/watch/contacts?line=BI&q=ab").set(auth);
-    expect(forbidden.status).toBe(403);
+    expect(forbidden.status).toBe(400); // KS_SERVER_v1_NO_BI - not a line in Keystone
     expect(callsMatching(queryMock, /FROM contacts/)).toHaveLength(0);
 
     const res = await request(app()).get("/api/watch/contacts?line=BF&q=ab&limit=999").set(auth);

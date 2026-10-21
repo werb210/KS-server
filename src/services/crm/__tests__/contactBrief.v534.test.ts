@@ -88,10 +88,10 @@ describe("v534 wiring", () => {
     loadCrmTimeline.mockResolvedValue([{ kind: "note", ts: "2026-09-20T10:00:00Z", title: "Called back", body: "" }]);
     query.mockResolvedValue({ rows: [] });
     const res = await request(await crmApp()).get("/api/crm/contacts/c1/ai-summary")
-      .set("Authorization", `Bearer ${staffToken()}`).set("X-Silo", "BI");
+      .set("Authorization", `Bearer ${staffToken()}`).set("X-Silo", "BF");
     expect(res.status).toBe(200);
     expect(JSON.stringify(res.body)).toContain("Roofing contractor in Laval");
-    expect(loadCrmTimeline).toHaveBeenCalledWith(true, "c1", "BI");
+    expect(loadCrmTimeline).toHaveBeenCalledWith(true, "c1", "BF");
     expect(askAI).toHaveBeenCalledTimes(1);
   });
 

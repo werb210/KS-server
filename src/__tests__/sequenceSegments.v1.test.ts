@@ -59,10 +59,10 @@ describe("sequence audience segments", () => {
   });
 
   it("is silo-scoped like every other segments endpoint", async () => {
-    await get("/api/marketing/segments", "BI");
+    await get("/api/marketing/segments", "BF");
     for (const [sql, params] of callsMatching(queryMock, CONTACT_QUERIES)) {
       expect(String(sql)).toContain("c.silo = $1");
-      expect(params).toEqual(["BI"]);
+      expect(params).toEqual(["BF"]);
     }
   });
 

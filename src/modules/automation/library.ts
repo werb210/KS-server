@@ -94,9 +94,9 @@ export function catalogStatic() {
 export type LibraryItem = { key: string; name: string; description: string; graph: Graph; settings: Settings; goal: Goal };
 
 const V1_SYSTEM = [
-  { key: "starter_funded", name: "Funded: thank you, referral ask, insurance", description: "The application moves to Accepted: thank the client, flag an Insurance (PGI) conversation, and 7 days later ask for a referral (with consent).",
+  { key: "starter_funded", name: "Funded: thank you and referral ask", description: "The application moves to Accepted: thank the client, and 7 days later ask for a referral (with consent).",
     trigger_type: "application.stage_changed", conditions: [{ field: "to_stage", op: "eq", value: "Accepted" }], reenroll: "never",
-    steps: [{ type: "notify_client", title: "Congratulations", body: "Congratulations {{first_name}} - your financing is complete. Thank you for choosing Boreal." }, { type: "create_task", title: "Discuss personal guarantee insurance (PGI) with {{full_name}}", taskType: "CALL", priority: "MEDIUM", dueHours: 48, assignTo: "owner" }, { type: "wait", amount: 7, unit: "days" }, { type: "send_sms", purpose: "marketing", body: "Hi {{first_name}}, glad we could help. If you know a business owner who needs financing, reply with their name - we look after referrals." }] },
+    steps: [{ type: "notify_client", title: "Congratulations", body: "Congratulations {{first_name}} - your financing is complete. Thank you for choosing Boreal." }, { type: "wait", amount: 7, unit: "days" }, { type: "send_sms", purpose: "marketing", body: "Hi {{first_name}}, glad we could help. If you know a business owner who needs financing, reply with their name - we look after referrals." }] },
   { key: "starter_missed_call", name: "Missed inbound call", description: "A client call is missed: create a callback task and text them that we will call back shortly.",
     trigger_type: "call.missed", conditions: [], reenroll: "always",
     steps: [{ type: "create_task", title: "Call back {{full_name}}", taskType: "CALL", priority: "HIGH", dueHours: 0, assignTo: "owner" }, { type: "send_sms", purpose: "transactional", body: "Sorry we missed your call - we will call you back shortly. - Boreal Financial" }] },

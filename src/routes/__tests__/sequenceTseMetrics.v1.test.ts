@@ -31,11 +31,11 @@ beforeEach(() => {
 
 describe("sequence email metrics from template_send_events (v1)", () => {
   it("emails_sent/opens/clicks come from template_send_events via step templates", async () => {
-    const r = await request(app).get("/api/marketing/sequences").set("Authorization", `Bearer ${token}`).set("X-Silo", "BI");
+    const r = await request(app).get("/api/marketing/sequences").set("Authorization", `Bearer ${token}`).set("X-Silo", "BF");
     expect(r.status).toBe(200);
     expect(r.body.data.items[0]).toMatchObject({ emails_sent: 1631, email_opens: 456, email_clicks: 30 });
     const [raw, params] = callsMatching(queryMock, LIST)[0] as [string, unknown[]];
-    expect(params).toEqual(["BI"]);
+    expect(params).toEqual(["BF"]);
     const sql = raw.replace(/\s+/g, " ");
     const ledger = "FROM template_send_events tse WHERE tse.channel='email' AND tse.silo=s.silo AND tse.template_id IN (SELECT st.template_id::text FROM marketing_sequence_steps st WHERE st.sequence_id=s.id AND st.template_id IS NOT NULL)";
     expect(sql).toContain(`(SELECT count(*)::int ${ledger}) AS emails_sent`);

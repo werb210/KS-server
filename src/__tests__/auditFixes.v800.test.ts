@@ -18,30 +18,7 @@ vi.mock("../db.js", () => ({
   },
 }));
 
-async function app() {
-  const { default: router } = await import("../routes/slf.js");
-  const a = express(); a.use("/api/slf", router); return a;
-}
 
-describe("SLF screen endpoints exist", () => {
-  it("stats", async () => {
-    const r = await request(await app()).get("/api/slf/stats");
-    expect(r.status).toBe(200);
-    expect(r.body.byStage[0].stage).toBe("review");
-    expect(r.body.recentSyncs).toEqual([]);
-  });
-  it("deals", async () => {
-    const r = await request(await app()).get("/api/slf/deals?limit=500");
-    expect(r.status).toBe(200);
-    expect(r.body[0].company_name).toBe("Acme");
-  });
-  it("deal detail", async () => {
-    const r = await request(await app()).get("/api/slf/deals/a1");
-    expect(r.status).toBe(200);
-    expect(r.body.request.id).toBe("a1");
-    expect(r.body.files[0].filename).toBe("x.pdf");
-  });
-});
 
 describe("1919 Owner's Position", () => {
   it("says Owner when no title is entered", () => {

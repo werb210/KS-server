@@ -1,5 +1,6 @@
 // BF_SERVER_BLOCK_v599 -- shared Twilio REST client + URL helpers
 import { createRequire } from "module";
+import { serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 const require = createRequire(import.meta.url);
 const twilioLib = require("twilio");
@@ -20,7 +21,7 @@ export function getCallerId(): string {
 }
 
 export function getBaseUrl(): string {
-  return process.env.PUBLIC_BASE_URL || "https://server.boreal.financial";
+  return process.env.PUBLIC_BASE_URL || serverUrl();
 }
 
 export default getTwilioClient;

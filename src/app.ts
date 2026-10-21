@@ -13,6 +13,7 @@ import { applySiloMiddleware, registerApiRouteMounts } from "./routes/routeRegis
 import { requireAuth } from "./middleware/auth.js";
 import { errorHandler } from "./middleware/errors.js";
 import { listRoutes } from "./debug/printRoutes.js";
+import { clientUrl, portalUrl, serverUrl, websiteUrl } from "./licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 export function createApp() {
   const app = express();
@@ -25,10 +26,9 @@ export function createApp() {
    * If unset, fallback to the default portal/local allowlist.
    */
   const defaultOrigins = [
-    "https://staff.boreal.financial",
-    "https://client.boreal.financial",
-    "https://boreal.financial",
-    "https://www.boreal.financial",
+    portalUrl(),
+    clientUrl(),
+    websiteUrl(),
     "http://localhost:3000",
     "http://localhost:5173",
   ];
@@ -79,11 +79,10 @@ export function createApp() {
         ],
         connectSrc: [
           "'self'",
-          "https://server.boreal.financial",
-          "wss://server.boreal.financial",
-          "https://staff.boreal.financial",
-          "https://client.boreal.financial",
-          "https://boreal.financial",
+          serverUrl(),
+          serverUrl().replace(/^http/, "ws"),
+          portalUrl(),
+          clientUrl(),
 
           // Twilio REST / signaling
           "https://voice-js.twilio.com",

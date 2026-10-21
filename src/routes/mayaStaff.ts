@@ -17,6 +17,7 @@ import { runPipelineQuery } from "../services/mayaPipelineQuery.js";
 import { retrieveContext } from "../modules/ai/knowledge.service.js";
 import { parseAndResolveMentions } from "../services/notes/mentions.js"; // BF_SERVER_MAYA_CRM_TOOLS_v1
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
+import { clientUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 const router = Router();
 
@@ -493,7 +494,7 @@ router.post(
       ? req.body.staff_user_id.trim()
       : typeof req.body?.user_id === "string" && req.body.user_id.trim() ? req.body.user_id.trim() : null;
     const siloRaw = typeof req.body?.silo === "string" ? req.body.silo : (req.header("x-silo") || "");
-    const silo = ["BF", "BI", "SLF"].includes(siloRaw.trim().toUpperCase()) ? siloRaw.trim().toUpperCase() : null;
+    const silo = ["BF"].includes(siloRaw.trim().toUpperCase()) ? siloRaw.trim().toUpperCase() : null;
     const approved = req.body?.approved === true;
     if (!body) return res.status(400).json({ ok: false, error: "body_required" });
     try {
@@ -757,111 +758,12 @@ router.post(
   }),
 );
 
-// BF_SERVER_MAYA_F_PGI_READINESS_v1
-// Read-only proxy: forwards a PGI document-status + carrier-readiness
-// request to BI-Server (the Insurance-silo data owner) and audits to
-// maya_audit. The agent only ever talks to BF-Server, so this keeps the
-// single-server contract while the real read happens in BI-Server's
-// /api/v1/bi/maya/staff/pgi-readiness endpoint. Accepts a BF application_id
-// (resolved to its linked bi_public_id) or a bi_public_id directly.
-const BI_SERVER_URL =
-  process.env.BI_SERVER_URL ||
-  "https://bi-server-cse0apamgkheb9d5.canadacentral-01.azurewebsites.net";
-
-// NOTE: BI-Server's Maya routes accept source 'maya-service' | 'agent'
-// only (NOT 'bf-server', which is reserved for the from-bf ingest routes).
-function mintBiMayaServiceJwt(): string {
-  return signServiceToken("bi-server", { source: "maya-service" }); // BF_SERVER_v789_SERVICE_TOKENS
-}
-
-router.post(
-  "/staff/pgi-readiness",
-  safeHandler(async (req: Request, res: Response) => {
-    if (!verifyMayaService(req)) {
-      return res.status(401).json({ ok: false, error: "service_jwt_required" });
-    }
-    const rawBiPublicId = typeof req.body?.bi_public_id === "string" ? req.body.bi_public_id.trim() : "";
-    const appId = typeof req.body?.application_id === "string" ? req.body.application_id.trim() : "";
-    if (!rawBiPublicId && !appId) {
-      await audit({ audience: "staff", tool: "pgi.readiness", args: {}, ok: false, summary: "identifier required", errorCode: "validation_error" });
-      return res.status(400).json({ ok: false, error: "application_id_or_bi_public_id_required" });
-    }
-    const userId = typeof req.body?.user_id === "string" ? req.body.user_id : null;
-    const sessionId = typeof req.body?.session_id === "string" ? req.body.session_id : null;
-    try {
-      // Resolve the BI public_id. Priority: explicit bi_public_id → the
-      // bi_public_id linked to a BF application → fall through to treating
-      // application_id as a BI identifier (staff working the BI silo direct).
-      let biPublicId = rawBiPublicId;
-      let bfApplicationId: string | null = null;
-      let bfAppExists = false;
-      if (!biPublicId && appId) {
-        const r = await pool.query<{ bi_public_id: string | null }>(
-          `SELECT bi_public_id FROM applications WHERE id::text = $1 LIMIT 1`,
-          [appId],
-        );
-        if (r.rows[0]) {
-          bfAppExists = true;
-          bfApplicationId = appId;
-          biPublicId = r.rows[0].bi_public_id ?? "";
-        }
-      }
-
-      // A known BF application that never opted into PGI has no BI row to read.
-      if (bfAppExists && !biPublicId) {
-        await audit({ audience: "staff", tool: "pgi.readiness", args: { application_id: appId }, ok: true, summary: "no_bi_link", userId, sessionId });
-        return res.json({
-          ok: true,
-          result: {
-            applicationId: appId,
-            biLinked: false,
-            readOnly: true,
-            blockers: ["This application has no linked PGI / Boreal Insurance submission."],
-          },
-        });
-      }
-
-      const identForBi = biPublicId || appId;
-      const url = `${BI_SERVER_URL.replace(/\/+$/, "")}/api/v1/bi/maya/staff/pgi-readiness`;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-      let upstream: any = null;
-      let upstreamStatus = 0;
-      try {
-        const resp = await fetch(url, {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${mintBiMayaServiceJwt()}` },
-          body: JSON.stringify({ public_id: identForBi }),
-          signal: controller.signal,
-        });
-        upstreamStatus = resp.status;
-        upstream = await resp.json().catch(() => null);
-      } finally {
-        clearTimeout(timeout);
-      }
-
-      if (upstreamStatus < 200 || upstreamStatus >= 300 || !upstream?.ok) {
-        const code = upstream?.error ?? `bi_status_${upstreamStatus || "network"}`;
-        await audit({ audience: "staff", tool: "pgi.readiness", args: { ident: identForBi }, ok: false, summary: String(code), errorCode: "bi_upstream_error", userId, sessionId });
-        return res.status(upstreamStatus === 404 ? 404 : 502).json({ ok: false, error: code });
-      }
-
-      const result = { ...upstream.result, biLinked: true, bfApplicationId };
-      const missingCount = Array.isArray(result?.missing) ? result.missing.length : 0;
-      await audit({ audience: "staff", tool: "pgi.readiness", args: { ident: identForBi }, ok: true, summary: `missing=${missingCount} ready=${result?.carrier?.readyForCarrier}`, userId, sessionId });
-      return res.json({ ok: true, result });
-    } catch (e: any) {
-      await audit({ audience: "staff", tool: "pgi.readiness", args: {}, ok: false, summary: e?.message ?? "error", errorCode: "pgi_readiness_exception", userId, sessionId });
-      logError("maya_pgi_readiness_failed", { code: "maya_pgi_readiness_failed", error: e?.message ?? "unknown" });
-      return res.status(500).json({ ok: false, error: "pgi_readiness_failed" });
-    }
-  }),
-);
+// KS_SERVER_v1_NO_BI - Maya's PGI readiness lookup (Boreal Insurance) is not in Keystone.
 
 // BF_SERVER_v789_MAYA_SUMMARY_PORTAL - the client app link every resume nudge sends (notifyContact,
 // automation application_link, staff-message SMS): CLIENT_URL + /application/:id.
 export function clientApplicationUrl(appId: string): string {
-  const base = String(process.env.CLIENT_URL ?? "https://client.boreal.financial").replace(/\/$/, "");
+  const base = String(process.env.CLIENT_URL ?? clientUrl()).replace(/\/$/, "");
   return `${base}/application/${encodeURIComponent(String(appId))}`;
 }
 
@@ -1580,7 +1482,7 @@ router.post(
     // that pass its CHECKs. assignee_user_id is NOT NULL: the staff user Maya acts for, else the
     // contact's owner; with neither the task cannot be created.
     const siloRaw = (biStr(req.body?.silo) ?? "BF").toUpperCase();
-    const silo = siloRaw === "BI" || siloRaw === "SLF" ? siloRaw : "BF";
+    void siloRaw; const silo = "BF"; // KS_SERVER_v1_NO_BI
     const dueAt = biStr(req.body?.due_at);
     const priorityRaw = (biStr(req.body?.priority) ?? "none").toUpperCase();
     const priority = ["LOW", "MEDIUM", "HIGH"].includes(priorityRaw) ? priorityRaw : "NONE";

@@ -80,30 +80,3 @@ export async function creditReferralConversion(params: {
   );
   return result.rows[0] ?? null;
 }
-
-export async function creditBiReferralConversion(params: {
-  refCode: string;
-  externalApplicationId: string;
-  dealAmount: number | null;
-}): Promise<{ id: string } | null> {
-  const result = await pool.query<{ id: string }>(
-    `WITH ref AS (
-       SELECT id::text AS contact_id, referrer_id::text AS referrer_id, ref_code
-         FROM contacts
-        WHERE ref_code = $1
-        LIMIT 1
-     )
-     INSERT INTO referral_conversions
-       (contact_id, referrer_id, ref_code, source_silo, external_application_id,
-        conversion_rate, deal_amount, credit_amount, status, credited_at, created_at, updated_at)
-     SELECT contact_id::uuid, referrer_id::uuid, ref_code, 'BI', $2::text,
-            $4::numeric, $3::numeric, COALESCE($3::numeric, 0) * ($4::numeric / 100), 'credited', now(), now(), now()
-       FROM ref
-      WHERE referrer_id IS NOT NULL
-     ON CONFLICT (source_silo, external_application_id) WHERE external_application_id IS NOT NULL DO UPDATE
-       SET updated_at = now()
-     RETURNING id::text AS id`,
-    [params.refCode, params.externalApplicationId, params.dealAmount, REFERRAL_CONVERSION_RATE],
-  );
-  return result.rows[0] ?? null;
-}

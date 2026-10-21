@@ -1,3 +1,4 @@
+import { clientUrl, hostOf } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 // BF_SERVER_FEE_NOTICE_DELIVERY_v740
 // Tells the applicant there is a fee agreement to sign. It used to be push OR text: when
 // Apple accepted a push the text was skipped, even though an accepted push is not a shown
@@ -52,7 +53,7 @@ export async function deliverFeeNotice(input: { applicationId: string; phone: st
       out.errors.push("email not configured on the server (SendGrid)");
     } else {
       const html = "<p>" + hi + "</p><p>Boreal Financial has a fee agreement (2% on funding) for you to review and sign.</p>"
-        + "<p>Sign in at <a href='https://client.boreal.financial'>client.boreal.financial</a> with your mobile number, then open <b>Sign your fee agreement</b>.</p>"
+        + "<p>Sign in at <a href='" + clientUrl() + "'>" + hostOf(clientUrl()) + "</a> with your mobile number, then open <b>Sign your fee agreement</b>.</p>"
         + "<p>Questions? Call (866) 631-8939.</p>";
       const r = await deps.email(input.email, "Your Boreal Financial fee agreement is ready to sign", html);
       if (r.ok) { out.email = true; out.emailTo = input.email; }

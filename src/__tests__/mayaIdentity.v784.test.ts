@@ -13,7 +13,7 @@ vi.mock("../db.js", async (orig) => {
   const query = async (sql: string, params?: unknown[]) => {
     if (/FROM users WHERE id::text = \$1/.test(sql)) {
       if (params?.[0] === STAFF_ID) {
-        return { rows: [{ id: STAFF_ID, first_name: "Sam", last_name: "Staff", email: "sam@boreal.test", role: "Staff", silo: "BF", silos: ["BF", "BI"] }] };
+        return { rows: [{ id: STAFF_ID, first_name: "Sam", last_name: "Staff", email: "sam@boreal.test", role: "Staff", silo: "BF", silos: ["BF"] }] };
       }
       return { rows: [] };
     }
@@ -90,12 +90,12 @@ describe("v784 Maya identity from the verified token only", () => {
   });
 
   it("staff token -> staff identity loaded from users, body staff ignored", async () => {
-    await request(app).post("/api/maya/chat").set("Authorization", staffTok).set("X-Silo", "BI").send({ message: "hi", staff: { id: "evil", role: "Admin" } });
+    await request(app).post("/api/maya/chat").set("Authorization", staffTok).set("X-Silo", "BF").send({ message: "hi", staff: { id: "evil", role: "Admin" } });
     const c = lastCall();
     expect(c.url).toBe("http://maya.test/api/maya/chat");
     expect(c.headers["X-Maya-Audience"]).toBe("staff");
     expect(c.ctx.staff).toEqual({ id: STAFF_ID, name: "Sam Staff", email: "sam@boreal.test", role: "Staff" });
-    expect(c.ctx.silo).toBe("BI");
+    expect(c.ctx.silo).toBe("BF");
     expect(c.body.staff).toBeUndefined();
   });
 

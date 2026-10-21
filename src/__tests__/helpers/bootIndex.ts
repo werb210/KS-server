@@ -40,7 +40,6 @@ export const WORKER_MODULES: Array<[string, string]> = [
   ["workers/bookingsWorker.js", "startBookingsWorker"],
   ["workers/teamReminderWorker.js", "startTeamReminderWorker"],
   ["workers/teamsTranscriptWorker.js", "startTeamsTranscriptWorker"],
-  ["workers/biOutreachEmailReplyWorker.js", "startBiOutreachEmailReplyWorker"],
   ["workers/graphSubscriptionWorker.js", "startGraphSubscriptionWorker"],
   ["workers/scheduledEmailWorker.js", "startScheduledEmailWorker"],
   ["workers/smsCascadeWorker.js", "startSmsCascadeWorker"],
@@ -51,7 +50,6 @@ export const WORKER_MODULES: Array<[string, string]> = [
   ["workers/adConversionWorker.js", "startAdConversionWorker"],
   ["workers/todoReconcileWorker.js", "startTodoReconcileWorker"],
   ["workers/taskRemindersWorker.js", "startTaskRemindersWorker"],
-  ["services/biHandoffRetry.js", "startBiHandoffRetryWorker"],
   ["workers/fxRateWorker.js", "startFxRateWorker"],
   ["workers/pipelineSnapshotWorker.js", "startPipelineSnapshotWorker"],
   ["workers/lenderBounceWorker.js", "startLenderBounceWorker"],
@@ -196,7 +194,6 @@ export async function bootIndex(opts: BootOptions = {}): Promise<Boot> {
   doMock("signnow/ensureWebhookSubscription.js", () => ({ ensureSignnowWebhook: stubs.ensureSignnowWebhook }));
   doMock("workers/claim.js", () => ({ closeWorkerLocks: stubs.closeWorkerLocks }));
   doMock("lib/netSockets.js", () => ({ startSocketReport: () => undefined }));
-  doMock("services/biDocMirror.js", () => ({ backfillPgiMirrors: stubs.backfillPgiMirrors }));
 
   for (const [rel, name] of WORKER_MODULES) {
     const fn = vi.fn((...args: unknown[]) => {
@@ -211,20 +208,8 @@ export async function bootIndex(opts: BootOptions = {}): Promise<Boot> {
       if (name === "startGraphSubscriptionWorker") return 0;
       return { stop: () => { events.push(`stop:${name}`); } };
     });
-    if (rel === "services/biHandoffRetry.js") continue; // mocked together below
     doMock(rel, () => ({ [name]: fn }));
     stubs[name] = fn;
-  }
-  {
-    const name = "startBiHandoffRetryWorker";
-    const fn = vi.fn((...args: unknown[]) => {
-      workerCalls.set(name, [...(workerCalls.get(name) ?? []), args]);
-      if (fail.has(name)) { events.push(`fail:${name}`); throw new Error(`${name} exploded`); }
-      events.push(`start:${name}`);
-      return { stop: () => { events.push(`stop:${name}`); } };
-    });
-    stubs[name] = fn;
-    doMock("services/biHandoffRetry.js", () => ({ [name]: fn }));
   }
 
   for (const [k, v] of Object.entries(opts.env ?? {})) {

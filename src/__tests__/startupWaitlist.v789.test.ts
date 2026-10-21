@@ -23,7 +23,7 @@ const ADMIN_ID = "00000000-0000-0000-0000-0000000000a1";
 const CONTACT_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const CONTACT_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
-const userRow = { rows: [{ id: ADMIN_ID, email: null, role: "Admin", silo: "BF", silos: ["BF", "BI"] }] };
+const userRow = { rows: [{ id: ADMIN_ID, email: null, role: "Admin", silo: "BF", silos: ["BF"] }] };
 
 function token(): string {
   return jwt.sign({ id: ADMIN_ID, role: "Admin", capabilities: ["crm:read", "crm:write"] }, SECRET, { algorithm: "HS256" });
@@ -112,17 +112,17 @@ describe("POST /api/crm/startup-waitlist (v789)", () => {
       [/insert into contacts/i, { rows: [{ id: CONTACT_B }] }],
     ]));
     const app = await buildApp();
-    const res = await post(app, { name: "Bea Lead", email: "bea@example.com" }, "BI");
+    const res = await post(app, { name: "Bea Lead", email: "bea@example.com" }, "BF");
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ ok: true, id: CONTACT_B, created: true });
 
     const lookup = callsMatching(queryMock, /from contacts\s+where silo = \$3/);
     expect(lookup).toHaveLength(1);
-    expect((lookup[0][1] as unknown[])[2]).toBe("BI");
+    expect((lookup[0][1] as unknown[])[2]).toBe("BF");
     const ins = callsMatching(queryMock, /insert into contacts/i);
-    expect((ins[0][1] as unknown[])[5]).toBe("BI");
+    expect((ins[0][1] as unknown[])[5]).toBe("BF");
     const tag = callsMatching(queryMock, /SET tags = /);
     expect(String(tag[0][0])).toContain("WHERE id = $1 AND silo = $4");
-    expect((tag[0][1] as unknown[])[3]).toBe("BI");
+    expect((tag[0][1] as unknown[])[3]).toBe("BF");
   });
 });

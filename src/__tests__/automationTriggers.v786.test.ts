@@ -75,11 +75,6 @@ vi.mock("../modules/applications/processingStage.service.js", async (importOrigi
   ...(await importOriginal<typeof import("../modules/applications/processingStage.service.js")>()),
   setProcessingStage: vi.fn(async () => undefined),
 }));
-vi.mock("../services/biApplicantThread.js", () => ({
-  cleanAttachments: () => [],
-  biSendForPhone: vi.fn(async () => ({ id: "msg-bi" })),
-  biContactForPhone: h.biContactForPhone,
-}));
 vi.mock("../services/team/teamPhaseC.js", () => ({ postTeamAlert: vi.fn(async () => undefined) }));
 
 import { loadCrmTimeline } from "../routes/crm/timeline.js";
@@ -168,10 +163,6 @@ describe("trigger emitters", () => {
     await waitForEmit({ trigger: "message.inbound", applicationId: E.IDS.app, data: { channel: "client_portal" } });
   }, 60_000);
 
-  it("message.inbound (BI app)", async () => {
-    expect((await E.biApplicantMessage(h.q)).status).toBe(201);
-    await waitForEmit({ trigger: "message.inbound", silo: "BI", contactId: "ct-bi", data: { channel: "client_portal" } });
-  });
 
   it("message.inbound (O365 mail)", async () => {
     h.graphFetch.mockResolvedValue(new Response(JSON.stringify(E.MAIL_REPLY_GRAPH_MESSAGES), { status: 200 }));

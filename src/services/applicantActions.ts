@@ -215,11 +215,7 @@ async function promptItems(applicationId: string, submittedFormTypes: string[], 
   );
   const rows = prompts.rows ?? [];
   const pgiUrl = rows.find((r) => r.cta_label === PGI_PROMPT_LABEL && /^https?:\/\//i.test(String(r.cta_action ?? "")))?.cta_action ?? null;
-  if (pgiUrl && (await termSheetSigned(applicationId))) {
-    const { pgiDone, pgiStageFor } = await import("./pgiStage.js");
-    const item: ActionItem = { key: "pgi", kind: "action", label: "Complete your Personal Guarantee Insurance application", action: pgiUrl, urgent: true };
-    if (pgiDone(await pgiStageFor(applicationId))) completed.push(item); else outstanding.push(item);
-  }
+  void pgiUrl; void termSheetSigned; // KS_SERVER_v1_NO_BI - Keystone has no PGI to-do.
   // BF_SERVER_SBA_FORMS_TODO_v757 - skipped when the forms are already listed one by one.
   if (!sbaListed && rows.some((r) => r.cta_action === "sba_forms" || r.cta_action === "form:sba_forms")) {
     const { resolveSbaOwners } = await import("../signnow/sba/sbaOwners.js");

@@ -1,6 +1,6 @@
 // BF_SERVER_REPORTS_SECTION_v714 - report catalog and role access rules.
 export type ReportGroup = "money" | "marketing" | "operations";
-export type ReportDef = { key: string; title: string; silo: "BF" | "BI" | "SLF"; group: ReportGroup; size: "half" | "full"; source: string; description: string };
+export type ReportDef = { key: string; title: string; silo: "BF"; group: ReportGroup; size: "half" | "full"; source: string; description: string };
 
 export const REPORTS: ReportDef[] = [
   // BF_SERVER_DASHBOARD_BOARD_v730 - the standard Dashboard sections, as cards a person can
@@ -40,7 +40,6 @@ export const REPORTS: ReportDef[] = [
   { key: "pipeline_snapshot", title: "Pipeline snapshot", silo: "BF", group: "operations", size: "full", source: "reports", description: "What the open pipeline looked like on a past day, next to today." },
   { key: "issues_report", title: "Issues", silo: "BF", group: "operations", size: "full", source: "reports", description: "Issues opened and resolved per month, time to resolve, and what is open now." },
   { key: "custom_report", title: "Custom report", silo: "BF", group: "operations", size: "full", source: "reports", description: "Pick a record type, how to group it and what to count." },
-  { key: "bi_insurance", title: "Insurance reports", silo: "BI", group: "operations", size: "full", source: "portal", description: "Referrals by referrer, carrier turnaround and premium by month (from BI-Server)." }, // BF_SERVER_REPORTS15_18_v786
   { key: "commission_by_month", title: "Commission by month", silo: "BF", group: "money", size: "half", source: "reports", description: "Funded amount and estimated commission per month." },
   // BF_SERVER_REPORTS_BATCH4_v722
   { key: "decline_reasons", title: "Decline reasons", silo: "BF", group: "operations", size: "full", source: "reports", description: "Why lenders pass and files are rejected, from the reasons staff record." },
@@ -62,7 +61,6 @@ export const REPORTS: ReportDef[] = [
   { key: "ads_story", title: "Ads: the story", silo: "BF", group: "marketing", size: "full", source: "portal", description: "Ad spend to applications, funded deals and return." },
   { key: "ads_dropoff", title: "Where applications stop", silo: "BF", group: "marketing", size: "full", source: "portal", description: "The step unfinished applications stopped at, and why." },
   { key: "ads_visitors", title: "Website visitors", silo: "BF", group: "marketing", size: "full", source: "portal", description: "Who came, from where, and what they did." },
-  { key: "bi_dashboard", title: "Insurance pipeline", silo: "BI", group: "operations", size: "full", source: "portal", description: "Boreal Insurance open pipeline and what needs attention." },
   // BF_SERVER_v819_MOBILE_REPORT - the client app usage report (Marketing > Mobile apps) as a Dashboard card;
   // the duplicate ads_story / ads_dropoff entries that listed both reports twice are removed.
   { key: "mobile_apps", title: "Mobile apps", silo: "BF", group: "marketing", size: "full", source: "portal", description: "Client app use: active users, app vs web, devices, notifications and quick sign-in." },

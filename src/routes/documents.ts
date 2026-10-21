@@ -22,7 +22,6 @@ import { requireAuthorization } from "../middleware/auth.js";
 import { ROLES } from "../auth/roles.js";
 import { safeHandler } from "../middleware/safeHandler.js";
 // BF_SERVER_BLOCK_v215_BF_TO_BI_DOC_MIRROR_v1
-import { mirrorDocToBiAsync, withdrawDocFromBiAsync } from "../services/biDocMirror.js"; // v395
 import { setProcessingStage } from "../modules/applications/processingStage.service.js";
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
 import rateLimit from "express-rate-limit"; // BF_SERVER_v789_PUBLIC_UPLOAD_AUTH
@@ -264,25 +263,6 @@ export async function persistAndEnqueue(opts: {
     });
   } catch (err) {
     console.warn("[documents] sibling-leg share failed", { applicationId: opts.applicationId, err: String(err) });
-  }
-
-  // BF_SERVER_BLOCK_v215_BF_TO_BI_DOC_MIRROR_v1
-  // If this BF application has a linked BI PGI application (v213),
-  // mirror the uploaded doc to BI. Fire-and-forget so the client
-  // upload response is not delayed and never fails on BI errors.
-  try {
-    mirrorDocToBiAsync({
-      bfApplicationId: String(opts.applicationId),
-      bfDocumentId: String(documentId),
-      documentType: typeof opts.category === "string" ? opts.category : null,
-      fileName: typeof opts.file.originalname === "string" ? opts.file.originalname : null,
-      mimeType: typeof opts.file.mimetype === "string" ? opts.file.mimetype : null,
-      fileSize: typeof put.sizeBytes === "number" ? put.sizeBytes : null,
-      storageUrl: typeof put.url === "string" ? put.url : null,
-      uploadedByName: null,
-    });
-  } catch {
-    // never block doc upload on mirror
   }
 
   // OCR is best-effort — if it fails we still return success for the upload.
@@ -542,38 +522,6 @@ router.post("/:id/category", requireAuth, safeHandler(async (req: Request, res: 
   try {
     const result = await moveDocument((sql, params) => pool.query(sql, params as any[]), toStringSafe(req.params.id), category, user.id ?? null);
     if (!result.ok) return fail(res, 404, "DOCUMENT_NOT_FOUND");
-    // BF_SERVER_MOVE_MIRROR_v393 - a document moved INTO a category the PGI
-    // application needs (A/R, A/P, P&L, balance sheet, loan agreement...) was
-    // only copied to BI on upload, so a misfiled statement staff corrected never
-    // reached BI. Copy it now. BI keys on the BF document id and updates the type
-    // of a copy it already has (BI v374), so moving twice cannot duplicate.
-    if (result.changed) {
-      // BF_SERVER_MOVE_WITHDRAW_v395 - moved OUT of a PGI category: retire BI's copy.
-      if (result.applicationId) {
-        withdrawDocFromBiAsync(String(result.applicationId), toStringSafe(req.params.id), result.from ?? null, category);
-      }
-      try {
-        const doc = await pool.query<{ filename: string | null; size_bytes: number | null; blob_url: string | null }>(
-          `SELECT filename, size_bytes, blob_url FROM documents WHERE id::text = ($1)::text LIMIT 1`,
-          [toStringSafe(req.params.id)],
-        );
-        const row = doc.rows[0];
-        if (row && result.applicationId) {
-          mirrorDocToBiAsync({
-            bfApplicationId: String(result.applicationId),
-            bfDocumentId: toStringSafe(req.params.id),
-            documentType: category,
-            fileName: row.filename ?? null,
-            mimeType: null,
-            fileSize: typeof row.size_bytes === "number" ? row.size_bytes : null,
-            storageUrl: row.blob_url ?? null,
-            uploadedByName: null,
-          });
-        }
-      } catch (err) {
-        console.warn("[documents] move mirror lookup failed", { documentId: req.params.id, err: String(err) });
-      }
-    }
     return ok(res, result);
   } catch (err) {
     console.error("[documents] move failed", { documentId: req.params.id, err: String(err) });

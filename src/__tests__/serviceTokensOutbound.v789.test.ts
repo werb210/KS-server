@@ -55,59 +55,7 @@ function tokenFor(fragment: string): string {
   return hit!.token;
 }
 
-async function runAllBiCallers(): Promise<void> {
-  const { fetchBiPerson } = await import("../services/crm/contactContext.js");
-  const { fetchBiCompaniesByIds } = await import("../services/biCompanyFetch.js");
-  const { postBiHandoff } = await import("../services/biHandoff.js");
-  const { mirrorDocToBi } = await import("../services/biDocMirror.js");
-  const { submitBiToCarrier } = await import("../services/biCarrierSubmit.js");
-  await fetchBiPerson("a@b.co", null);
-  await fetchBiCompaniesByIds(["c1"]);
-  await postBiHandoff({ bfApplicationId: "bf-1", legacyApp: {} } as any);
-  await mirrorDocToBi({ bfApplicationId: "bf-1", bfDocumentId: "d1", documentType: "bank_statements", fileName: "a.pdf", mimeType: "application/pdf", fileSize: 1, storageUrl: "u", uploadedByName: null });
-  await submitBiToCarrier("bf-1");
-}
 
-const EXPECT_SOURCE: Array<[string, string]> = [
-  ["/maya/staff/person-summary", "maya-service"],
-  ["/companies/by-ids/from-bf", "bf-server"],
-  ["/applications/from-bf", "bf-server"],
-  ["/documents/from-bf", "bf-server"],
-  ["/maya/staff/pgi-readiness", "maya-service"],
-  ["/submit-pgi", "bf-server"],
-];
-
-describe("outbound BI service tokens", () => {
-  it("carry iss bf-server, aud bi-server, kind service and the receiver's source; signed with JWT_SECRET by default", async () => {
-    await runAllBiCallers();
-    for (const [fragment, source] of EXPECT_SOURCE) {
-      const claims = jwt.verify(tokenFor(fragment), JWT_SECRET, { algorithms: ["HS256"], issuer: "bf-server", audience: "bi-server" }) as any;
-      expect(claims).toMatchObject({ kind: "service", source });
-    }
-    const carrier = jwt.decode(tokenFor("/submit-pgi")) as any;
-    expect(carrier.service).toBe("bf-server");
-  });
-
-  it("use BI_SERVICE_JWT_SECRET when it is set (and no longer verify with JWT_SECRET)", async () => {
-    process.env.BI_SERVICE_JWT_SECRET = BI_SECRET;
-    await runAllBiCallers();
-    for (const [fragment] of EXPECT_SOURCE) {
-      const token = tokenFor(fragment);
-      expect(() => jwt.verify(token, BI_SECRET, { algorithms: ["HS256"], issuer: "bf-server", audience: "bi-server" })).not.toThrow();
-      expect(() => jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] })).toThrow();
-    }
-  });
-
-  it("pgiStage asks BI with a helper token", async () => {
-    process.env.BI_SERVICE_JWT_SECRET = BI_SECRET;
-    const { pgiStageFor, __clearPgiStageCache } = await import("../services/pgiStage.js");
-    __clearPgiStageCache();
-    const stage = await pgiStageFor("app-pgi-1");
-    expect(stage).toBe("submitted");
-    const claims = jwt.verify(tokenFor("/maya/staff/pgi-readiness"), BI_SECRET, { algorithms: ["HS256"], issuer: "bf-server", audience: "bi-server" }) as any;
-    expect(claims.source).toBe("maya-service");
-  });
-});
 
 describe("outbound agent token (X-Maya-Context)", () => {
   it("is iss bf-server / aud agent, keeps kind maya_context, and ignores BI_SERVICE_JWT_SECRET", async () => {

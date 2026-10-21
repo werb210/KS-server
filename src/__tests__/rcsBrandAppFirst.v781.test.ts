@@ -79,34 +79,8 @@ describe("the Boreal Financial RCS brand is used for Boreal Financial only", () 
     expect(smsSenderFor("+17805550100", "+18254511768")).toEqual({ messagingServiceSid: MG });
     expect(smsSenderFor("+17805550100", "+18254511768", { silo: "BF" })).toEqual({ messagingServiceSid: MG });
   });
-  it("Insurance texts stay plain SMS from the normal number", () => {
-    process.env.TWILIO_RCS_MESSAGING_SERVICE_SID = MG;
-    expect(smsSenderFor("+17805550100", "+18254511768", { silo: "BI" })).toEqual({ from: "+18254511768" });
-    expect(smsSenderFor("+17805550100", "+18254511768", { silo: "bi" })).toEqual({ from: "+18254511768" });
-  });
 
-  it("BI-Server's text bridge sends as the Insurance silo", async () => {
-    process.env.BACKEND_SERVICE_TOKEN = "svc-token-v781";
-    const app = await mount("/api/service", "../routes/serviceBridge.js");
-    const res = await request(app).post("/api/service/sms").set("X-Backend-Token", "svc-token-v781").send({ to: "+17805550100", body: "Your policy renews soon" });
-    expect(res.status).toBe(200);
-    expect(h.sendSMS).toHaveBeenCalledWith("+17805550100", "Your policy renews soon", { silo: "BI" });
-  });
 
-  it("staff texts in the Insurance silo pass their silo (plain SMS); Financial texts use RCS", async () => {
-    process.env.TWILIO_RCS_MESSAGING_SERVICE_SID = MG;
-    const app = await mount("/api/communications", "../routes/communications.js");
-    const bi = await request(app).post("/api/communications/sms").set("Authorization", `Bearer ${adminToken()}`).set("X-Silo", "BI").send({ to: "+17804561234", body: "Hello from Insurance" });
-    expect(bi.status).toBeLessThan(300);
-    const biArgs = (h.twilioCreate.mock.calls[0] as unknown as [any])[0];
-    expect(biArgs.messagingServiceSid).toBeUndefined();
-    expect(biArgs.from).toBeTruthy();
-
-    const bf = await request(app).post("/api/communications/sms").set("Authorization", `Bearer ${adminToken()}`).set("X-Silo", "BF").send({ to: "+17804561234", body: "Hello from Financial" });
-    expect(bf.status).toBeLessThan(300);
-    const bfArgs = (h.twilioCreate.mock.calls[1] as unknown as [any])[0];
-    expect(bfArgs.messagingServiceSid).toBe(MG);
-  });
 });
 
 describe("SBA ready-to-sign notice and banner", () => {

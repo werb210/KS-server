@@ -85,13 +85,13 @@ describe("v787 workflow access", () => {
     expect((await request(app(null)).get("/api/automations")).status).toBe(401);
   });
 
-  it("people search respects X-Silo BI and defaults to BF", async () => {
-    const r = await request(app({ role: "Admin" })).get("/api/meetings/people?q=bianca").set("X-Silo", "BI");
+  it("people search is scoped to the BF silo", async () => {
+    const r = await request(app({ role: "Admin" })).get("/api/meetings/people?q=bianca").set("X-Silo", "BF");
     expect(r.status).toBe(200);
     expect(r.body.people.find((p: any) => p.kind === "contact")).toMatchObject({ contactId: CONTACT });
     const call = q.mock.calls.find((c) => String(c[0]).includes("FROM contacts"))!;
     expect(call[0]).toContain("WHERE silo = $2");
-    expect(call[1]).toEqual(["%bianca%", "BI"]);
+    expect(call[1]).toEqual(["%bianca%", "BF"]);
     q.mockClear();
     await request(app({ role: "Admin" })).get("/api/meetings/people?q=bianca");
     expect(q.mock.calls.find((c) => String(c[0]).includes("FROM contacts"))![1]).toEqual(["%bianca%", "BF"]);

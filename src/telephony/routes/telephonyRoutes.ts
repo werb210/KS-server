@@ -14,6 +14,7 @@ import { describeCrmUpdate, safeDispositionCrmUpdate } from "../../modules/calls
 import { parseCallRef, callRefPredicate } from "../../modules/calls/callRef.js";
 import { logWarnSwallowed } from "../../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
 import { replayKey } from "../../middleware/replayKey.js"; // BF_SERVER_v831_DIALER_POLISH
+import { serverUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 const router = express.Router();
 import { sharedTwilio } from "../../lib/sharedClients.js";
@@ -325,8 +326,8 @@ router.post("/outbound-call", auth, async (req: any, res: Response) => {
     const call = await client.calls.create({
       to,
       from,
-      url: `${process.env.PUBLIC_BASE_URL ?? "https://server.boreal.financial"}/api/webhooks/twilio/voice/twiml`,
-      statusCallback: `${process.env.PUBLIC_BASE_URL ?? "https://server.boreal.financial"}/api/webhooks/twilio/voice`,
+      url: `${process.env.PUBLIC_BASE_URL ?? serverUrl()}/api/webhooks/twilio/voice/twiml`,
+      statusCallback: `${process.env.PUBLIC_BASE_URL ?? serverUrl()}/api/webhooks/twilio/voice`,
       statusCallbackMethod: "POST",
     });
     // Log the call.

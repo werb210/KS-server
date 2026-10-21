@@ -105,7 +105,7 @@ describe("library and catalog", () => {
   it("has the 4 system automations plus booked call follow-up and no reply after 3 days, all valid", () => {
     const items = libraryItems();
     expect(items.map((i) => i.name)).toEqual([
-      "Funded: thank you, referral ask, insurance", "Missed inbound call", "New website lead", "Offer not accepted after 48 hours",
+      "Funded: thank you and referral ask", "Missed inbound call", "New website lead", "Offer not accepted after 48 hours",
       "Booked call follow-up", "No reply after 3 days",
     ]);
     for (const i of items) expect(validateGraph(i.graph, i.settings, i.goal)).toEqual([]);

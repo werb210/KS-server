@@ -310,12 +310,6 @@ export async function start(): Promise<void> {
     try { const w = startTeamsTranscriptWorker(pool); workerStops.push(w.stop); console.log("[startup] teams-transcript worker started"); }
     catch (err) { console.error("[startup] teams-transcript worker failed to start:", err); }
 
-    // BF_SERVER_BLOCK_v744 — advance BI leads to Engaged on an email reply.
-    const { startBiOutreachEmailReplyWorker } = await import("./workers/biOutreachEmailReplyWorker.js");
-    await workerStagger();
-    try { const w = startBiOutreachEmailReplyWorker(pool); workerStops.push(w.stop); console.log("[startup] BI outreach email-reply worker started"); }
-    catch (err) { console.error("[startup] BI outreach email-reply worker failed to start:", err); }
-
     // BF_SERVER_GRAPH_WEBHOOKS_v1 - keep Graph mail subscriptions alive.
     const { startGraphSubscriptionWorker } = await import("./workers/graphSubscriptionWorker.js");
     await workerStagger();
@@ -382,24 +376,7 @@ export async function start(): Promise<void> {
     try { const w = startTaskRemindersWorker(pool); workerStops.push(w.stop); console.log("[startup] task-reminders worker started"); }
     catch (err) { console.error("[startup] task-reminders worker failed to start:", err); }
 
-    // BF_SERVER_BI_HANDOFF_RETRY_v397 - retry PGI handoffs that failed at submit time.
-    try {
-      const { startBiHandoffRetryWorker } = await import("./services/biHandoffRetry.js");
-      await workerStagger();
-      const worker = startBiHandoffRetryWorker();
-      workerStops.push(worker.stop);
-      console.log("[startup] bi-handoff-retry worker started");
-    } catch (err) {
-      console.error("[startup] bi-handoff-retry worker failed to start:", err);
-    }
-
-    // BF_SERVER_PGI_MIRROR_LABELS_v357 - one catch-up pass a minute after boot.
-    const pgiBackfill = setTimeout(() => {
-      void import("./services/biDocMirror.js")
-        .then((m) => m.backfillPgiMirrors(30))
-        .catch((err) => console.error("[startup] pgi mirror backfill failed:", err));
-    }, 60_000);
-    (pgiBackfill as any).unref?.();
+    // KS_SERVER_v1_NO_BI - no PGI handoff retries or document mirror in Keystone.
 
     // BF_SERVER_FX_RATE_WORKER_v355 - daily Bank of Canada USD->CAD rate.
     const { startFxRateWorker } = await import("./workers/fxRateWorker.js");

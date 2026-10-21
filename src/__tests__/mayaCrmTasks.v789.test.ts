@@ -43,13 +43,13 @@ describe("Maya crm-tasks on the unified tasks table", () => {
       ] }],
     ]));
     const app = await buildApp();
-    const res = await request(app).post("/api/maya/staff/crm-tasks").set("Authorization", svc()).send({ contact_id: CONTACT_ID, silo: "bi" });
+    const res = await request(app).post("/api/maya/staff/crm-tasks").set("Authorization", svc()).send({ contact_id: CONTACT_ID, silo: "bf" });
     expect(res.status).toBe(200);
     expect(res.body.tasks).toEqual([{ id: "t1", title: "Call back", status: "open", priority: "high", dueAt: null, assignee: "Sam Staff" }]);
     const q = callsMatching(queryMock, /FROM tasks t/);
     expect(String(q[0][0])).toContain("CASE t.status WHEN 'COMPLETED' THEN 'done' ELSE 'open' END AS status");
     expect(String(q[0][0])).toContain("t.deleted_at IS NULL");
-    expect(q[0][1]).toEqual([CONTACT_ID, "BI"]);
+    expect(q[0][1]).toEqual([CONTACT_ID, "BF"]);
   });
 
   it("crm-create-task inserts UPPERCASE values into tasks with an assignee", async () => {
@@ -68,7 +68,7 @@ describe("Maya crm-tasks on the unified tasks table", () => {
     expect(sql).toContain("'API'");
     expect(sql).toContain("COALESCE(s.id, c.owner_id) AS assignee");
     expect(sql).toContain("a.assignee IS NOT NULL");
-    expect(ins[0][1]).toEqual(["SLF", "Follow up", null, "HIGH", null, CONTACT_ID, STAFF_ID]);
+    expect(ins[0][1]).toEqual(["BF", "Follow up", null, "HIGH", null, CONTACT_ID, STAFF_ID]);
   });
 
   it("crm-create-task maps an unknown priority/silo to NONE/BF", async () => {

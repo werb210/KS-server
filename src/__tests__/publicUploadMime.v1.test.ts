@@ -15,7 +15,6 @@ vi.mock("../lib/storage/index.js", () => ({
   getStorage: () => ({ put: async () => ({ hash: "h", blobName: "b", url: "u", sizeBytes: 4 }) }),
 }));
 vi.mock("../modules/ocr/ocr.service.js", () => ({ enqueueOcrForDocument: async () => undefined }));
-vi.mock("../services/biDocMirror.js", () => ({ mirrorDocToBiAsync: () => undefined, withdrawDocFromBiAsync: () => undefined }));
 vi.mock("../modules/automation/automationEngine.js", () => ({ emitAutomationEvent: async () => undefined }));
 vi.mock("../routes/clientDocumentsNeeded.js", () => ({ computeOutstandingDocs: async () => ({ required: [], stillNeeded: [], rejected: [] }) }));
 

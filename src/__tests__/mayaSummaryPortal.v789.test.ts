@@ -53,7 +53,7 @@ describe("v789 application-summary carries the client portal view", () => {
   });
 
   it("continuation_url is the client app link resume nudges send", async () => {
-    expect((await summary()).body.continuation_url).toBe(`https://client.boreal.financial/application/${APP_ID}`);
+    expect((await summary()).body.continuation_url).toBe(`https://wonderful-island-0b68ae310.5.azurestaticapps.net/application/${APP_ID}`);
     process.env.CLIENT_URL = "https://client.example.test/";
     expect(clientApplicationUrl(APP_ID)).toBe(`https://client.example.test/application/${APP_ID}`);
   });

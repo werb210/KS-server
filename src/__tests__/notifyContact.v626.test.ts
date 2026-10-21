@@ -18,7 +18,6 @@ vi.mock("../db.js", async () => ({
 }));
 vi.mock("../services/notifications/notifyClient.js", () => ({ pushToClientApp: vi.fn(async () => state.pushOk) }));
 vi.mock("../modules/notifications/sms.service.js", () => ({ sendSms: vi.fn(async (m: any) => { state.smsSent.push(m); }) }));
-vi.mock("../services/biApplicantMessages.js", () => ({ notifyBiApplicant: vi.fn(async (m: any) => { state.biCalls.push(m); return { ok: true }; }) }));
 
 import { cleanNotice, notifyContact } from "../services/notifications/notifyContact.js";
 
@@ -45,12 +44,6 @@ describe("notifyContact", () => {
     const r = await notifyContact({ contactId: "c1", title: "Hi", body: "Docs needed" });
     expect(r.channel).toBe("sms");
     expect(state.smsSent[0].message).toContain("/application/app-1");
-  });
-  it("sends Boreal Risk contacts through BI-Server", async () => {
-    state.contact = { id: "c2", phone: "+17805550100", silo: "BI" };
-    const r = await notifyContact({ contactId: "c2", title: "Hi", body: "Docs needed" });
-    expect(r.channel).toBe("bi");
-    expect(state.biCalls[0].contactId).toBe("c2");
   });
   it("reports a missing phone and unknown contact", async () => {
     state.contact = { id: "c3", phone: null, silo: "BF" };

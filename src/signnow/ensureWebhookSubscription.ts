@@ -1,4 +1,5 @@
 import { isApiKeyConfigured, ensureUserSignedSubscription } from "./signnowClient.js";
+import { serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 // Register (idempotently) a user-level "field invite signed" webhook so signed
 // events are PUSHED to /api/webhooks/signnow. SignNow denies our API key read
@@ -11,7 +12,7 @@ export async function ensureSignnowWebhook(): Promise<void> {
   }
   const callback =
     process.env.SIGNNOW_WEBHOOK_URL ||
-    "https://server.boreal.financial/api/webhooks/signnow";
+    serverUrl() + "/api/webhooks/signnow";
   // Document-GROUP invites do not reliably emit user.document.fieldinvite.signed,
   // so also subscribe to document.complete (the webhook handler already accepts any
   // /signed|complete/ event). Register each best-effort: an unknown event name on a

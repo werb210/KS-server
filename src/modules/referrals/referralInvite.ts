@@ -1,10 +1,10 @@
 import { randomBytes } from "node:crypto";
 import { sendSms } from "../notifications/sms.service.js";
+import { websiteUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
-// BF_SERVER_REFERRAL_LANDING_v2 - referrals go to funding (BF) and/or PGI (BI) only.
+// KS_SERVER_v1_NO_BI - Keystone referrals go to funding only (no Boreal Insurance).
 const SILO_LANDING_PATHS: Record<string, string> = {
   BF: "/apply",
-  BI: "/bi/apply",
 };
 
 export function mintReferralCode(): string {
@@ -18,16 +18,10 @@ export function normalizeReferralSilos(value: unknown): string[] {
 }
 
 export function referralLandingUrl(silos: string[], refCode: string): string {
-  // BF_SERVER_REFERRAL_LANDING_v2 - route to the real website referral landings:
-  //   funding only  -> BF-Website  /r/f/<code>
-  //   funding + PGI -> BF-Website  /r/b/<code>   ("both" landing)
-  //   PGI only      -> BI-Website  /r/<code>
-  const bf = (process.env.BF_WEBSITE_URL ?? process.env.WEBSITE_URL ?? "https://www.boreal.financial").replace(/\/$/, "");
-  const bi = (process.env.BI_WEBSITE_URL ?? "https://www.boreal.insure").replace(/\/$/, "");
-  const set = new Set(silos.map((v) => String(v).trim().toUpperCase()));
+  // KS_SERVER_v1_NO_BI - every referral lands on the licensee's funding page: <website>/r/f/<code>.
+  void silos;
+  const bf = (process.env.BF_WEBSITE_URL ?? process.env.WEBSITE_URL ?? websiteUrl()).replace(/\/$/, "");
   const code = encodeURIComponent(refCode);
-  if (set.has("BI") && !set.has("BF")) return `${bi}/r/${code}`;
-  if (set.has("BF") && set.has("BI")) return `${bf}/r/b/${code}`;
   return `${bf}/r/f/${code}`;
 }
 

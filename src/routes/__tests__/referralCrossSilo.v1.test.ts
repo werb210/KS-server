@@ -16,11 +16,8 @@ vi.mock("../../db.js", async () => {
 vi.mock("../../modules/notifications/sms.service.js", () => ({ sendSms: h.sendSms }));
 
 import referrerSelfRouter from "../referrerSelf.js";
-import referralsExtRouter from "../referralsExt.js";
-import { API_ROUTE_MOUNTS } from "../routeRegistry.js";
 import {
   REFERRAL_CONVERSION_RATE,
-  creditBiReferralConversion,
   creditReferralConversion,
 } from "../../modules/referrals/referralConversions.service.js";
 
@@ -52,20 +49,20 @@ describe("BF_SERVER_REFERRAL_CROSS_SILO_v1", () => {
       silos: ["bi", "BF", "nope", "bf"], message: "A", referrerName: "Todd W",
     });
     expect(r.status).toBe(201);
-    expect(r.body.data.silos).toEqual(["BI", "BF"]);
+    expect(r.body.data.silos).toEqual(["BF"]); // KS_SERVER_v1_NO_BI - funding is the only referral silo
     const refCode = r.body.data.refCode as string;
     expect(refCode).toMatch(/^BF-[0-9A-F]{8}$/);
 
     // The minted code is stored on the contact with the silos and the chosen message.
     const [stamp] = callsMatching(h.queryMock, /SET ref_code = \$2/);
-    expect((stamp[1] as unknown[]).slice(1)).toEqual([refCode, ["BI", "BF"], "A"]);
+    expect((stamp[1] as unknown[]).slice(1)).toEqual([refCode, ["BF"], "A"]);
 
-    // ...and the invite SMS carries it, in the referrer's name, to the both-silos landing.
+    // ...and the invite SMS carries it, in the referrer's name, to the funding landing.
     expect(h.sendSms).toHaveBeenCalledTimes(1);
     const sms = h.sendSms.mock.calls[0][0] as { to: string; message: string };
     expect(sms.to).toBe("+15875550100");
     expect(sms.message).toContain("Todd W");
-    expect(sms.message).toContain(`/r/b/${refCode}`);
+    expect(sms.message).toContain(`/r/f/${refCode}`);
   });
 
   it("has an additive conversion ledger with 20 percent idempotent crediting", async () => {
@@ -81,31 +78,6 @@ describe("BF_SERVER_REFERRAL_CROSS_SILO_v1", () => {
     expect(sqlText(bf[0])).toContain("ON CONFLICT (application_id) WHERE application_id IS NOT NULL DO UPDATE");
     expect(bf[1]).toEqual(["app-1", null, null, 50000, 20]);
 
-    h.queryMock.mockImplementation(answerBySql([[/INSERT INTO referral_conversions/, { rows: [{ id: "conv-2" }] }]]));
-    await expect(creditBiReferralConversion({ refCode: "BF-ABCDEF12", externalApplicationId: "bi-9", dealAmount: 1000 })).resolves.toEqual({ id: "conv-2" });
-    const [bi] = callsMatching(h.queryMock, /INSERT INTO referral_conversions/);
-    expect(sqlText(bi[0])).toContain("ON CONFLICT (source_silo, external_application_id) WHERE external_application_id IS NOT NULL DO UPDATE");
-    expect(bi[1]).toEqual(["BF-ABCDEF12", "bi-9", 1000, 20]);
   });
 
-  // BF_SERVER_BLOCK_v574 - moved to its own mount (REFERRALS_EXT_MOUNT_v1) because it collided
-  // with /referrals; BI-Server's notifyBfReferralConversion posts to /api/referrals-ext/from-bi.
-  it("mounts service-JWT protected BI ingest under /api/referrals-ext/from-bi", async () => {
-    const mount = API_ROUTE_MOUNTS.find((m) => m.path === "/referrals-ext");
-    expect(mount?.router).toBe(referralsExtRouter);
-
-    const app = express();
-    app.use(express.json());
-    app.use("/api/referrals-ext", referralsExtRouter);
-    const body = { ref_code: "BF-ABCDEF12", bi_application_id: "bi-9", deal_amount: 1000 };
-    expect((await request(app).post("/api/referrals-ext/from-bi").send(body)).status).toBe(401);
-    expect(callsMatching(h.queryMock, /referral_conversions/)).toHaveLength(0);
-
-    h.queryMock.mockImplementation(answerBySql([[/INSERT INTO referral_conversions/, { rows: [{ id: "conv-3" }] }]]));
-    const admin = sign({ sub: "11111111-1111-4111-8111-111111111111", role: "Admin", tokenVersion: 0, tv: 0 });
-    const ok = await request(app).post("/api/referrals-ext/from-bi").set("Authorization", admin).send(body);
-    expect(ok.status).toBe(200);
-    expect(ok.body.data).toEqual({ conversionId: "conv-3" });
-    expect((await request(app).post("/api/referrals-ext/from-bi").set("Authorization", admin).send({ ref_code: "x" })).status).toBe(400);
-  });
 });

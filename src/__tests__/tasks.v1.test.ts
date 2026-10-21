@@ -29,14 +29,14 @@ async function api(method: "get" | "post" | "patch" | "delete", path: string, bo
   const app = express();
   app.use(express.json());
   app.use("/api/tasks", tasksRoutes);
-  const r = (request(app) as any)[method](`/api/tasks${path}`).set("Authorization", `Bearer ${token()}`).set("X-Silo", "BI");
+  const r = (request(app) as any)[method](`/api/tasks${path}`).set("Authorization", `Bearer ${token()}`).set("X-Silo", "BF");
   return body === undefined ? r : r.send(body);
 }
 
 beforeEach(() => {
   queryMock.mockReset();
   queryMock.mockImplementation(answerBySql([
-    [/FROM users WHERE id = \$1/, { rows: [{ id: STAFF_ID, role: "Admin", silo: "BF", silos: ["BF", "BI"] }], rowCount: 1 }],
+    [/FROM users WHERE id = \$1/, { rows: [{ id: STAFF_ID, role: "Admin", silo: "BF", silos: ["BF"] }], rowCount: 1 }],
     [/FROM users/, { rows: [{ id: MATE, name: "Andrew Mate", email: "andrew@boreal.financial" }], rowCount: 1 }],
     [/FROM tasks t/, { rows: [{ id: TASK, title: "Call Jordan", contact_phone: "+15874441234" }], rowCount: 1 }],
     [/UPDATE tasks SET status = ?'COMPLETED'/, { rows: [{ id: TASK, source: "MANUAL", repeat_active: false }], rowCount: 1 }],
@@ -67,7 +67,7 @@ describe("tasks milestone 1", () => {
     expect(scoped.length).toBeGreaterThan(8);
     for (const [sql, params] of scoped) {
       expect(sqlText(sql)).toMatch(/silo/);
-      expect(params as unknown[], sqlText(sql)).toContain("BI");
+      expect(params as unknown[], sqlText(sql)).toContain("BF");
     }
   });
 
@@ -105,7 +105,7 @@ describe("tasks milestones 2+3", () => {
     expect(add.status).toBe(200);
     const [ins] = callsMatching(queryMock, /INSERT INTO task_queue_shares/);
     expect(sqlText(ins![0])).toContain("ON CONFLICT (queue_id, user_id) DO NOTHING");
-    expect(ins![1]).toEqual([QUEUE, MATE, "BI"]);
+    expect(ins![1]).toEqual([QUEUE, MATE, "BF"]);
     expect((await api("delete", `/queues/${QUEUE}/shares/${MATE}`)).status).toBe(200);
     const staff = await api("get", "/staff");
     expect(staff.status).toBe(200);

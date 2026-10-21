@@ -57,11 +57,11 @@ export function watchError(req: Request, res: Response, status: number, code: st
   return res.status(status).json({ error: { code, message, retryable, requestId: req.header("x-request-id") || (req as any).id || null } });
 }
 
-export function allowedLine(req: Request, line: unknown): "BF" | "BI" | "SLF" | null {
+export function allowedLine(req: Request, line: unknown): "BF" | null {
   const normalized = String(line || "").toUpperCase();
-  if (!["BF", "BI", "SLF"].includes(normalized)) return null;
+  if (!["BF"].includes(normalized)) return null;
   const user = (req as any).user || {};
   const granted = new Set([user.silo, ...(Array.isArray(user.silos) ? user.silos : [])].map((x) => String(x || "").toUpperCase()));
-  return granted.has(normalized) ? normalized as "BF" | "BI" | "SLF" : null;
+  return granted.has(normalized) ? normalized as "BF" : null;
 }
 

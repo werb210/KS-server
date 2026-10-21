@@ -9,6 +9,7 @@ import { ALBERTA_TZ } from "../../lib/albertaTime.js"; // BF_SERVER_ALBERTA_TIME
 import { nextAllowedSendTime, renderTokens } from "./conditions.js";
 import { buildContext, emitWith, stepsOf, type AutomationEvent, type EngineDeps, type Step } from "./automationContext.js";
 import { logStep, OUTWARD, runAction, runCheck, waitMs } from "./automationSteps.js";
+import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 export { buildContext, emitWith, stepsOf };
 export type { AutomationEvent, EngineDeps, Step };
@@ -106,14 +107,6 @@ export async function defaultDeps(): Promise<EngineDeps> {
       await sendSms({ to, message, track: { kind: "automation" } });
     },
     async notifyClient({ silo, phone, contactId, applicationId, title, body }) {
-      if (silo === "BI") {
-        // BI applicants are told by BI-Server (app first, SMS fallback) - the same path staff replies use.
-        if (!contactId) return "none";
-        const { notifyBiApplicant } = await import("../../services/biApplicantMessages.js");
-        const r = await notifyBiApplicant({ contactId, body: `${title}: ${body}`, staffName: null });
-        if (!r.ok) throw new Error(`BI notice failed: ${r.error}`);
-        return "app";
-      }
       const { pushToClientApp } = await import("../../services/notifications/notifyClient.js");
       const viaApp = await pushToClientApp({ phone, applicationId, kind: "automation", title, body, sms: "", categoryId: "APPLICATION_UPDATE" } as any);
       if (viaApp) return "app";
@@ -124,7 +117,7 @@ export async function defaultDeps(): Promise<EngineDeps> {
         return "none";
       }
       const { sendSms } = await import("../notifications/sms.service.js");
-      const base = String(process.env.CLIENT_URL ?? "https://client.boreal.financial").replace(/\/$/, "");
+      const base = String(process.env.CLIENT_URL ?? clientUrl()).replace(/\/$/, "");
       await sendSms({ to: phone, message: `Boreal: ${body}\n${applicationId ? `${base}/application/${encodeURIComponent(applicationId)}` : `${base}/portal`}`, track: { kind: "automation", applicationId } });
       return "sms";
     },

@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import type { Pool } from "pg";
 import { getStorage } from "../../lib/storage/index.js";
 import { lenderEmail, type LenderEmailDetails } from "./lenderEmail.js"; // BF_SERVER_BLOCK_v458_LENDER_EMAIL
+import { serverUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 type Attachment = { filename: string; contentType: string; content: Buffer };
 
@@ -17,7 +18,7 @@ export function linkLifetimeDays(): number {
 }
 
 export function packageLinkBase(): string {
-  return (process.env.PUBLIC_BASE_URL || "https://server.boreal.financial").replace(/\/+$/, "");
+  return (process.env.PUBLIC_BASE_URL || serverUrl()).replace(/\/+$/, "");
 }
 
 export function shouldLinkPackage(sizeBytes: number): boolean {

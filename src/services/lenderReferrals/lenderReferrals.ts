@@ -14,6 +14,7 @@
 //   decline   -> the zip is deleted; the client is never contacted.
 // The lender sees status only: never which lenders the file went to or what they offered.
 import { pool } from "../../db.js";
+import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount?: number | null }> };
 
@@ -363,7 +364,7 @@ export async function acceptReferral(
   let texted = false;
   try {
     const sendSms = deps.sendSms ?? (await import("../../modules/notifications/sms.service.js")).sendSms;
-    const appUrl = deps.appUrl ?? (process.env.CLIENT_APP_URL || "https://client.boreal.financial").replace(/\/+$/, "");
+    const appUrl = deps.appUrl ?? (process.env.CLIENT_APP_URL || clientUrl()).replace(/\/+$/, "");
     const first = String(app.rows[0]?.first_name ?? "").trim() || String(row.client_name ?? "").trim().split(/\s+/)[0] || null;
     await sendSms({ to: phone, message: clientInviteText(first, appUrl), track: { kind: "lender_referral_invite", applicationId } });
     await db.query(`UPDATE lender_referrals SET client_texted_at = now(), updated_at = now() WHERE id::text = $1`, [id]);

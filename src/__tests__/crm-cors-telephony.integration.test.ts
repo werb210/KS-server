@@ -90,17 +90,17 @@ describe("CRM + CORS + telephony regressions", () => {
     );
   });
 
-  it("OPTIONS /api/crm/contacts allows https://staff.boreal.financial", async () => {
+  it("OPTIONS /api/crm/contacts allows https://thankful-wave-04964490f.2.azurestaticapps.net", async () => {
     const { createApp } = await import("../app.js");
     const app = createApp();
 
     const res = await request(app)
       .options("/api/crm/contacts")
-      .set("Origin", "https://staff.boreal.financial")
+      .set("Origin", "https://thankful-wave-04964490f.2.azurestaticapps.net")
       .set("Access-Control-Request-Method", "POST");
 
     expect(res.status).toBe(204);
-    expect(res.headers["access-control-allow-origin"]).toBe("https://staff.boreal.financial");
+    expect(res.headers["access-control-allow-origin"]).toBe("https://thankful-wave-04964490f.2.azurestaticapps.net");
     expect(res.headers["access-control-allow-credentials"]).toBe("true");
   });
 

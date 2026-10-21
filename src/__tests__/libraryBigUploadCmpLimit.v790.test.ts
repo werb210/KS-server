@@ -128,11 +128,11 @@ describe("the browser is allowed to send upload pieces cross-origin", () => {
   it("CORS allows the three upload headers (staff.boreal.financial -> server.boreal.financial)", async () => {
     const r = await request(createApp())
       .options("/api/o365/library/upload-chunk")
-      .set("Origin", "https://staff.boreal.financial")
+      .set("Origin", "https://thankful-wave-04964490f.2.azurestaticapps.net")
       .set("Access-Control-Request-Method", "POST")
       .set("Access-Control-Request-Headers", "x-upload-url,x-chunk-start,x-total-size,content-type");
     expect(r.status).toBe(204);
-    expect(r.headers["access-control-allow-origin"]).toBe("https://staff.boreal.financial");
+    expect(r.headers["access-control-allow-origin"]).toBe("https://thankful-wave-04964490f.2.azurestaticapps.net");
     const allowed = String(r.headers["access-control-allow-headers"]).toLowerCase().split(",").map((s) => s.trim());
     for (const h of ["x-upload-url", "x-chunk-start", "x-total-size"]) expect(allowed).toContain(h);
   });

@@ -1,5 +1,6 @@
 // BF_SERVER_BLOCK_v616 - automation types and context (split from the engine so each block stays small).
 import { conditionsMatch } from "./conditions.js";
+import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 export type Query = (sql: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount?: number | null }>;
 
@@ -54,7 +55,7 @@ export async function buildContext(q: Query, ev: AutomationEvent): Promise<Recor
     if (app) {
       silo = silo || app.silo;
       contactId = contactId || app.contact_id;
-      const base = String(process.env.CLIENT_URL ?? "https://client.boreal.financial").replace(/\/$/, ""); // BF_SERVER_v786_WORKFLOW_GRAPH
+      const base = String(process.env.CLIENT_URL ?? clientUrl()).replace(/\/$/, ""); // BF_SERVER_v786_WORKFLOW_GRAPH
       Object.assign(ctx, { stage: app.pipeline_state, pipeline_state: app.pipeline_state, product_type: app.product_type, requested_amount: app.requested_amount != null ? Number(app.requested_amount) : null, owner_user_id: app.owner_user_id,
         application_link: `${base}/application/${encodeURIComponent(String(app.id))}` });
       if (ctx.source === undefined) ctx.source = app.source;
@@ -83,7 +84,7 @@ export async function buildContext(q: Query, ev: AutomationEvent): Promise<Recor
         lead_status: ct.lead_status ?? null, lifecycle_stage: ct.lifecycle_stage ?? null, contact_status: ct.status ?? null, contact_role: ct.role ?? null,
         tags: Array.isArray(ct.tags) ? ct.tags : [], owner_id: ct.owner_id ?? null, owner_email: ct.owner_email ?? null,
       });
-      if (ctx.application_link === undefined) ctx.application_link = String(process.env.CLIENT_URL ?? "https://client.boreal.financial").replace(/\/$/, "") + "/portal";
+      if (ctx.application_link === undefined) ctx.application_link = String(process.env.CLIENT_URL ?? clientUrl()).replace(/\/$/, "") + "/portal";
     }
   }
   if (ctx.document_type) ctx.document_type = String(ctx.document_type).replace(/_/g, " ");

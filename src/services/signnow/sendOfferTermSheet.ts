@@ -178,26 +178,6 @@ export async function attachSignedTermSheet(pool: Pool, applicationId: string): 
         [versionId, documentId, put.blobName, hash, JSON.stringify({ source: "signnow_term_sheet", groupId, docId, signedAt: new Date().toISOString() }), put.url],
       );
 
-      // BF_SERVER_PGI_MIRROR_SCOPE_v1
-      // The signed term sheet is written straight into `documents` here and
-      // never passes through the upload route, so it was the one required PGI
-      // document that never mirrored - and it is usually the last one, which
-      // is why PGI files never completed.
-      try {
-        const { mirrorDocToBiAsync } = await import("../biDocMirror.js");
-        mirrorDocToBiAsync({
-          bfApplicationId: String(applicationId),
-          bfDocumentId: String(documentId),
-          documentType: "signed_term_sheet",
-          fileName: put.blobName ?? "signed_term_sheet.pdf",
-          mimeType: "application/pdf",
-          fileSize: typeof put.sizeBytes === "number" ? put.sizeBytes : null,
-          storageUrl: typeof put.url === "string" ? put.url : null,
-          uploadedByName: null,
-        });
-      } catch {
-        // never block term-sheet persistence on the mirror
-      }
       await client.query("COMMIT");
     } catch {
       await client.query("ROLLBACK").catch((swallowedErr: unknown) => logWarnSwallowed(swallowedErr, "services/signnow/sendOfferTermSheet.ts:202", undefined));

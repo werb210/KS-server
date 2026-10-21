@@ -75,13 +75,13 @@ describe("GET /api/voice/caller-card", () => {
   it("returns the card for the request's silo (X-Silo, under the usual silo rules)", async () => {
     h.query.mockImplementation(answerBySql([[CARD_SQL, { rows: [cardRow({ last_note: "Wants a callback" })] }]]));
     const res = await request(await app()).get("/api/voice/caller-card").query({ phone: CALLER })
-      .set("Authorization", `Bearer ${staffToken("Admin")}`).set("X-Silo", "BI");
+      .set("Authorization", `Bearer ${staffToken("Admin")}`).set("X-Silo", "BF");
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       found: true, contactId: CONTACT, name: "Jane Client", company: "Client Trucking Ltd", stage: "In Review", applicationId: APP,
       lastNote: "Wants a callback", lastContactAt: "2026-10-16T15:00:00.000Z", tags: ["vip", "equipment"],
     });
-    expect((callsMatching(h.query, CARD_SQL)[0]![1] as unknown[])[1]).toBe("BI");
+    expect((callsMatching(h.query, CARD_SQL)[0]![1] as unknown[])[1]).toBe("BF");
   });
 
   it("found:false for an unknown number, 400 for a bad one, 401 without a sign-in", async () => {

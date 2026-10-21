@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-staging
+  group: deploy-ks-server-dev
   cancel-in-progress: false
 
 jobs:
@@ -82,9 +82,10 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      # KS_SERVER_v1_LICENSEE - Keystone's development copy (resource group ks-dev). Basic plans have no staging
+      # slot, so this deploys straight to the app. AZURE_CREDENTIALS is a service principal limited to ks-dev.
       - name: Deploy to Azure
         uses: azure/webapps-deploy@v3
         with:
-          app-name: boreal-staff-server
-          slot-name: staging
+          app-name: ks-server-dev
           package: release.zip

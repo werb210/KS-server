@@ -10,6 +10,7 @@ import { pool } from "../db.js";
 import { getGraphForUser, type GraphClient } from "../modules/o365/graphClient.js";
 import * as repo from "../modules/library/library.repo.js";
 import * as g from "../modules/library/libraryGraph.js";
+import { serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 const router = Router();
 
@@ -19,7 +20,7 @@ export const ZIP_MAX_BYTES = 500 * 1024 * 1024;
 export const SHARE_MAX_DAYS = 90;
 
 export function publicBase(): string {
-  return String(process.env.PUBLIC_BASE_URL || "https://server.boreal.financial").replace(/\/+$/, "");
+  return String(process.env.PUBLIC_BASE_URL || serverUrl()).replace(/\/+$/, "");
 }
 export function actorOf(req: any): { id: string; name: string | null } {
   const u = req.user ?? {};

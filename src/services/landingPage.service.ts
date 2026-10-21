@@ -2,6 +2,7 @@
 // (mirror of the branded email) and resolve it by slug for the public route.
 import { pool } from "../db.js";
 import { renderBrandedEmail, type BrandedEmailFields } from "./emailTemplateRender.js";
+import { websiteUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 // BF_SERVER_LANDING_BASE_HOST_v14
 // LANDING_BASE_URL is not set on the App Service, so this fell back to the
@@ -28,7 +29,7 @@ function landingBase(): string {
   if (raw) {
     console.warn("[landing] ignoring invalid LANDING_BASE_URL", { value: raw });
   }
-  return "https://www.boreal.financial";
+  return websiteUrl();
 }
 
 function slugify(): string {

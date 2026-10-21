@@ -30,14 +30,14 @@ beforeEach(() => {
 
 describe("funnel counts verified step-one abandoners v79", () => {
   it("keeps never-progressed application rows in the funnel", async () => {
-    const r = await request(app).get("/api/marketing/funnel?days=30").set("Authorization", `Bearer ${token}`).set("X-Silo", "BI");
+    const r = await request(app).get("/api/marketing/funnel?days=30").set("Authorization", `Bearer ${token}`).set("X-Silo", "BF");
     expect(r.status).toBe(200);
     const step1 = r.body.data.steps[0];
     expect(step1).toMatchObject({ key: "step1", count: 15, pctOfStart: 100 });
     // The step-1 stoppers show up as the step 1 -> step 2 drop.
     expect(r.body.data.steps[1]).toMatchObject({ key: "step2", count: 5, dropFromPrev: 66.7 });
     const [raw, params] = callsMatching(queryMock, FUNNEL)[0] as [string, unknown[]];
-    expect(params).toEqual(["BI", "30"]);
+    expect(params).toEqual(["BF", "30"]);
     // The executable SQL (comments stripped) filters on silo and window only.
     const sql = raw.replace(/--[^\n]*/g, "").replace(/\s+/g, " ");
     expect(sql).toContain("FROM applications WHERE silo = $1 AND created_at >= now() - ($2 || ' days')::interval )");

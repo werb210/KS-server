@@ -7,6 +7,7 @@ import { pool } from "../db.js";
 import { twilioWebhookValidation } from "../middleware/twilioWebhookValidation.js"; // BF_SERVER_BLOCK_v464_SMS_DELIVERY
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js";
 import { safeHandler } from "../middleware/safeHandler.js"; // BF_SERVER_v789_SAFE_HANDLERS // BF_SERVER_SILENT_QUERIES_v678
+import { websiteUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 const router = Router();
 router.use(express.urlencoded({ extended: false }));
@@ -32,7 +33,7 @@ router.post("/status", twilioWebhookValidation, safeHandler(async (req: any, res
 }));
 
 router.get("/:token", async (req: any, res: any) => {
-  const fallbackUrl = "https://www.boreal.financial"; // BF_SERVER_WWW_FALLBACK_v749
+  const fallbackUrl = websiteUrl(); // BF_SERVER_WWW_FALLBACK_v749
   try {
     const payload = jwt.verify(String(req.params.token), String(process.env.JWT_SECRET), { algorithms: ["HS256"] }) as { sid?: string; u?: string };
     const url = payload?.u && /^https?:\/\//i.test(payload.u) ? payload.u : fallbackUrl;

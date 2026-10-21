@@ -48,7 +48,7 @@ describe("v464 SMS delivery tracking", () => {
     create.mockResolvedValue({ sid: "SM1", status: "queued" });
     const sendSms = await load();
     await sendSms({ to: "+19173043342", message: "hi", track: { kind: "owner1_signing", applicationId: "app-1" } });
-    expect(create.mock.calls[0][0].statusCallback).toBe("https://server.boreal.financial/api/r/status");
+    expect(create.mock.calls[0][0].statusCallback).toBe("https://ks-server-dev-chb5htbwaue2hygk.canadacentral-01.azurewebsites.net/api/r/status");
     const insert = poolQuery.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO sms_deliveries"));
     expect(insert?.[1]).toEqual(["SM1", "+19173043342", "owner1_signing", "app-1", "queued"]);
   });

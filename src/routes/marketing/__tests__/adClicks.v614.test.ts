@@ -51,12 +51,12 @@ describe("ad clicks tree", () => {
   });
 
   it("is mounted on the marketing router and reads CRM attribution, all time, leaving out Performance Max", async () => {
-    const r = await request(app).get("/api/marketing/ad-clicks").set("Authorization", `Bearer ${token}`).set("X-Silo", "BI");
+    const r = await request(app).get("/api/marketing/ad-clicks").set("Authorization", `Bearer ${token}`).set("X-Silo", "BF");
     expect(r.status).toBe(200);
     expect(r.body.total).toBe(9);
     expect(r.body.campaigns[0].campaign).toBe("BF Search - CA");
     const [sql, params] = callsMatching(queryMock, CLICKS)[0] as [string, unknown[]];
-    expect(params).toEqual(["BI"]);
+    expect(params).toEqual(["BF"]);
     expect(sql).toContain("NOT ILIKE '%performance max%'");
     expect(sql).not.toContain("interval");
   });

@@ -9,7 +9,6 @@ import { answerBySql, callsMatching } from "./helpers/answerBySql.js";
 
 const h = vi.hoisted(() => ({ query: vi.fn() }));
 vi.mock("../db.js", async (orig) => ({ ...(await orig() as any), pool: { query: h.query, connect: vi.fn() }, runQuery: h.query, dbQuery: h.query }));
-vi.mock("../services/biCarrierSubmit.js", () => ({ submitBiToCarrier: async () => ({ ok: true, skipped: "no_pgi" }) }));
 import offerAcceptance from "../routes/offerAcceptance.js";
 import dashboard from "../routes/dashboard.js";
 

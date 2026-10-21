@@ -21,6 +21,7 @@ import { getStorage } from '../../lib/storage/index.js';
 import { sendSMS } from '../../services/smsService.js';
 import { randomUUID } from 'node:crypto';
 import { logWarnSwallowed } from "../../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
+import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 // BF_APP_ID_CAST_v39 — Block 39-A — applications.id comparisons cast to text
 
 const router = Router();
@@ -450,7 +451,7 @@ router.post('/:id/request-steps', requireCapability([CAPABILITIES.CRM_WRITE]), s
     );
     const phone = ph.rows[0]?.phone ?? null;
     if (phone) {
-      const base = (process.env.CLIENT_BASE_URL ?? 'https://client.boreal.financial').replace(/\/+$/, '');
+      const base = (process.env.CLIENT_BASE_URL ?? clientUrl()).replace(/\/+$/, '');
       const url = `${base}/application/${id}`;
       const { notifyClient } = await import('../../services/notifications/notifyClient.js'); // BF_SERVER_BLOCK_v552
       // BF_SERVER_BLOCK_v481_NO_SILENT_SEND_FAILURES - only report sent when it actually went out.
@@ -1809,7 +1810,7 @@ router.post('/:id/lenders/:lenderId/files', lenderTermSheetUpload.single('file')
     );
     const phone = phoneRes.rows[0]?.phone ?? null;
     if (phone) {
-      const portalBase = process.env.CLIENT_PORTAL_URL || 'https://client.boreal.financial';
+      const portalBase = process.env.CLIENT_PORTAL_URL || clientUrl();
       const { notifyClient } = await import('../../services/notifications/notifyClient.js'); // BF_SERVER_BLOCK_v552
       await notifyClient({ phone, applicationId: appId, kind: 'term_sheet', categoryId: 'OFFER_READY',
         sms: `Your term sheet from ${lenderName} is ready to review: ${portalBase}/application/${appId}`,

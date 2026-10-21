@@ -21,13 +21,11 @@ import { linkContactToApplication } from "../../services/applicationContacts.js"
 import { logError, logInfo } from "../../observability/logger.js";
 import { mirrorApplicationToCrm } from "../../services/applicationCrmMirror.js"; // BF_APP_TO_CRM_v38
 import { fillDraftContact, furthestStep } from "../../services/draftProgress.js"; // BF_SERVER_DRAFT_PROGRESS_v389
-// BF_SERVER_BLOCK_v213_BF_TO_BI_HANDOFF_v1
-import { postBiHandoff } from "../../services/biHandoff.js";
-import { randomUUID as biRandomUUID } from "node:crypto";
 import { logWarnSwallowed } from "../../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
 import { applicationParamGuard } from "../../auth/clientApplicationOwnership.js"; // BF_SERVER_v789_ID_NORMALIZE
 import { checkSubmitCompleteness, type CompletenessResult } from "../../services/applicationCompleteness.js"; // BF_SERVER_v791_SUBMIT_COMPLETENESS
 import { MARKETING_SMS_OPTIN_TEXT } from "../../services/smsConsent.js"; // BF_SERVER_v808_MARKETING_OPTIN
+import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 // BF_APP_ID_CAST_v39 - Block 39-A - applications.id comparisons cast to text
 
 const router = Router();
@@ -694,7 +692,7 @@ router.post(
               try { const md = (application as any).metadata ?? {}; const fd = md.formData ?? {}; return fd?.applicant?.phone ?? md?.applicant?.phone ?? null; } catch { return null; }
             })();
             if (v711_phone) {
-              const v711_base = (process.env.CLIENT_BASE_URL ?? "https://client.boreal.financial").replace(/\/+$/, "");
+              const v711_base = (process.env.CLIENT_BASE_URL ?? clientUrl()).replace(/\/+$/, "");
               const v711_url = `${v711_base}/application/${application.id}`;
               const { notifyClient } = await import("../../services/notifications/notifyClient.js"); // BF_SERVER_BLOCK_v552
               await notifyClient({ phone: String(v711_phone), applicationId: String(application.id), kind: "forms_remaining", categoryId: "DOCUMENT_REQUEST",
@@ -783,7 +781,7 @@ router.post(
             } catch { return null; }
           })();
           if (v650_phone) {
-            const clientBase = process.env.CLIENT_BASE_URL ?? "https://client.boreal.financial";
+            const clientBase = process.env.CLIENT_BASE_URL ?? clientUrl();
             const portalUrl = `${clientBase.replace(/\/+$/, "")}/application/${application.id}`;
             const { notifyClient } = await import("../../services/notifications/notifyClient.js"); // BF_SERVER_BLOCK_v552
             await notifyClient({ phone: String(v650_phone), applicationId: String(application.id), kind: "documents_remaining", categoryId: "DOCUMENT_REQUEST",
@@ -1255,193 +1253,7 @@ router.post(
         });
       } catch { /* never block submit on mirror */ }
 
-      // BF_SERVER_BLOCK_v213_BF_TO_BI_HANDOFF_v1
-      // If the applicant opted into PGI on Step 6, hand off to
-      // BI-Server. Synchronous (not fire-and-forget) so the response
-      // includes the completion URL and the mini-portal messenger
-      // can show the link immediately. Bounded to 8s by biHandoff.
-      // Failure here is non-fatal - BF submit still succeeds and
-      // staff can re-trigger the handoff from the portal later.
-      try {
-        const pgiOptIn = String((legacyApp as any)?.pgi_opt_in ?? "").toLowerCase();
-        if (pgiOptIn === "yes") {
-          // BF_SERVER_BLOCK_v330_MULTI_APP_PGI_HANDOFF_v1
-          // One PGI policy per funding/equipment application:
-          //   - primary (always)
-          //   - equipment leg (when scenario 4 fired)
-          //   - closing-costs companion (when scenario 3 fired)
-          const v330_handoffTargets: Array<{
-            bfApplicationId: string;
-            loanAmountOverride: number | null;
-            role: "primary" | "equipment_leg" | "closing_costs_companion";
-          }> = [
-            { bfApplicationId: application.id, loanAmountOverride: null, role: "primary" },
-          ];
-          if (v330_equipmentLegId != null) {
-            v330_handoffTargets.push({
-              bfApplicationId: v330_equipmentLegId,
-              loanAmountOverride: v330_equipmentLegAmount,
-              role: "equipment_leg",
-            });
-          }
-          if (v330_companionLegId != null) {
-            v330_handoffTargets.push({
-              bfApplicationId: v330_companionLegId,
-              loanAmountOverride: v330_companionLegAmount,
-              role: "closing_costs_companion",
-            });
-          }
-
-          for (const v330_t of v330_handoffTargets) {
-            const r = await postBiHandoff({
-              bfApplicationId: v330_t.bfApplicationId,
-              legacyApp,
-              // BF_SERVER_BI_HANDOFF_SOURCES_v1 - hand over the sources this
-              // route already resolved instead of making the payload builder
-              // guess the wizard's shape a second time.
-              normalized,
-              businessSource: bizSrc,
-              applicantSource: appSrc,
-              loanAmountOverride: v330_t.loanAmountOverride,
-            });
-            if (r.ok) {
-              await pool.query(
-                `UPDATE applications
-                    SET bi_application_id = $1,
-                        bi_public_id = $2,
-                        bi_completion_url = $3,
-                        updated_at = NOW()
-                  WHERE id::text = ($4)::text`,
-                [r.biApplicationId, r.biPublicId, r.completionUrl, v330_t.bfApplicationId],
-              );
-              // BF_SERVER_BI_DOC_COPY_v701 - documents uploaded in the wizard (before this link
-              // existed) were never copied to the PGI application. Copy them now.
-              void import("../../services/biDocMirror.js")
-                .then((m) => m.mirrorApplicationDocsToBi(v330_t.bfApplicationId))
-                .catch((err: unknown) => console.warn("[bi-handoff] document copy failed", { message: err instanceof Error ? err.message : String(err) }));
-              // v330: one messenger message per funding app's PGI policy.
-              // The body names the product category when available so the
-              // applicant can tell which policy belongs to which application.
-              const v330_roleLabel = v330_t.role === "primary"
-                ? "main funding"
-                : v330_t.role === "equipment_leg"
-                  ? "equipment"
-                  : "closing costs";
-              // BF_SERVER_BLOCK_v777_PGI_PRODUCT_LABEL - name the PGI message after
-              // the BF app's product category (LOC / Equipment / ...) instead of the
-              // generic funding-leg role, so a client with several apps can tell
-              // which policy belongs to which application.
-              const v777_catRow = await pool.query<{ product_category: string | null; product_type: string | null }>(
-                `SELECT product_category, product_type FROM applications WHERE id::text = ($1)::text LIMIT 1`,
-                [v330_t.bfApplicationId],
-              );
-              const v777_label = (() => {
-                const raw = String(v777_catRow.rows[0]?.product_category ?? v777_catRow.rows[0]?.product_type ?? "").trim();
-                if (!raw) return v330_roleLabel;
-                const k = raw.toLowerCase().replace(/[\s-]+/g, "_");
-                const m: Record<string, string> = { line_of_credit: "LOC", loc: "LOC", equipment_financing: "Equipment", equipment: "Equipment", equipment_finance: "Equipment", working_capital: "Working Capital", term_loan: "Term Loan", factoring: "Factoring" };
-                return m[k] ?? raw.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-              })();
-              try {
-                const v650_existingMsg = await pool.query<{ id: string }>(
-                  `SELECT id FROM communications_messages
-                    WHERE application_id = $1
-                      AND staff_name = 'Boreal Insurance'
-                      AND body LIKE $2
-                    LIMIT 1`,
-                  [v330_t.bfApplicationId, `%${r.completionUrl}%`]
-                );
-                if (v650_existingMsg.rows.length === 0) {
-                  await pool.query(
-                    `INSERT INTO communications_messages
-                       (id, type, direction, status, application_id, contact_id, silo, body, staff_name, cta_label, cta_action, created_at)
-                     VALUES (
-                       $1, 'message', 'outbound', 'sent', $2,
-                       (SELECT contact_id FROM applications WHERE id = $2 LIMIT 1),
-                       COALESCE((SELECT silo FROM applications WHERE id = $2 LIMIT 1), 'BF'),
-                       $3, 'Boreal Insurance', $4, $5, NOW()
-                     )`,
-                    [
-                      biRandomUUID(),
-                      v330_t.bfApplicationId,
-                      `Your PGI application for the ${v777_label} funding portion is ready to complete.`,
-                      "Complete PGI Application",
-                      r.completionUrl,
-                    ],
-                  );
-                }
-              } catch (msgErr) {
-                logError("bi_handoff_messenger_insert_failed", {
-                  code: "bi_handoff_messenger_insert_failed",
-                  applicationId: v330_t.bfApplicationId,
-                  role: v330_t.role,
-                  error: msgErr instanceof Error ? msgErr.message : "unknown",
-                });
-              }
-              try {
-                const v650_contactRes = await pool.query<{ phone: string | null }>(
-                  `SELECT c.phone
-                     FROM applications a
-                LEFT JOIN contacts c ON c.id = a.contact_id
-                    WHERE a.id = $1
-                    LIMIT 1`,
-                  [v330_t.bfApplicationId]
-                );
-                const phoneFromContact = v650_contactRes.rows[0]?.phone ?? null;
-                const phoneFromMeta = (() => {
-                  try {
-                    const md = (application as any).metadata ?? {};
-                    const fd = md.formData ?? {};
-                    return fd?.applicant?.phone ?? md?.applicant?.phone ?? md?.borrower?.phone ?? null;
-                  } catch { return null; }
-                })();
-                const v650_to = String(phoneFromContact ?? phoneFromMeta ?? "").trim();
-                // BF_SERVER_BLOCK_v563 - the PGI link goes out when the term sheet is signed
-                // (signnow webhook), not at submit - unless it is somehow already signed.
-                // BF_SERVER_v809_SMS_UPDATES_CONSENT - texted only if the client ticked "Text me updates".
-                if (v650_to && (await (await import("../../services/smsUpdatesConsent.js")).smsUpdatesAllowed(v650_to)) && (await (await import("../../services/termSheetSigned.js")).termSheetSigned(String(v330_t.bfApplicationId)))) {
-                  const { sendSms } = await import("../../modules/notifications/sms.service.js");
-                  await sendSms({
-                    to: v650_to,
-                    message: `Boreal Insurance: your PGI application for the ${v777_label} funding portion is ready to complete: ${r.completionUrl}`,
-                  }).catch((smsErr) => {
-                    logError("bi_handoff_sms_failed_nonfatal", {
-                      code: "bi_handoff_sms_failed_nonfatal",
-                      applicationId: v330_t.bfApplicationId,
-                      role: v330_t.role,
-                      error: smsErr instanceof Error ? smsErr.message : "unknown",
-                    });
-                  });
-                }
-              } catch (smsOuterErr) {
-                logError("bi_handoff_sms_unexpected", {
-                  code: "bi_handoff_sms_unexpected",
-                  applicationId: v330_t.bfApplicationId,
-                  error: smsOuterErr instanceof Error ? smsOuterErr.message : "unknown",
-                });
-              }
-              logInfo("bi_handoff_recorded", {
-                applicationId: v330_t.bfApplicationId,
-                role: v330_t.role,
-                biPublicId: r.biPublicId,
-              });
-            } else {
-              logError("bi_handoff_failed_nonfatal", {
-                code: "bi_handoff_failed_nonfatal",
-                applicationId: v330_t.bfApplicationId,
-                role: v330_t.role,
-                error: r.error,
-              });
-            }
-          }
-        }
-      } catch (handoffErr) {
-        logError("bi_handoff_unexpected", {
-          code: "bi_handoff_unexpected",
-          applicationId: application.id,
-          error: handoffErr instanceof Error ? handoffErr.message : "unknown",
-        });
-      }
+      // KS_SERVER_v1_NO_BI - Keystone has no Boreal Insurance: no PGI handoff after submit.
     }
 
     if (!normalized) {

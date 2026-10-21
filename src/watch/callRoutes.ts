@@ -31,8 +31,8 @@ router.post("/calls", watchAuth, safeHandler(async (req: any, res) => {
     return watchError(req, res, 400, "invalid_request", "Callback number is server controlled");
   const requestedLine = String(req.body?.line || "").toUpperCase();
   const line = allowedLine(req, requestedLine);
-  if (!line) return watchError(req, res, ["BF", "BI", "SLF"].includes(requestedLine) ? 403 : 400,
-    ["BF", "BI", "SLF"].includes(requestedLine) ? "forbidden" : "invalid_request", "Line is invalid or not permitted");
+  if (!line) return watchError(req, res, ["BF"].includes(requestedLine) ? 403 : 400,
+    ["BF"].includes(requestedLine) ? "forbidden" : "invalid_request", "Line is invalid or not permitted");
   const contactId = typeof req.body?.contactId === "string" && /^[0-9a-f-]{36}$/i.test(req.body.contactId) ? req.body.contactId : null;
   const callback = await pool.query(`SELECT verified_callback_number,callback_verified_at FROM users WHERE id=$1`, [req.watch.staffUserId]);
   const callbackNumber = normalizeE164(callback.rows[0]?.verified_callback_number);

@@ -95,29 +95,4 @@ describe("BF_SERVER_OCR_RATE_LIMIT_v1", () => {
     expect(config.ocr.workerConcurrency).toBe(1);
   });
 
-  describe("treats an already-mirrored BI document as done, not failed", () => {
-    afterEach(() => { vi.unstubAllGlobals(); });
-
-    it("a unique-index answer from BI is logged as already present and marked mirrored", async () => {
-      h.query.mockImplementation(answerBySql([[/SELECT bi_public_id FROM applications/, { rows: [{ bi_public_id: "PUB1" }] }]]));
-      const fetchMock = vi.fn(async () => new Response('duplicate key value violates unique constraint "idx_bi_documents_app_doctype_unique"', { status: 500 }));
-      vi.stubGlobal("fetch", fetchMock);
-      const { mirrorDocToBi } = await import("../services/biDocMirror.js");
-      const r = await mirrorDocToBi({ bfApplicationId: "app-1", bfDocumentId: "doc-1", documentType: "Void cheque", fileName: "c.pdf", mimeType: "application/pdf", fileSize: 1, storageUrl: "u", uploadedByName: null });
-      expect(r).toEqual({ ok: false, error: "bi_already_mirrored" });
-      expect(String((fetchMock.mock.calls[0] as unknown as [string])[0])).toContain("/applications/PUB1/documents/from-bf");
-      expect(h.logInfo).toHaveBeenCalledWith("bi_doc_mirror_already_present", expect.objectContaining({ bfDocumentId: "doc-1" }));
-      expect(h.logError).not.toHaveBeenCalledWith("bi_doc_mirror_http_error", expect.anything());
-      expect(callsMatching(h.query, /UPDATE documents SET bi_mirrored_at = now\(\)/).map((c) => c[1])).toEqual([["doc-1"]]);
-    });
-
-    it("any other BI error is still an error", async () => {
-      h.query.mockImplementation(answerBySql([[/SELECT bi_public_id FROM applications/, { rows: [{ bi_public_id: "PUB1" }] }]]));
-      vi.stubGlobal("fetch", vi.fn(async () => new Response("boom", { status: 500 })));
-      const { mirrorDocToBi } = await import("../services/biDocMirror.js");
-      const r = await mirrorDocToBi({ bfApplicationId: "app-1", bfDocumentId: "doc-1", documentType: "Void cheque", fileName: null, mimeType: null, fileSize: null, storageUrl: null, uploadedByName: null });
-      expect(r).toEqual({ ok: false, error: "bi_500" });
-      expect(h.logError).toHaveBeenCalledWith("bi_doc_mirror_http_error", expect.objectContaining({ status: 500 }));
-    });
-  });
 });
