@@ -19,6 +19,6 @@ describe("LANDING_BASE_URL guard", () => {
   });
 
   it("still falls back to www, since the apex cannot serve /e/*", () => {
-    expect(src).toContain('return "https://www.boreal.financial";');
+    expect(src).toContain("return websiteUrl();"); // KS_SERVER_v1_LICENSEE - the licensee's website, never Boreal's
   });
 });

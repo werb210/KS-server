@@ -9,7 +9,7 @@ import { createApp } from "../app.js";
 process.env.NODE_ENV = "test";
 process.env.JWT_SECRET = "test-secret";
 
-const STAFF_ORIGIN = "https://staff.boreal.financial";
+const STAFF_ORIGIN = "https://thankful-wave-04964490f.2.azurestaticapps.net";
 
 describe("OTP CORS flow", () => {
   const app = createApp();

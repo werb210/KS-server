@@ -1,8 +1,6 @@
 // BF_SERVER_CRM_CONTEXT_v653 - optional context used by CRM summaries and Maya.
-import { signServiceToken } from "../../auth/serviceTokens.js"; // BF_SERVER_v789_SERVICE_TOKENS
 import { pool } from "../../db.js";
 import { buildActionCenter } from "../applicantActions.js";
-import { pgiStageFor } from "../pgiStage.js";
 
 type Rows = { rows: any[] };
 export type ContextDeps = {
@@ -92,18 +90,14 @@ export async function contactContextSections(contact: any, apps: any[], deps: Co
   return [section("How they found us (Google Ads)", ads), section("Referral", referral), section("Capital readiness check", readiness), section("Website journey (oldest first)", journey), section("Maya chat (oldest first)", chats), section("Application detail", depth), section("Boreal Insurance side", insurance)].filter(Boolean);
 }
 
-export async function fetchBiPerson(email: string | null, phone: string | null): Promise<any | null> {
-  // BF_SERVER_v789_SERVICE_TOKENS - helper token (iss/aud, BI secret when set).
-  let token: string; try { token = signServiceToken("bi-server", { source: "maya-service" }); } catch (error) { console.warn("[crm-context] bi_token_unavailable", { message: (error as Error)?.message }); return null; }
-  const base = (process.env.BI_SERVER_URL || "https://bi-server-cse0apamgkheb9d5.canadacentral-01.azurewebsites.net").replace(/\/+$/, "");
-  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 5000);
-  try { const response = await fetch(`${base}/api/v1/bi/maya/staff/person-summary`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify({ email, phone }), signal: controller.signal }); if (!response.ok) { console.warn("[crm-context] bi_person_http", { status: response.status }); return null; } const body: any = await response.json(); return body?.ok ? body : null; }
-  finally { clearTimeout(timer); }
+// KS_SERVER_v1_NO_BI - Keystone has no Boreal Insurance, so there is no insurance person to look up.
+export async function fetchBiPerson(_email: string | null, _phone: string | null): Promise<any | null> {
+  return null;
 }
 
 export const defaultContextDeps: ContextDeps = {
   query: (sql, params) => pool.query(sql, params as any[]) as unknown as Promise<Rows>,
   actionCenter: (applicationId) => buildActionCenter(applicationId),
-  pgiStage: (applicationId) => pgiStageFor(applicationId),
+  pgiStage: async () => null, // KS_SERVER_v1_NO_BI
   biPerson: fetchBiPerson,
 };

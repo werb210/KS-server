@@ -12,6 +12,7 @@ import { dbQuery } from "../../db.js";
 import { createSbaSigningSessions } from "./sbaSigning.js";
 import { resolveSbaOwners, ownerFingerprint } from "./sbaOwners.js";
 import { logInfo } from "../../observability/logger.js";
+import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 /** Is this an SBA deal at all? Non-SBA applications must not be gated. */
 // BF_SERVER_BLOCK_v455_SEND_FOLLOWUP - application_lender_selections has no
@@ -177,7 +178,7 @@ export async function sendSbaForSigning(applicationId: string): Promise<SendForS
 
 async function notifyOwnerOne(applicationId: string): Promise<{ sms: boolean; email: boolean }> {
   const out = { sms: false, email: false };
-  const portal = "https://client.boreal.financial";
+  const portal = clientUrl();
   try {
     const owners = await resolveSbaOwners(applicationId);
     const o1: any = owners.find((o) => o.index === 1);

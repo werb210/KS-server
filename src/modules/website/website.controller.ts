@@ -9,6 +9,7 @@ import { notifyAllStaff } from "../../services/notifications/notifyAllStaff.js";
 import { parseExpressCaslConsent, recordExpressCaslConsent } from "../../services/smsConsent.js"; // BF_SERVER_v789_CASL_EXPRESS_CONSENT
 // BF_SERVER_BLOCK_v129a_READINESS_PHONE_NORMALIZE_v1
 import { normalizePhoneNumber } from "../auth/phone.js";
+import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 // BF_SERVER_v?_BLOCK_1_14_V1_READINESS_AND_STAFF_NOTIFY
 export async function submitCreditReadiness(req: Request, res: Response) {
@@ -258,7 +259,7 @@ export async function submitCreditReadiness(req: Request, res: Response) {
       leadId: lead.id,
       // Phone-based prefill is the primary mechanism. The token is kept for
       // back-compat with any consumer that prefers token-based hydration.
-      redirect: `https://client.boreal.financial/apply?continue=${token}`,
+      redirect: `${clientUrl()}/apply?continue=${token}`,
       readinessScore: readinessRes.rows[0]?.readiness_score ?? null,
       readinessTier: readinessRes.rows[0]?.readiness_tier ?? null,
     });

@@ -13,7 +13,6 @@ vi.mock("../db.js", async () => {
 });
 vi.mock("../lib/storage/index.js", () => ({ getStorage: () => ({ put: h.put }) }));
 vi.mock("../modules/ocr/ocr.service.js", () => ({ enqueueOcrForDocument: async () => undefined }));
-vi.mock("../services/biDocMirror.js", async (orig) => ({ ...(await orig<typeof import("../services/biDocMirror.js")>()), mirrorDocToBiAsync: () => undefined, withdrawDocFromBiAsync: () => undefined }));
 vi.mock("../modules/automation/automationEngine.js", () => ({ emitAutomationEvent: async () => undefined }));
 vi.mock("../routes/clientDocumentsNeeded.js", () => ({ computeOutstandingDocs: async () => ({ required: [], stillNeeded: [], rejected: [] }) }));
 

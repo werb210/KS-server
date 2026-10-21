@@ -97,11 +97,11 @@ describe("send hold window v1", () => {
 
   it("a held job is canceled outright, only while queued and not started", async () => {
     queryMock.mockImplementation(answerBySql([[HOLD_CANCEL, { rows: [{ id: "job-7" }], rowCount: 1 }]]));
-    const r = await auth(request(app).post("/api/marketing/send-jobs/job-7/cancel")).set("X-Silo", "BI");
+    const r = await auth(request(app).post("/api/marketing/send-jobs/job-7/cancel")).set("X-Silo", "BF");
     expect(r.status).toBe(200);
     expect(r.body.data).toEqual({ canceled: true, id: "job-7", phase: "held" });
     const [sql, params] = callsMatching(queryMock, HOLD_CANCEL)[0] as [string, unknown[]];
     expect(sql).toContain("status='queued' AND started_at IS NULL");
-    expect(params).toEqual(["job-7", "BI"]);
+    expect(params).toEqual(["job-7", "BF"]);
   });
 });

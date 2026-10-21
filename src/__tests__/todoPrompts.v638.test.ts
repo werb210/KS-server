@@ -16,7 +16,6 @@ vi.mock("../db.js", async (orig) => {
   return { ...real, dbQuery: q, runQuery: q, query: q, pool, db: pool, default: pool };
 });
 vi.mock("../services/termSheetSigned.js", async (orig) => ({ ...(await orig<any>()), termSheetSigned: async () => h.signed }));
-vi.mock("../services/pgiStage.js", async (orig) => ({ ...(await orig<any>()), pgiStageFor: async () => "new_application" }));
 vi.mock("../routes/clientDocumentsNeeded.js", async (orig) => ({
   ...(await orig<any>()),
   computeOutstandingDocs: async () => ({ required: [], stillNeeded: [], rejected: [] }),
@@ -56,14 +55,14 @@ describe("SBA forms outstanding", () => {
 });
 
 describe("PGI and SBA prompts leave the chat for the to-do list", () => {
-  it("action center adds the SBA forms item, and the PGI item only once a term sheet is signed", async () => {
+  it("action center adds the SBA forms item and never a PGI item (KS_SERVER_v1_NO_BI)", async () => {
     const before = await buildActionCenter(APP);
     expect(before.outstanding.find((i) => i.key === "pgi")).toBeUndefined();
     expect(before.outstanding).toContainEqual({ key: "form:sba_forms", kind: "form", label: "SBA forms", action: "sba_forms", urgent: false });
 
     h.signed = true;
     const after = await buildActionCenter(APP);
-    expect(after.outstanding).toContainEqual(expect.objectContaining({ key: "pgi", kind: "action", action: PGI_URL, urgent: true }));
+    expect(after.outstanding.find((i) => i.key === "pgi")).toBeUndefined();
   });
 
   it("the client thread leaves them out", async () => {

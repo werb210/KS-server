@@ -24,7 +24,7 @@ let inFlight = 0;
 let maxInFlight = 0;
 function answers() {
   const base = answerBySql([
-    [PROFILE, { rows: [{ id: STAFF_ID, role: "Admin", silo: "BF", silos: ["BF", "BI"] }] }],
+    [PROFILE, { rows: [{ id: STAFF_ID, role: "Admin", silo: "BF", silos: ["BF"] }] }],
     [/FROM tasks t/, { rows: [{ count: "3" }] }],
     [/FROM communications_messages m/, { rows: [{ count: "2" }] }],
     [/AS commission/, { rows: [{ commission: "1234.56" }] }],
@@ -43,7 +43,7 @@ function answers() {
 async function summary(withAuth = true) {
   const app = express();
   app.use("/api/widget", widgetSummaryRoutes);
-  const r = request(app).get("/api/widget/summary").set("X-Silo", "BI");
+  const r = request(app).get("/api/widget/summary").set("X-Silo", "BF");
   return withAuth ? r.set("Authorization", `Bearer ${token()}`) : r;
 }
 const widgetCalls = () => queryMock.mock.calls.filter(([sql]) => !PROFILE.test(sqlText(sql)));
@@ -89,7 +89,7 @@ describe("the widget cannot disagree with the dashboard", () => {
     await summary();
     const [call] = callsMatching(queryMock, /AS commission/);
     expect(sqlText(call![0])).toContain("a.pipeline_state = $2 OR a.funded_amount IS NOT NULL");
-    expect(call![1]).toEqual(["BI", ApplicationStage.ACCEPTED]);
+    expect(call![1]).toEqual(["BF", ApplicationStage.ACCEPTED]);
   });
 });
 
@@ -103,7 +103,7 @@ describe("one call, not four", () => {
   it("returns every figure the widget needs", async () => {
     const res = await summary();
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ silo: "BI", pipelineCount: 7, tasksDueToday: 3, unreadMessages: 2, commissionEarned: 1235, currency: "CAD" });
+    expect(res.body).toMatchObject({ silo: "BF", pipelineCount: 7, tasksDueToday: 3, unreadMessages: 2, commissionEarned: 1235, currency: "CAD" });
   });
 
   it("stamps the time so a stale tile can say so", async () => {
@@ -146,7 +146,7 @@ describe("it counts what the portal counts", () => {
     expect(sql).toContain("t.due_at::date <= now()::date");
     expect(sql).toContain("t.assignee_user_id = $2 OR t.assignee_user_id IS NULL");
     expect(sql).toContain("t.status <> 'COMPLETED'");
-    expect(call![1]).toEqual(["BI", STAFF_ID]);
+    expect(call![1]).toEqual(["BF", STAFF_ID]);
   });
 });
 
@@ -161,7 +161,7 @@ describe("it is authenticated and silo-scoped like everything else", () => {
     await summary();
     for (const [sql, params] of widgetCalls()) {
       expect(sqlText(sql)).toMatch(/silo/i);
-      expect((params as unknown[])[0]).toBe("BI");
+      expect((params as unknown[])[0]).toBe("BF");
     }
   });
 

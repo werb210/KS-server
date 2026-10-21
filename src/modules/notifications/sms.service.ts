@@ -4,6 +4,7 @@ import { withRetry } from "../../lib/retry.js";
 import { pushDeadLetter } from "../../lib/deadLetter.js";
 import { isPermanentSmsFailure, isUndeliverableNumber } from "../../lib/smsDeliverability.js";
 import { smsFromFor, smsSenderFor } from "../../lib/smsFrom.js"; // BF_SERVER_US_SMS_TOLLFREE_v755
+import { serverUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 // BF_SERVER_SMS_LOOP_KILL_v121
 export class UndeliverableNumberError extends Error {
@@ -19,7 +20,7 @@ export class UndeliverableNumberError extends Error {
 export type SmsTrack = { kind?: string; applicationId?: string | null };
 
 function statusCallbackUrl(): string {
-  return `${(process.env.PUBLIC_BASE_URL || "https://server.boreal.financial").replace(/\/+$/, "")}/api/r/status`;
+  return `${(process.env.PUBLIC_BASE_URL || serverUrl()).replace(/\/+$/, "")}/api/r/status`;
 }
 
 async function recordSmsSent(sid: string | undefined, to: string, track: SmsTrack | undefined, status: string | undefined): Promise<void> {

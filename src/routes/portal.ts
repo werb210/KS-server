@@ -67,6 +67,7 @@ import { misfiledSignal, type ClassificationRow } from "../services/documents/mi
 import { bankCoverageForApplication, type Coverage } from "../services/documents/bankStatementCoverage.js"; // BF_SERVER_BANK_COVERAGE_v267
 import { loadNamingContext, sanitizeDisplayName, uniqueDisplayName } from "../services/documents/documentNaming.js"; // BF_SERVER_RENAME_ON_ACCEPT_v264
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
+import { clientUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 // BF_APP_ID_CAST_v39 — Block 39-A — applications.id comparisons cast to text
 
 const router = Router();
@@ -222,7 +223,7 @@ async function sendDocumentRejectionSms(params: {
   const reason = params.rejectionReason ? ` Reason: ${params.rejectionReason}.` : "";
   const body =
     `Your document "${params.documentType}" has been rejected.${reason} ` +
-    "Please log in to re-upload: https://client.boreal.financial";
+    "Please log in to re-upload: " + clientUrl();
 
   // BF_SERVER_GUARD_EVERYWHERE_v136
   if (isUndeliverableNumber(to)) return;
@@ -2162,7 +2163,7 @@ router.post(
       );
       const phone = phoneRes.rows[0]?.phone ?? null;
       if (phone) {
-        const portalBase = process.env.CLIENT_PORTAL_URL || "https://client.boreal.financial";
+        const portalBase = clientUrl();
         const link = `${portalBase}/application/${appId}`;
         const { notifyClient } = await import("../services/notifications/notifyClient.js"); // BF_SERVER_BLOCK_v552
         await notifyClient({ phone, applicationId: appId, kind: "term_sheet", categoryId: "OFFER_READY",

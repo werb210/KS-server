@@ -22,7 +22,6 @@ vi.mock("../../modules/ocr/ocr.service.js", async (orig) => ({
   ...(await orig<typeof import("../../modules/ocr/ocr.service.js")>()),
   enqueueOcrForDocument: vi.fn(async () => undefined),
 }));
-vi.mock("../../services/biDocMirror.js", () => ({ mirrorDocToBiAsync: vi.fn(), withdrawDocFromBiAsync: vi.fn() }));
 
 const migration = fs.readFileSync("migrations/2026_09_16_v306_documents_received_in_background.sql", "utf8");
 const APP_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";

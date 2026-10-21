@@ -1,6 +1,7 @@
 // BF_NOTIFICATIONS_v50 — in-app notification fan-out.
 import { runQuery } from "../../lib/db.js";
 import { pushToUser } from "./pushToUser.js"; // BF_SERVER_BLOCK_v_NOTIF_PUSH_v1
+import { portalUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 export interface NotifyMentionsParams {
   newMentions: string[];          // resolved user ids
@@ -57,7 +58,7 @@ export async function notifyMentions(p: NotifyMentionsParams): Promise<{ inserte
     if (phones.length > 0) {
       const { sendSms } = await import("../../modules/notifications/sms.service.js");
       const preview = snippet.length > 120 ? snippet.slice(0, 117) + "…" : snippet;
-      const linkBase = String(process.env.PORTAL_URL ?? "https://staff.boreal.financial").replace(/\/$/, "");
+      const linkBase = String(process.env.PORTAL_URL ?? portalUrl()).replace(/\/$/, "");
       const url = p.contextUrl ? `${linkBase}${p.contextUrl}` : linkBase;
       for (const u of phones) {
         const greet = u.first_name ? `Hi ${u.first_name}, ` : "";

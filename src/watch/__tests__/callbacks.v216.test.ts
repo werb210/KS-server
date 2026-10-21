@@ -111,8 +111,8 @@ describe("it cannot fail silently", () => {
     expect(sql).toContain("t.silo = $2");
     expect(params.slice(0, 2)).toEqual([STAFF, "BF"]);
     h.query.mockClear();
-    const other = await callbacks("line=BI");
-    expect(other.status).toBe(403);
+    const other = await callbacks("line=BI"); // KS_SERVER_v1_NO_BI - not a line in Keystone
+    expect(other.status).toBe(400);
     expect(callsMatching(h.query, TASKS_SQL)).toHaveLength(0);
   });
 

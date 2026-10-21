@@ -39,7 +39,7 @@ export function validateSteps(steps: unknown): string | null {
   return null;
 }
 
-const SILOS = new Set(["BF", "BI", "SLF"]);
+const SILOS = new Set(["BF"]);
 const isUuid = (v: unknown) => typeof v === "string" && /^[0-9a-f-]{36}$/i.test(v);
 
 /** Body silo when an admin names a valid one, else the selected silo. */

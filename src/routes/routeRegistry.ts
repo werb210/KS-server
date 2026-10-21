@@ -9,7 +9,6 @@ import brokerSelfRoutes from "./brokerSelf.js"; // BF_SERVER_BROKER_PORTAL_v717
 import lenderReferralRoutes from "./lenderReferrals.js"; // BF_SERVER_v825_LENDER_REFERRALS
 import applicationOriginRoutes from "./applicationOrigin.js"; // BF_SERVER_v828_APPLICATION_ORIGIN
 import adminReferrersRoutes from "./adminReferrers.js"; // BF_SERVER_ADMIN_REFERRERS_v1
-import slfRoutes from "./slf.js"; // BF_SERVER_BLOCK_v153_SLF_BACKEND_MINIMAL_v1
 import applicationsRoutes from "../modules/applications/applications.routes.js";
 import bankingRoutes from "./banking.js";
 import calendarRoutes from "./calendar.js";
@@ -68,7 +67,6 @@ import staffPushTokenRoutes from "./staffPushToken.js"; // BF_SERVER_v820_WATCH_
 import { callHoursRouter, missedSummaryRouter, nextFollowUpRouter } from "./staffDialer.js"; // BF_SERVER_v821_DIALER
 import supportRoutes from "./support.js";
 import tasksRoutes from "./tasks.js";
-import serviceBridgeRoutes from "./serviceBridge.js"; // BF_SERVER_SERVICE_BRIDGE_v1
 import usersRoutes from "./users.js";
 import o365TokensRoutes from "./o365Tokens.js";
 import o365OAuthRoutes from "./o365OAuth.js";
@@ -92,7 +90,6 @@ import analyticsRoutes from "./analytics.js"; // BF_SERVER_v789_ANALYTICS_COLLEC
 import naicsRoutes from "./naics.js"; // BF_SERVER_NAICS_v83 (public)
 import recipientSuggestRoutes from "./recipientSuggest.js"; // BF_SERVER_RECIPIENT_SUGGEST_v100
 import referralsRoutes from "./referrals.js";
-import referralsExtRoutes from "./referralsExt.js";
 import pipelineRoutes from "./pipeline.js";
 import telephonyRoutes from "../telephony/routes/telephonyRoutes.js";
 import realtimeRoutes from "../voice/realtimeRoutes.js";
@@ -134,6 +131,7 @@ import libraryPublicRoutes from "./libraryPublic.js"; // BF_SERVER_v810_LIBRARY_
 import diagnosticsRoutes from "./diagnostics.js";
 import { createMountTracker } from "./_canonicalMount.js";
 import { siloMiddleware } from "../middleware/silo.js";
+import licenseeRoutes from "./licensee.js"; // KS_SERVER_v1_LICENSEE
 import { requireAuth, requireAuthAllowClient } from "../middleware/auth.js";
 import watchAuthRoutes from "../watch/authRoutes.js";
 import watchDeviceRoutes from "../watch/deviceRoutes.js";
@@ -293,15 +291,11 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/staff", router: staffRoutes },
   { path: "/support", router: supportRoutes },
   { path: "/tasks", router: tasksRoutes },
-  // BF_SERVER_SERVICE_BRIDGE_v1 - backend-to-backend only, guarded by the
-  // service token inside the router. Not reachable with a staff JWT alone.
-  { path: "/service", router: serviceBridgeRoutes },
   { path: "/users/me", router: o365TokensRoutes },
   { path: "/users", router: usersRoutes },
   { path: "/portal", router: combinedPortalRoutes },
   { path: "/pwa", router: pwaRoutes },
   { path: "/referrals", router: referralsRoutes },
-  { path: "/referrals-ext", router: referralsExtRoutes }, // BF_SERVER_REFERRALS_EXT_MOUNT_v1 - own path (was colliding with /referrals)
   { path: "/pipeline", router: pipelineRoutes },
   { path: "/webhooks", router: webhooksRoutes },
   { path: "/webhooks/graph", router: graphWebhooksRoutes }, // BF_SERVER_GRAPH_WEBHOOKS_v1
@@ -336,7 +330,6 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/naics", router: naicsRoutes }, // BF_SERVER_NAICS_v83 (public)
   { path: "/recipients/suggest", router: recipientSuggestRoutes }, // BF_SERVER_RECIPIENT_SUGGEST_v100
   { path: "/", router: rootRoutes },
-  { path: "/slf", router: slfRoutes },
   { path: "/applications", router: applicationsRoutes },
   { path: "/collateral", router: collateralRoutes }, // v693
   { path: "/credit-summary-v2", router: creditSummaryV2Routes }, // BF_SERVER_BLOCK_v538
@@ -345,6 +338,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/credit-financials", router: creditFinancialsRoutes }, // BF_SERVER_BLOCK_v535
   { path: "/broker-imports", router: brokerImportRoutes }, // BF_SERVER_BLOCK_v521_BROKER_IMPORT
   { path: "/templates", router: templatesRoutes }, // v693
+  { path: "/licensee", router: licenseeRoutes }, // KS_SERVER_v1_LICENSEE
 ];
 
 export const PORTAL_ROUTE_REQUIREMENTS: Pick<ApiRoute, "method" | "path">[] = [

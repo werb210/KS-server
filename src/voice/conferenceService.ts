@@ -1,6 +1,7 @@
 // BF_SERVER_BLOCK_v500 -- conference DB layer (no Twilio calls here)
 import { pool } from "../db.js";
 import { mainLineNumber } from "./directLines.js"; // BF_SERVER_v817_DIALER_MESSAGING - caller-ID last resort
+import { serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 export type ParticipantKind = "staff" | "pstn" | "client_miniportal";
 export type ParticipantRole = "moderator" | "participant";
@@ -146,7 +147,7 @@ function __getTw() {
   return __twilio_v599b(sid, tok);
 }
 function __baseUrl(): string {
-  return process.env.PUBLIC_BASE_URL || "https://server.boreal.financial";
+  return process.env.PUBLIC_BASE_URL || serverUrl();
 }
 function __callerId(): string {
   return process.env.TWILIO_CALLER_ID

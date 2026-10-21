@@ -35,11 +35,6 @@ vi.mock("../../applications/processingStage.service.js", async (importOriginal) 
   ...(await importOriginal<typeof import("../../applications/processingStage.service.js")>()),
   setProcessingStage: vi.fn(async () => undefined),
 }));
-vi.mock("../../../services/biApplicantThread.js", () => ({
-  cleanAttachments: () => [],
-  biSendForPhone: vi.fn(async () => ({ id: "msg-bi" })),
-  biContactForPhone: vi.fn(async () => "ct-bi"),
-}));
 vi.mock("../../../services/team/teamPhaseC.js", () => ({ postTeamAlert: vi.fn(async () => undefined) }));
 
 const waitForEmit = (ev: Record<string, unknown>) => vi.waitFor(() => expect(h.emit).toHaveBeenCalledWith(ev));
@@ -76,10 +71,6 @@ describe("trigger points fire from every phase-1 trigger", () => {
     await waitForEmit({ trigger: "message.inbound", applicationId: E.IDS.app, data: { channel: "client_portal" } });
   }, 60_000);
 
-  it("message.inbound from the BI applicant thread", async () => {
-    await E.biApplicantMessage(h.q);
-    await waitForEmit({ trigger: "message.inbound", silo: "BI", contactId: "ct-bi", data: { channel: "client_portal" } });
-  });
 
   it("call.missed", async () => {
     await E.missedCall(h.q);

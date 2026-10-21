@@ -10,15 +10,13 @@ import { AppleWatchApnsProvider, WatchApnsError } from "../watch/apnsProvider.js
 import { FcmError, getFcmProvider, initializeFcmProvider, isFcmConfigured } from "./fcmProvider.js";
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
 
-type Silo = "BF" | "BI" | "SLF";
+type Silo = "BF";
 
 let provider: AppleWatchApnsProvider | null = null;
 let configured = false;
 
 const BUNDLE_IDS: Record<Silo, string | undefined> = {
   BF: process.env.CLIENT_APNS_BUNDLE_ID_BF,
-  BI: process.env.CLIENT_APNS_BUNDLE_ID_BI,
-  SLF: process.env.CLIENT_APNS_BUNDLE_ID_BF,
 };
 
 // BF_SERVER_v817_CLIENT - the client app moved to the company Apple team (76VAY7UJKJ,

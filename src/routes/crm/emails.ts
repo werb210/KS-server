@@ -6,6 +6,7 @@ import { getGraphForUser } from "../../modules/o365/graphClient.js";
 // BF_SERVER_BLOCK_BI_ROUND5_CRM_SILO_RESOLVE_v1
 import { resolveSiloFromRequest } from "../../middleware/silo.js";
 import { randomUUID } from "node:crypto"; // BF_SERVER_BLOCK_v797_EMAIL_OPEN_TRACKING
+import { serverUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 const router = express.Router({ mergeParams: true });
 
@@ -81,7 +82,7 @@ router.post("/", safeHandler(async (req: any, res: any) => {
   } catch { signatureHtml = ""; }
 
   const pixelToken = randomUUID();
-  const serverBase = (process.env.SERVER_PUBLIC_URL ?? process.env.PUBLIC_SERVER_URL ?? "https://server.boreal.financial").replace(/\/+$/, "");
+  const serverBase = (process.env.SERVER_PUBLIC_URL ?? process.env.PUBLIC_SERVER_URL ?? serverUrl()).replace(/\/+$/, "");
   const signedBody = signatureHtml.trim() ? `${body_html}<br/><br/>${signatureHtml}` : body_html;
   const trackedHtml = `${signedBody}<img src="${serverBase}/api/track/email/${pixelToken}.gif" width="1" height="1" alt="" style="display:none;width:1px;height:1px;" />`;
   const graphRes = await graph.fetch(endpoint, {

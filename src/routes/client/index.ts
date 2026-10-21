@@ -31,6 +31,7 @@ import {
   requireApplicationAccess,
 } from "../../auth/clientApplicationOwnership.js"; // BF_SERVER_v784_CLIENT_OWNERSHIP, BF_SERVER_v789_FORM_RESPONSE_AUTH
 import { logWarnSwallowed } from "../../lib/logWarnSwallowed.js"; // BF_SERVER_v789_SILENT_QUERIES
+import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 const router = Router();
 router.use(submitAttemptsRouter); // BF_SERVER_BLOCK_v842_SUBMIT_ATTEMPTS — frictionless beacon, before rate-limit/ownership middleware
@@ -40,7 +41,7 @@ router.use(passkeysRouter); // BF_SERVER_BLOCK_v599 - passkey sign-in, before th
 // BF_SERVER_CLIENT_APP_VERSION_v744 - phone apps built before this date are missing features the server now
 // relies on (fee agreement signing, to-do buttons). The app compares its own build time and asks the client to
 // update instead of showing buttons that do nothing. Raise CLIENT_APP_MIN_BUILD when a change needs a new app.
-router.get("/app-version", (_req: any, res: any) => { res.json({ minBuild: process.env.CLIENT_APP_MIN_BUILD || "2026-10-04T00:00:00Z", webUrl: "https://client.boreal.financial" }); });
+router.get("/app-version", (_req: any, res: any) => { res.json({ minBuild: process.env.CLIENT_APP_MIN_BUILD || "2026-10-04T00:00:00Z", webUrl: clientUrl() }); });
 // BF_SERVER_CMP_READ_LIMIT_v790 - every client GET used to share the site-wide 200-per-15-minutes limiter, keyed by IP.
 // The client portal polls about 25 GETs a minute, so after ~8 minutes every read failed with 429 for the rest of
 // the window: the to-do list failed to load and "Sign your application documents" never appeared. Reads now get
@@ -1053,12 +1054,6 @@ router.get(
     v778_rows = v778_rows.filter((r: any) => r.cta_label !== "Complete PGI Application" && r.cta_action !== "sba_forms" && r.cta_action !== "form:sba_forms");
     v778_rows = v778_rows.filter((r: any) => !v778_isTask(r.cta_action)
       && !(typeof r.body === "string" && /^(We've added more documents to your checklist|To continue your application, please upload|Please complete the .+ step to continue your application)/.test(r.body)));
-    if (v778_rows.some((r: any) => r.cta_label === "Complete PGI Application")) {
-      const { pgiDone, pgiStageFor } = await import("../../services/pgiStage.js");
-      if (pgiDone(await pgiStageFor(applicationId))) {
-        v778_rows = v778_rows.filter((r: any) => r.cta_label !== "Complete PGI Application");
-      }
-    }
     if (!v778_rows.some((r: any) => v778_isTask(r.cta_action))) {
       v778_rows = v778_rows.filter((r: any) => !(typeof r.body === "string" && /few quick steps to finish/i.test(r.body)));
     }

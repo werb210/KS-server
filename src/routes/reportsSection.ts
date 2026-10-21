@@ -7,7 +7,7 @@ import { catalogFor, reportByKey, canSee, normalizeRole } from "../services/repo
 import { DATA } from "../services/reports/data.js";
 
 const router = Router();
-const SILOS = new Set(["BF", "BI", "SLF"]);
+const SILOS = new Set(["BF"]);
 const siloOf = (v: unknown) => (SILOS.has(String(v ?? "").toUpperCase()) ? String(v).toUpperCase() : "BF");
 const uid = (req: any) => String(req.user?.userId ?? req.user?.id ?? "");
 type Card = { id: string; report: string; size: "third" | "half" | "full"; days?: number }; // BF_SERVER_DASHBOARD_BOARD_v730 third = Small

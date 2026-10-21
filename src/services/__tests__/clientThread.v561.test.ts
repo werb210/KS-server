@@ -4,7 +4,6 @@ import express from "express";
 import request from "supertest";
 import jwt from "jsonwebtoken";
 import { answerBySql } from "../../__tests__/helpers/answerBySql.js";
-import { __clearPgiStageCache, pgiDone, pgiStageFor } from "../pgiStage.js";
 
 const APP = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const OWNER = "+15875550123";
@@ -18,25 +17,7 @@ vi.mock("../../db.js", async (orig) => {
 vi.mock("../../routes/clientDocumentsNeeded.js", async (orig) => ({ ...(await orig<any>()), computeOutstandingDocs: (id: string) => h.outstanding(id) }));
 vi.mock("../termSheetSigned.js", async (orig) => ({ ...(await orig<any>()), termSheetSigned: async () => true }));
 
-beforeEach(() => __clearPgiStageCache());
 
-describe("v561 PGI prompt", () => {
-  it("is done once the PGI application has moved past new_application", () => {
-    expect(pgiDone(null)).toBe(false);
-    expect(pgiDone("new_application")).toBe(false);
-    expect(pgiDone("documents_pending")).toBe(true);
-    expect(pgiDone("policy_issued")).toBe(true);
-  });
-  it("looks the stage up once per 5 minutes and treats failures as not done", async () => {
-    const fetchStage = vi.fn(async () => "under_review");
-    const deps = { biPublicId: async () => "BI-1", fetchStage, now: () => 1000 };
-    expect(await pgiStageFor("a1", deps)).toBe("under_review");
-    await pgiStageFor("a1", deps);
-    expect(fetchStage).toHaveBeenCalledTimes(1);
-    expect(await pgiStageFor("a2", { ...deps, fetchStage: async () => { throw new Error("down"); } })).toBeNull();
-    expect(await pgiStageFor("a3", { ...deps, biPublicId: async () => null })).toBeNull();
-  });
-});
 
 describe("v561 client thread", () => {
   const ROWS = [

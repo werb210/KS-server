@@ -2,7 +2,6 @@ import express, { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { safeHandler } from "../middleware/safeHandler.js";
 import { pool } from "../db.js";
-import { bumpBiOutreachToContacted } from "../services/biOutreach.js"; // BF_SERVER_BLOCK_v344_BI_OUTREACH_AUTOADVANCE_v1
 import { getGraphForUser } from "../modules/o365/graphClient.js";
 import { SENT_LOGGED_HEADER } from "../modules/o365/sentItemsLog.js"; // BF_SERVER_SENT_ITEMS_v39
 import { draftErrorResponse } from "../modules/o365/draftErrors.js"; // BF_SERVER_DRAFT_NOT_FOUND_v1
@@ -11,6 +10,7 @@ import { getStorage } from "../lib/storage/index.js"; // v693
 import { resolveSiloFromRequest } from "../middleware/silo.js";
 import { randomUUID } from "node:crypto";
 import staffLibraryPlus from "./staffLibraryPlus.js"; // BF_SERVER_v810_LIBRARY_PLUS
+import { serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 // BF_SERVER_BLOCK_v513_LARGE_EMAIL_ATTACHMENTS - Graph sendMail takes at most ~3 MB
 // of inline attachments per request. Bigger files go on a draft: small ones by
@@ -370,7 +370,7 @@ router.post("/mail/send", safeHandler(async (req: any, res: any) => {
   // pixel_token through every crm_email_log insert so the v706 "Opened:" timeline entry
   // fires for composer-sent mail too.
   const pixelToken = randomUUID();
-  const _pxBase = (process.env.SERVER_PUBLIC_URL ?? process.env.PUBLIC_SERVER_URL ?? "https://server.boreal.financial").replace(/\/+$/, "");
+  const _pxBase = (process.env.SERVER_PUBLIC_URL ?? process.env.PUBLIC_SERVER_URL ?? serverUrl()).replace(/\/+$/, "");
   bodyWithSig = `${bodyWithSig}<img src="${_pxBase}/api/track/email/${pixelToken}.gif" width="1" height="1" alt="" style="display:none;width:1px;height:1px;" />`;
   const logEmail = (cid: string | null, coid: string | null, siloVal: string) =>
     pool.query(
@@ -508,9 +508,8 @@ router.post("/mail/send", safeHandler(async (req: any, res: any) => {
     }
     if (_safeContactId || _safeCompanyId) {
       await logEmail(_safeContactId, _safeCompanyId, _silo);
-      if (logContactId) void bumpBiOutreachToContacted(logContactId); // BF_SERVER_BLOCK_v344_BI_OUTREACH_AUTOADVANCE_v1
     } else if (logContactId || logCompanyId) {
-      if (logContactId) void bumpBiOutreachToContacted(logContactId);
+      // KS_SERVER_v1_NO_BI - no Boreal Insurance outreach stage to advance.
     } else {
       const _recips = Array.from(new Set([...(Array.isArray(to) ? to : []), ...(Array.isArray(cc) ? cc : [])]
         .map((a: any) => String(a || "").trim().toLowerCase()).filter(Boolean)));

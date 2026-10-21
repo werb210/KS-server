@@ -147,7 +147,6 @@ export const EnvSchema = z
     BF_START_TIMEOUT_MS: z.string().optional(), // interval in milliseconds; read in routes/publicApplication.ts
     BF_WEBSITE_URL: z.string().optional(), // URL; read in modules/referrals/referralInvite.ts
     BF_WORKERS_ENABLED: z.string().optional(), // true/false switch; read in startup/workersSwitch.ts
-    BI_SERVER_URL: z.string().optional(), // URL; read in routes/mayaStaff.ts
     BI_SERVICE_JWT_SECRET: z.string().optional(), // Secret used to sign/verify these JWTs
     BI_WEBSITE_URL: z.string().optional(), // URL; read in modules/referrals/referralInvite.ts
     BOOKING_INTAKE_EXCLUDE: z.string().optional(), // setting; read in services/clientBooking.ts

@@ -70,10 +70,8 @@ describe("test sends use the real contact", () => {
   });
 
   it("scopes the lookup to the active silo", async () => {
-    await post("/api/marketing/email/send", { subject: "Hi {{first_name}}", html: "<p>x</p>", test: "jane@acme.test" }, "BI");
-    expect((callsMatching(queryMock, EMAIL_LOOKUP)[0][1] as unknown[])[0]).toBe("BI");
-    // Jane lives in BF, so a BI test does not see her.
-    expect(sendOne.mock.calls[0][0].subject).toBe("Hi there");
+    await post("/api/marketing/email/send", { subject: "Hi {{first_name}}", html: "<p>x</p>", test: "jane@acme.test" }, "BF");
+    expect((callsMatching(queryMock, EMAIL_LOOKUP)[0][1] as unknown[])[0]).toBe("BF");
   });
 
   it("still falls back to the placeholder when nothing matches", async () => {

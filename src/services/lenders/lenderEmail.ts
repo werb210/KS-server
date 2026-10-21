@@ -1,4 +1,5 @@
 // BF_SERVER_BLOCK_v458_LENDER_EMAIL
+import { serverUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 export type LenderEmailDetails = { lenderName: string; applicationId: string; businessName?: string | null; requestedAmount?: number | null; productCategory?: string | null; contents?: string[] };
 export type LenderEmailDelivery = { mode: "attached"; sizeBytes: number } | { mode: "link"; sizeBytes: number; url: string; expiresAt: Date };
 
@@ -9,7 +10,7 @@ export function formatAmount(amount: number | null | undefined): string | null {
   return `$${Math.round(amount).toLocaleString("en-US")}`;
 }
 const formatDate = (d: Date) => d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
-const publicBase = () => (process.env.PUBLIC_BASE_URL || "https://server.boreal.financial").replace(/\/+$/, "");
+const publicBase = () => serverUrl();
 
 export function lenderEmailSubject(d: LenderEmailDetails): string {
   const who = (d.businessName ?? "").trim() || `application ${d.applicationId.slice(0, 8)}`;

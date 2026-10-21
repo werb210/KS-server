@@ -4,7 +4,7 @@ import { describe, it, expect } from "vitest";
 import { createApp } from "../app.js";
 
 const app = createApp();
-const ORIGIN = "https://staff.boreal.financial";
+const ORIGIN = "https://thankful-wave-04964490f.2.azurestaticapps.net";
 
 describe("v661 OTP preflight guard", () => {
   it("answers OPTIONS for /api/auth/* with 204 and the CORS headers", async () => {

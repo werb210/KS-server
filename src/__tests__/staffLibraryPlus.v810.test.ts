@@ -206,7 +206,7 @@ describe("v810 share links for people outside Boreal", () => {
   it("a password link shows the file name, refuses a wrong password and sends the file for the right one", async () => {
     const r = await request(app).post("/api/o365/library/item/F1/share").send({ expiresDays: 7, password: "boreal1", allowDownload: true });
     expect(r.status).toBe(200);
-    expect(r.body.url).toMatch(/^https:\/\/server\.boreal\.financial\/api\/shared\/f\/[A-Za-z0-9_-]{30,}$/);
+    expect(r.body.url).toMatch(/^https:\/\/ks-server-dev-chb5htbwaue2hygk\.canadacentral-01\.azurewebsites\.net\/api\/shared\/f\/[A-Za-z0-9_-]{30,}$/);
     const t = tokenFrom(r.body.url);
     expect(db.shares.get(hashToken(t)).password_hash).toMatch(/^scrypt\$/);
     const pageRes = await request(app).get("/api/shared/f/" + t);

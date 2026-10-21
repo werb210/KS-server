@@ -12,7 +12,6 @@ vi.mock("../db.js", async () => {
   const actual = await vi.importActual<typeof import("../db.js")>("../db.js");
   return { ...actual, pool: { query: h.queryMock } };
 });
-vi.mock("../services/biOutreach.js", async (orig) => ({ ...(await orig<typeof import("../services/biOutreach.js")>()), fetchBiOutreachContact: h.fetchBi }));
 vi.mock("../modules/o365/todoSync.js", () => ({ mirrorTaskToTodo: async () => undefined }));
 
 import tasksRouter from "../routes/tasks.js";

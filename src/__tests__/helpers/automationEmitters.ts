@@ -170,17 +170,6 @@ export async function clientPortalMessage(q: QueryMock) {
   return request(appWith("/api/client", client)).post("/api/client/messages").set("Authorization", `Bearer ${token}`).send({ applicationId: IDS.app, body: "Any news?" });
 }
 
-export async function biApplicantMessage(q: QueryMock) {
-  answer(q, []);
-  process.env.BACKEND_SERVICE_TOKEN = "automation-emitters-token";
-  const { default: bridge } = await import("../../routes/serviceBridge.js");
-  return request(appWith("/api/service", bridge))
-    .post("/api/service/applicant-messages")
-    .set("x-backend-token", "automation-emitters-token")
-    .set("x-applicant-phone", "+15875550100")
-    .send({ body: "Question about my policy" });
-}
-
 export async function mailReply(q: QueryMock) {
   process.env.SENDGRID_REPLY_TO = "replies@boreal.test";
   answer(q, [

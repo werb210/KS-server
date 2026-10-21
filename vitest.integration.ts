@@ -21,6 +21,7 @@ export const INTEGRATION_TEST_FILES: string[] = [
   "src/__tests__/applicationCrmMirror.dedup.v65.test.ts",
   "src/__tests__/auth.otp.client-fallthrough.test.ts",
   "src/__tests__/bi-workflows.smoke.test.ts",
+  "src/__tests__/ksLicensee.v1.integration.test.ts", // KS_SERVER_v1_LICENSEE - needs Postgres
   "src/__tests__/chatIsChat.v629.integration.test.ts", // BF_SERVER_CHAT_IS_CHAT_v629 - needs Postgres
   "src/watch/__tests__/watchPushLookup.v819.integration.test.ts", // BF_SERVER_v819_PUSH - needs Postgres
   "src/__tests__/dialerV821.integration.test.ts", // BF_SERVER_v821_DIALER - needs Postgres
@@ -62,7 +63,6 @@ export const INTEGRATION_TEST_FILES: string[] = [
   "src/routes/__tests__/twilio.twiml.test.ts",
   "src/routes/__tests__/users.o365-status.test.ts",
   "src/services/__tests__/bankingAnalysisPipeline.test.ts",
-  "src/services/__tests__/biDocMirror.v215.test.ts",
   "src/services/__tests__/mayaPipelineQuery.v214.test.ts",
   "test/e2e/07-health-contract.test.ts",
   "test/e2e/09-portal-pipeline-transitions.test.ts",

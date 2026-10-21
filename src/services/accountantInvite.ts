@@ -7,6 +7,7 @@ import { pool } from "../db.js";
 // and delivery does not depend on a marketing sender's reputation or on a
 // SendGrid key that a slot swap can silently replace.
 import { sendViaGraph } from "./email/graphSendService.js";
+import { clientUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 const BOREAL_ADDRESS = "450 Sparling Crt SW, Edmonton, AB T6X 1G9";
 
@@ -88,7 +89,7 @@ export async function sendAccountantInvite(opts: {
     "your client";
   const applicantName = [row.first_name, row.last_name].filter(Boolean).join(" ").trim() || "your client";
 
-  const portalBase = (process.env.CLIENT_PORTAL_URL || "https://client.boreal.financial").replace(/\/+$/, "");
+  const portalBase = (process.env.CLIENT_PORTAL_URL || clientUrl()).replace(/\/+$/, "");
   const { subject, html } = buildAccountantInvite({
     accountantName: opts.accountantName || "there",
     accountantPhone: opts.accountantPhone,

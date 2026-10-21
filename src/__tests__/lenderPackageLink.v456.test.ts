@@ -27,7 +27,7 @@ describe("v456 lender package delivery", () => {
     const pool = { query: vi.fn().mockResolvedValue({ rows: [] }) };
     const d = await prepareEmailDelivery(pool as any, { applicationId: "app", lenderId: "L", lenderName: "Acme", zip: Buffer.alloc(40 * MB), filename: "application-app.zip" });
     expect(d.ok && d.mode).toBe("link"); expect(d.ok && d.attachments).toBeUndefined();
-    expect(d.ok && d.bodyHtml).toMatch(/https:\/\/server\.boreal\.financial\/api\/public\/lender-package\/[A-Za-z0-9_-]{32}/);
+    expect(d.ok && d.bodyHtml).toMatch(/https:\/\/ks-server-dev-chb5htbwaue2hygk\.canadacentral-01\.azurewebsites\.net\/api\/public\/lender-package\/[A-Za-z0-9_-]{32}/);
     expect(d.ok && d.bodyText).toContain("40.0 MB");
     expect(putMock.mock.calls[0][0]).toMatchObject({ contentType: "application/zip", pathPrefix: "lender-packages/app" });
     expect(pool.query.mock.calls[0][0]).toContain("INSERT INTO lender_package_links");

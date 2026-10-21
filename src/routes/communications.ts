@@ -11,6 +11,7 @@ import twilio from "twilio";
 import { isUndeliverableNumber } from "../lib/smsDeliverability.js"; // BF_SERVER_GUARD_EVERYWHERE_v136
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
 import { replayKey } from "../middleware/replayKey.js"; // BF_SERVER_v831_DIALER_POLISH
+import { clientUrl, serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 const router = Router();
 import { smsFromFor, smsSenderFor } from "../lib/smsFrom.js"; // BF_SERVER_US_SMS_TOLLFREE_v755
@@ -141,19 +142,6 @@ router.post("/call-events", replayKey("call-events"), safeHandler(async (req: an
     void import("../services/team/teamPhaseC.js")
       .then((m) => m.postTeamAlert(callsChannel, "Missed call from " + String(body.from_number ?? "an unknown number") + (contactId ? " /crm/contacts/" + contactId : "")))
       .catch((err: any) => console.warn("[call_events] team alert failed", err?.message ?? String(err)));
-  }
-  // BF_SERVER_BLOCK_v822_BI_OUTBOUND_CONTACTED - a BI outbound call advances the contact to
-  // "contacted" (matched by dialed number; only from an earlier stage, so it never downgrades
-  // engaged/demo_booked/onboarding/active, and re-firing on later call events is a no-op).
-  // BF_SERVER_v789_BI_OUTREACH_VIA_API - bi_contacts is BI-Server's table; ask BI to
-  // advance it (forward-only rules live there). Non-blocking; failures are logged.
-  if (silo === "BI" && direction !== "inbound") {
-    const d10 = String(toNumber || "").replace(/\D/g, "").slice(-10);
-    if (d10.length === 10) {
-      void import("../services/biOutreach.js")
-        .then((m) => m.advanceBiOutreach({ phone: toNumber }, "contacted"))
-        .catch((err: any) => console.warn("[communications] BI outbound-call contacted-advance failed", { err: String(err?.message ?? err) }));
-    }
   }
   return res.status(201).json(rows[0]);
 }));
@@ -831,7 +819,7 @@ router.get("/threads", safeHandler(async (req: any, res: any) => {
     ? req.query.businessUnit.toUpperCase()
     : null;
   const isAdmin = String(req.user?.role ?? "").toLowerCase() === "admin";
-  const effectiveSilo = isAdmin && requestedBu && /^(BF|BI|SLF)$/.test(requestedBu)
+  const effectiveSilo = isAdmin && requestedBu && /^BF$/.test(requestedBu)
     ? requestedBu
     : silo;
 
@@ -1393,7 +1381,7 @@ router.post("/sms", replayKey("sms"), safeHandler(async (req: any, res: any) => 
       return res.status(400).json({ error: "undeliverable_number", message: "That number cannot receive SMS." });
     }
     // BF_SERVER_BLOCK_v499_STAFF_SMS_DELIVERY_STATUS - ask Twilio for delivery updates.
-    const statusCallback = `${(process.env.PUBLIC_BASE_URL || "https://server.boreal.financial").replace(/\/+$/, "")}/api/r/status`;
+    const statusCallback = `${(process.env.PUBLIC_BASE_URL || serverUrl()).replace(/\/+$/, "")}/api/r/status`;
     const senderSilo = (await import("../middleware/silo.js")).resolveSiloFromRequest(req); // BF_SERVER_RCS_BRAND_BF_ONLY_v781
     message = await client.messages.create({ body: String(mergedBody), ...smsSenderFor(String(to), from, { silo: senderSilo }), to: String(to), statusCallback, /* BF_SERVER_US_SMS_TOLLFREE_v755 */ ...(mmsMediaUrl ? { mediaUrl: [mmsMediaUrl] } : {}) }); // BF_SERVER_BLOCK_v497
   } catch (err: any) {
@@ -1712,26 +1700,6 @@ router.post(
        )`,
       [id, applicationId, resolvedContactId ?? "", silo, __msgMerged, staffName, ctaLabel, ctaAction, JSON.stringify(attachments), replyConversationId],
     );
-    // Insurance applicants live in BI's app. Keep the local row as the staff
-    // audit record, then notify BI-Server so its applicant can see the reply.
-    if (silo === "BI" && resolvedContactId) {
-      const { notifyBiApplicant } = await import("../services/biApplicantMessages.js");
-      const delivered = await notifyBiApplicant({
-        contactId: resolvedContactId,
-        body: __msgMerged,
-        messageId: id,
-        staffName,
-        ctaLabel,
-        ctaAction,
-      });
-      if (!delivered.ok) {
-        console.warn("[communications] BI applicant notification failed", {
-          contactId: resolvedContactId,
-          messageId: id,
-          error: delivered.error,
-        });
-      }
-    }
     // BF_SERVER_BLOCK_v496_MESSAGE_ATTACHMENTS_TO_DOCUMENTS - file it on the application too.
     if (applicationId && attachments.length) {
       void import("../services/communications/attachmentsToDocuments.js")
@@ -1751,8 +1719,6 @@ router.post(
       ).catch((swallowedErr: unknown) => logWarnSwallowed(swallowedErr, "routes/communications.ts:1589", undefined));
     }
 
-    // BF_SERVER_BLOCK_v610_BI_THREAD - Insurance applicants are notified by BI-Server above.
-    if (silo !== "BI")
     // BF_SERVER_BLOCK_v636_MESSAGES_TAB_FIXES_v1: offline-fallback SMS.
     // Mini-portal bumps applications.last_portal_seen_at on every poll (~20s).
     // No bump in 60s -> treat as offline -> SMS the contact with a deep-link.
@@ -1787,7 +1753,7 @@ router.post(
         : false;
       if (stale && row?.phone && !viaApp) {
         const { sendSms } = await import("../modules/notifications/sms.service.js");
-        const clientBase = String(process.env.CLIENT_URL ?? "https://client.boreal.financial").replace(/\/$/, "");
+        const clientBase = String(process.env.CLIENT_URL ?? clientUrl()).replace(/\/$/, "");
         const link = applicationId
           ? `${clientBase}/application/${encodeURIComponent(applicationId)}` /* BF_SERVER_LIVE_UPLOAD_PROMPT_v629 - /portal/:id is not a client route */
           : `${clientBase}/portal`;

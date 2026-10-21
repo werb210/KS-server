@@ -4,6 +4,7 @@ import { ALBERTA_TZ } from "../lib/albertaTime.js"; // BF_SERVER_ALBERTA_TIME_v7
 // code can't be reused to get into someone else's meeting days later.
 import { randomInt, randomUUID } from "node:crypto";
 import { pool } from "../db.js";
+import { serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 export const DIAL_IN_DISPLAY = "(866) 631-8939";
 export const DIAL_IN_E164 = "+18666318939";
@@ -31,7 +32,7 @@ export function isOpen(room: Pick<MeetingRoom, "starts_at" | "duration_min" | "s
 export function oneTapDial(code: string): string { return DIAL_IN_E164 + ",,3" + code + "#"; }
 
 export function joinUrl(slug: string): string {
-  const base = (process.env.PUBLIC_SERVER_URL || "https://server.boreal.financial").replace(/[/]+$/, "");
+  const base = (process.env.PUBLIC_SERVER_URL || serverUrl()).replace(/[/]+$/, "");
   return base + "/api/meetings/join/" + slug;
 }
 
@@ -207,7 +208,7 @@ export async function searchPeople(q: string, silo: string = "BF"): Promise<Arra
 // recording to the same recording status route dialer calls use, so the recording -> call_recordings ->
 // transcription pipeline runs unchanged. caller = the leg's From, carried in case Twilio omits it.
 export function roomConferenceAttrs(roomId: string, caller?: string | null): Record<string, unknown> {
-  const base = (process.env.PUBLIC_BASE_URL || "https://server.boreal.financial").replace(/[/]+$/, "");
+  const base = (process.env.PUBLIC_BASE_URL || serverUrl()).replace(/[/]+$/, "");
   const from = caller ? "&from=" + encodeURIComponent(caller) : "";
   return {
     startConferenceOnEnter: true, endConferenceOnExit: false, beep: "onEnter", record: "record-from-start",

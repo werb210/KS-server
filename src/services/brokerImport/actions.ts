@@ -5,8 +5,9 @@
 import { pool } from "../../db.js";
 import { toE164 } from "./extract.js";
 import { BrokerImportError } from "./importBrokerFile.js";
+import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
-export const CLIENT_APP_URL = (process.env.CLIENT_APP_URL || "https://client.boreal.financial").replace(/\/+$/, "");
+export const CLIENT_APP_URL = (process.env.CLIENT_APP_URL || clientUrl()).replace(/\/+$/, "");
 
 type Row = { id: string; status: string; application_id: string | null; applicant_phone: string | null; broker_name: string; pipeline_state: string | null; first_name: string | null };
 

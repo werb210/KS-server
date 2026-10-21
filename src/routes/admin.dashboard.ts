@@ -22,7 +22,7 @@ function effectiveSilo(req: any): string {
   const requested = typeof req.query.silo === "string"
     ? req.query.silo.toUpperCase()
     : null;
-  if (isAdmin && requested && /^(BF|BI|SLF)$/.test(requested)) {
+  if (isAdmin && requested && /^BF$/.test(requested)) {
     return requested;
   }
   return resolveSiloFromRequest(req);

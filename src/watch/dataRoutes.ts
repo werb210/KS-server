@@ -26,8 +26,8 @@ const bounded = (value: unknown, fallback: number, max: number) => Math.max(1, M
 router.get("/contacts", safeHandler(async (req, res) => {
   const requested = String(req.query.line || "").toUpperCase();
   const line = allowedLine(req, requested);
-  if (!line) return watchError(req, res, ["BF", "BI", "SLF"].includes(requested) ? 403 : 400,
-    ["BF", "BI", "SLF"].includes(requested) ? "forbidden" : "invalid_request", "Line is invalid or not permitted");
+  if (!line) return watchError(req, res, ["BF"].includes(requested) ? 403 : 400,
+    ["BF"].includes(requested) ? "forbidden" : "invalid_request", "Line is invalid or not permitted");
   const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 100) : "";
   if (q.length < 2) return watchError(req, res, 400, "invalid_request", "Search query must contain at least two characters");
   const limit = bounded(req.query.limit, 10, 25);
@@ -47,8 +47,8 @@ router.get("/contacts", safeHandler(async (req, res) => {
 router.get("/calls/recent", safeHandler(async (req: any, res) => {
   const requested = String(req.query.line || "").toUpperCase();
   const line = allowedLine(req, requested);
-  if (!line) return watchError(req, res, ["BF", "BI", "SLF"].includes(requested) ? 403 : 400,
-    ["BF", "BI", "SLF"].includes(requested) ? "forbidden" : "invalid_request", "Line is invalid or not permitted");
+  if (!line) return watchError(req, res, ["BF"].includes(requested) ? 403 : 400,
+    ["BF"].includes(requested) ? "forbidden" : "invalid_request", "Line is invalid or not permitted");
   const limit = bounded(req.query.limit, 25, 50);
   const cursor = typeof req.query.cursor === "string" ? req.query.cursor : null;
   const found = await pool.query(
@@ -88,8 +88,8 @@ router.get("/calls/recent", safeHandler(async (req: any, res) => {
 router.get("/callbacks", safeHandler(async (req: any, res) => {
   const requested = String(req.query.line || "").toUpperCase();
   const line = allowedLine(req, requested);
-  if (!line) return watchError(req, res, ["BF", "BI", "SLF"].includes(requested) ? 403 : 400,
-    ["BF", "BI", "SLF"].includes(requested) ? "forbidden" : "invalid_request", "Line is invalid or not permitted");
+  if (!line) return watchError(req, res, ["BF"].includes(requested) ? 403 : 400,
+    ["BF"].includes(requested) ? "forbidden" : "invalid_request", "Line is invalid or not permitted");
   const limit = bounded(req.query.limit, 20, 50);
 
   const found = await pool.query(

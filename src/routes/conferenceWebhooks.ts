@@ -11,7 +11,6 @@ import {
   notifyConferenceState,
 } from "../voice/conferenceService.js";
 import { getPublicBaseUrl } from "../voice/twilioClient.js";
-import { bumpBiOutreachToContacted } from "../services/biOutreach.js"; // BF_SERVER_BLOCK_v744
 import recordingWebhooksRoutes from "./recordingWebhooks.js";
 import transcriptionWebhooksRoutes from "./transcriptionWebhooks.js";
 
@@ -309,7 +308,6 @@ router.post("/conference/status", twilioWebhookValidation, safeHandler(async (re
              JSON.stringify({ conference_id: conf.id, source: "conference-end" })],
           );
         } catch { /* timeline logging is best-effort; never break the webhook */ }
-        void bumpBiOutreachToContacted(String(er.contact_id));
       }
       break;
     }

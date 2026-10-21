@@ -12,7 +12,7 @@ import { reportByKey } from "../services/reports/catalog.js";
 describe("reports 15-18", () => {
   it("are registered", () => {
     for (const k of ["pipeline_snapshot", "issues_report", "custom_report"]) expect(typeof (DATA as any)[k], k).toBe("function");
-    expect(reportByKey("bi_insurance")).toMatchObject({ silo: "BI", source: "portal" }); // drawn by the portal from BI-Server
+    expect(reportByKey("bi_insurance")).toBeUndefined(); // KS_SERVER_v1_NO_BI - no insurance reports in Keystone
   });
   it("the custom builder only runs groupings and measures from its fixed menu", async () => {
     const bad = await customReport({ entity: "applications", groupBy: "id; DROP TABLE applications", measure: "count" });

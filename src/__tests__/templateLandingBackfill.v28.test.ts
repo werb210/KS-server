@@ -66,7 +66,7 @@ describe("wiring", () => {
       const r = await request(app).get("/api/marketing/templates").set("Authorization", `Bearer ${token}`);
       expect(r.status).toBe(200);
       const items = (r.body.data ?? r.body).items as Array<{ id: string; landingUrl: string | null }>;
-      expect(items.find((i) => i.id === "t1")!.landingUrl).toBe("https://www.boreal.financial/e/ftvf9n1dwg");
+      expect(items.find((i) => i.id === "t1")!.landingUrl).toBe("https://wonderful-island-0b68ae310.5.azurestaticapps.net/e/ftvf9n1dwg");
       expect(items.find((i) => i.id === "t2")!.landingUrl).toBe("https://example.com/offer");
       expect(items.find((i) => i.id === "t3")!.landingUrl).toBeNull();
     } finally {

@@ -144,13 +144,13 @@ describe("client failure log", () => {
     it("the SMS redirect falls back to www", async () => {
       const bad = await request(app).get("/api/r/not-a-token");
       expect(bad.status).toBe(302);
-      expect(bad.headers.location).toBe("https://www.boreal.financial");
+      expect(bad.headers.location).toBe("https://wonderful-island-0b68ae310.5.azurestaticapps.net");
       const noUrl = jwt.sign({ u: "javascript:alert(1)" }, process.env.JWT_SECRET as string, { algorithm: "HS256" });
       const r = await request(app).get("/api/r/" + noUrl);
       expect(r.status).toBe(302);
-      expect(r.headers.location).toBe("https://www.boreal.financial");
-      const good = jwt.sign({ u: "https://client.boreal.financial/x" }, process.env.JWT_SECRET as string, { algorithm: "HS256" });
-      expect((await request(app).get("/api/r/" + good)).headers.location).toBe("https://client.boreal.financial/x");
+      expect(r.headers.location).toBe("https://wonderful-island-0b68ae310.5.azurestaticapps.net");
+      const good = jwt.sign({ u: "https://wonderful-island-0b68ae310.5.azurestaticapps.net/x" }, process.env.JWT_SECRET as string, { algorithm: "HS256" });
+      expect((await request(app).get("/api/r/" + good)).headers.location).toBe("https://wonderful-island-0b68ae310.5.azurestaticapps.net/x");
     });
   });
 });

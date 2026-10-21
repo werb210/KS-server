@@ -4,6 +4,7 @@
 // does its own app-first / SMS fallback. Every notice lands on the timeline.
 import { pool } from "../../db.js";
 import { logError } from "../../observability/logger.js";
+import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 export type NotifyChannel = "app" | "sms" | "bi" | "none";
 export type NotifyContactInput = { contactId: string; title: string; body: string; actorUserId?: string | null; staffName?: string | null };
@@ -25,11 +26,8 @@ export async function notifyContact(input: NotifyContactInput): Promise<NotifyCo
   const silo = String(contact.silo ?? "BF").toUpperCase();
   let result: NotifyContactResult;
 
-  if (silo === "BI") {
-    const { notifyBiApplicant } = await import("../biApplicantMessages.js");
-    const r = await notifyBiApplicant({ contactId: contact.id, body: input.title + ": " + input.body, staffName: input.staffName ?? null });
-    result = r.ok ? { ok: true, channel: "bi" } : { ok: false, channel: "none", error: r.error };
-  } else if (!contact.phone) {
+  // KS_SERVER_v1_NO_BI - Keystone has no Boreal Insurance applicants.
+  if (!contact.phone) {
     result = { ok: false, channel: "none", error: "no_phone" };
   } else {
     const app = await pool.query<{ id: string }>(
@@ -47,7 +45,7 @@ export async function notifyContact(input: NotifyContactInput): Promise<NotifyCo
     } else {
       try {
         const { sendSms } = await import("../../modules/notifications/sms.service.js");
-        const base = String(process.env.CLIENT_URL ?? "https://client.boreal.financial").replace(/\/$/, "");
+        const base = String(process.env.CLIENT_URL ?? clientUrl()).replace(/\/$/, "");
         const link = applicationId ? base + "/application/" + encodeURIComponent(applicationId) : base + "/portal";
         await sendSms({ to: contact.phone, message: "Boreal: " + input.body + "\n" + link, track: { kind: "staff_notice", applicationId } } as any);
         result = { ok: true, channel: "sms" };

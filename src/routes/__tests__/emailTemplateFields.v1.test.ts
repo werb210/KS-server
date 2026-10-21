@@ -41,11 +41,11 @@ afterEach(() => {
 
 describe("GET /templates returns what the composer needs to restore a template", () => {
   it("selects html and fields alongside body/subject, silo-scoped and channel-filtered", async () => {
-    const r = await request(app).get("/api/marketing/templates?channel=email").set("Authorization", `Bearer ${token}`).set("X-Silo", "BI");
+    const r = await request(app).get("/api/marketing/templates?channel=email").set("Authorization", `Bearer ${token}`).set("X-Silo", "BF");
     expect(r.status).toBe(200);
     const [sql, params] = callsMatching(queryMock, /FROM marketing_template WHERE/)[0] as [string, unknown[]];
     for (const col of ["id", "channel", "name", "body", "link_url", "subject", "html", "fields", "updated_at"]) expect(sql).toMatch(new RegExp(`\\b${col}\\b`));
-    expect(params).toEqual(["BI", "email"]);
+    expect(params).toEqual(["BF", "email"]);
     expect(r.body.data.items[0]).toMatchObject({ html: "<h1>Hero</h1>", subject: "S", body: "b", fields: { headline: "Hero" } });
   });
 

@@ -16,10 +16,6 @@ vi.mock("../../middleware/twilioWebhookValidation.js", () => {
   return { twilioWebhookValidation: pass, validateTwilioWebhook: pass };
 });
 vi.mock("../../services/notifications/notifyAllStaff.js", () => ({ notifyAllStaff: async () => undefined }));
-vi.mock("../../services/biOutreach.js", async () => ({
-  ...(await vi.importActual<any>("../../services/biOutreach.js")),
-  bumpBiOutreachToEngagedByPhone: async () => undefined,
-}));
 vi.mock("../../modules/automation/automationEngine.js", async () => ({
   ...(await vi.importActual<any>("../../modules/automation/automationEngine.js")),
   emitAutomationEvent: async () => undefined,

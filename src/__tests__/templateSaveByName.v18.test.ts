@@ -55,9 +55,9 @@ beforeEach(() => {
 
 describe("saving a template under an existing name", () => {
   it("looks for a prior template by silo, channel and name", async () => {
-    await save({ channel: "email", name: "Spring", html: "<p>x</p>" }, "BI");
+    await save({ channel: "email", name: "Spring", html: "<p>x</p>" }, "BF");
     const lookup = callsMatching(queryMock, /SELECT id, link_url FROM marketing_template/)[0];
-    expect(lookup[1]).toEqual(["BI", "email", "Spring"]);
+    expect(lookup[1]).toEqual(["BF", "email", "Spring"]);
   });
 
   it("updates the prior row instead of inserting a duplicate", async () => {

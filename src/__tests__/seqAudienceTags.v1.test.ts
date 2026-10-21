@@ -62,10 +62,10 @@ describe("sequence audience include and exclude tags", () => {
   });
 
   it("accepts composer-style tag lists, normalised, and preserves the legacy tag", async () => {
-    await auth(request(app).post("/api/marketing/sequences")).set("X-Silo", "BI")
+    await auth(request(app).post("/api/marketing/sequences")).set("X-Silo", "BF")
       .send({ name: "Drip", audienceTag: "legacy", includeTags: [" vip ", "vip", "", "new"], excludeTags: ["dnc"], steps: [{ channel: "email" }] });
     const p = callsMatching(queryMock, /INSERT INTO marketing_sequences/)[0][1] as unknown[];
-    expect(p.slice(0, 5)).toEqual(["BI", "Drip", "legacy", ["vip", "new"], ["dnc"]]);
+    expect(p.slice(0, 5)).toEqual(["BF", "Drip", "legacy", ["vip", "new"], ["dnc"]]);
   });
 
   it("also accepts the audienceIncludeTags / audienceExcludeTags names, and no legacy tag", async () => {

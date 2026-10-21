@@ -17,7 +17,6 @@ vi.mock("../lib/sharedClients.js", () => ({
   sharedOpenAI: () => ({}),
 }));
 vi.mock("../modules/o365/graphClient.js", () => ({ getGraphForUser: vi.fn(async () => ({ fetch: graphFetch })) }));
-vi.mock("../services/biOutreach.js", () => ({ bumpBiOutreachToContacted: vi.fn(async () => undefined) }));
 
 const STAFF_ID = "00000000-0000-4000-8000-0000000000a1";
 const CONTACT = "11111111-2222-4333-8444-555555555555";

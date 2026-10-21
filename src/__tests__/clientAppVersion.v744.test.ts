@@ -30,7 +30,7 @@ describe("client app version check", () => {
   it("serves the minimum app build, defaulting when CLIENT_APP_MIN_BUILD is unset", async () => {
     const r = await request(app).get("/api/client/app-version");
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ minBuild: "2026-10-04T00:00:00Z", webUrl: "https://client.boreal.financial" });
+    expect(r.body).toEqual({ minBuild: "2026-10-04T00:00:00Z", webUrl: "https://wonderful-island-0b68ae310.5.azurestaticapps.net" });
     process.env.CLIENT_APP_MIN_BUILD = "2026-11-01T00:00:00Z";
     expect((await request(app).get("/api/client/app-version")).body.minBuild).toBe("2026-11-01T00:00:00Z");
   });

@@ -10,25 +10,22 @@ function run(req: any) {
   return { res, called };
 }
 
+// KS_SERVER_v1_NO_BI - Keystone has one silo (BF); any other value falls back to it.
 describe("siloMiddleware", () => {
   it("single-silo user ignores X-Silo", () => {
-    const { res } = run({ headers: { "x-silo": "BI" }, query: {}, user: { role: "Staff", silo: "BF", silos: ["BF"] } });
+    const { res, called } = run({ headers: { "x-silo": "BI" }, query: {}, user: { role: "Staff", silo: "BF", silos: ["BF"] } });
     expect(res.locals.silo).toBe("BF");
+    expect(called).toBe(true);
   });
 
-  it("multi-silo user accepts allowlisted X-Silo", () => {
-    const { res } = run({ headers: { "x-silo": "BI" }, query: {}, user: { role: "Staff", silo: "BF", silos: ["BF", "BI"] } });
-    expect(res.locals.silo).toBe("BI");
-  });
-
-  it("multi-silo rejects non-allowlisted X-Silo", () => {
-    const { res } = run({ headers: { "x-silo": "SLF" }, query: {}, user: { role: "Staff", silo: "BF", silos: ["BF", "BI"] } });
-    expect(res.locals.silo).toBe("BF");
-  });
-
-  it("admin can use requested silo", () => {
+  it("admin asking for a removed silo gets BF", () => {
     const { res } = run({ headers: { "x-silo": "SLF" }, query: {}, user: { role: "Admin", silo: "BF", silos: ["BF"] } });
-    expect(res.locals.silo).toBe("SLF");
+    expect(res.locals.silo).toBe("BF");
+  });
+
+  it("accepts an explicit BF", () => {
+    const { res } = run({ headers: { "x-silo": "BF" }, query: {}, user: { role: "Admin", silo: "BF", silos: ["BF"] } });
+    expect(res.locals.silo).toBe("BF");
   });
 
   it("defaults to BF when no user", () => {
@@ -36,8 +33,8 @@ describe("siloMiddleware", () => {
     expect(res.locals.silo).toBe("BF");
   });
 
-  it("invalid silo falls back", () => {
+  it("a user stored with an old silo still gets BF", () => {
     const { res } = run({ headers: { "x-silo": "ZZ" }, query: {}, user: { role: "Staff", silo: "BI", silos: ["BI"] } });
-    expect(res.locals.silo).toBe("BI");
+    expect(res.locals.silo).toBe("BF");
   });
 });

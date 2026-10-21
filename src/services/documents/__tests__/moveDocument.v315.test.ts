@@ -11,11 +11,6 @@ vi.mock("../../../db.js", async () => {
   const pool = { query: h.queryMock, connect: async () => ({ query: h.queryMock, release: () => undefined }) };
   return { ...actual, pool, dbQuery: h.queryMock, runQuery: h.queryMock, db: pool };
 });
-vi.mock("../../biDocMirror.js", async (orig) => ({
-  ...(await orig<typeof import("../../biDocMirror.js")>()),
-  mirrorDocToBiAsync: () => undefined,
-  withdrawDocFromBiAsync: () => undefined,
-}));
 vi.mock("../../../modules/ocr/ocr.service.js", () => ({ enqueueOcrForDocument: async () => undefined }));
 vi.mock("../../../modules/automation/automationEngine.js", () => ({ emitAutomationEvent: async () => undefined }));
 import { canMoveDocuments, cleanCategory, moveDocument } from "../moveDocument.js";

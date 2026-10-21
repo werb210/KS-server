@@ -54,27 +54,4 @@ describe("branded (RCS) texting through a Messaging Service", () => {
     expect(r.payload!.from).toBeTruthy();
   });
 
-  it("staff texts from the BI silo stay plain SMS (BF_SERVER_RCS_BRAND_BF_ONLY_v781)", async () => {
-    process.env.TWILIO_RCS_MESSAGING_SERVICE_SID = SID;
-    const express = (await import("express")).default;
-    const request = (await import("supertest")).default;
-    const jwt = (await import("jsonwebtoken")).default;
-    const router = (await import("../routes/communications.js")).default;
-    const app = express();
-    app.use(express.json());
-    app.use("/api/communications", router);
-    const id = "00000000-0000-4000-8000-0000000000a1";
-    const tok = jwt.sign({ sub: id, id, role: "Admin", tokenVersion: 0, tv: 0 }, String(process.env.JWT_SECRET));
-    createMock.mockReset();
-    createMock.mockResolvedValue({ sid: "SM1", status: "queued" });
-    queryMock.mockReset();
-    queryMock.mockResolvedValue({ rows: [], rowCount: 0 });
-    process.env.TWILIO_FROM_NUMBER = "+15875550100";
-    const res = await request(app).post("/api/communications/sms").set("Authorization", `Bearer ${tok}`).set("X-Silo", "BI")
-      .send({ to: "+15874441234", body: "hello" });
-    delete process.env.TWILIO_FROM_NUMBER;
-    expect(res.status).toBe(200);
-    expect(createMock.mock.calls[0]![0]).toMatchObject({ from: "+15875550100" });
-    expect(createMock.mock.calls[0]![0]).not.toHaveProperty("messagingServiceSid");
-  });
 });

@@ -80,18 +80,4 @@ describe("records Graph sends and bridge SMS on the contact", () => {
     }
   });
 
-  it("a bridge SMS lands on the contact with that number", async () => {
-    process.env.BACKEND_SERVICE_TOKEN = "test-token-v358";
-    const { default: router } = await import("../routes/serviceBridge.js");
-    const app = express();
-    app.use(express.json());
-    app.use("/api/service", router);
-    const res = await request(app).post("/api/service/sms").set("x-backend-token", "test-token-v358").send({ to: "+1 (587) 555-0100", body: "Your quote is ready" });
-    expect(res.status).toBe(200);
-    expect(sendSMS).toHaveBeenCalledWith("+1 (587) 555-0100", "Your quote is ready", { silo: "BI" });
-    const recorded = callsMatching(queryMock, /INSERT INTO crm_timeline_events/);
-    expect(recorded).toHaveLength(1);
-    expect(String(recorded[0]![0])).toContain("'sms_marketing_sent', $2::jsonb FROM contacts c");
-    expect(recorded[0]![1]).toEqual(["15875550100", JSON.stringify({ body: "Your quote is ready", source: "bi_sequence" })]);
-  });
 });

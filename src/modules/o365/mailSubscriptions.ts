@@ -11,6 +11,7 @@ import { isNonPersonUser } from "../notifications/notifications.repo.js";
 import { notifyAllStaff } from "../../services/notifications/notifyAllStaff.js";
 import { pool as defaultPool } from "../../db.js";
 import { logWarnSwallowed } from "../../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
+import { serverUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 const RESOURCE = "me/mailFolders('inbox')/messages";
 // BF_SERVER_SENT_ITEMS_v39
@@ -20,7 +21,7 @@ const LIFETIME_MS = 60 * 60 * 60 * 1000;
 const RENEW_BEFORE_MS = 12 * 60 * 60 * 1000;
 
 function notificationUrl(): string {
-  const base = process.env.PUBLIC_BASE_URL || "https://server.boreal.financial";
+  const base = process.env.PUBLIC_BASE_URL || serverUrl();
   return `${base.replace(/\/$/, "")}/api/webhooks/graph`;
 }
 

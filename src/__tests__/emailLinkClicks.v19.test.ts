@@ -47,7 +47,7 @@ beforeEach(() => {
   logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
   queryMock.mockReset();
   queryMock.mockImplementation(answerBySql([
-    [/SELECT template_id, silo FROM template_send_events/, { rows: [{ template_id: "tpl-1", silo: "BI" }] }],
+    [/SELECT template_id, silo FROM template_send_events/, { rows: [{ template_id: "tpl-1", silo: "BF" }] }],
     [/FROM email_link_clicks/, { rows: [{ url: "https://boreal.financial/apply", clicks: 5, contacts: 3, last_clicked: "2026-10-01" }] }],
   ]));
 });
@@ -87,7 +87,7 @@ describe("email link click capture", () => {
     ]);
     const rows = callsMatching(queryMock, /INSERT INTO email_link_clicks \(contact_id, template_id, tse_id, silo, url\)/).map((c) => c[1]);
     expect(rows).toEqual([
-      ["c1", "tpl-1", "tse-9", "BI", "https://boreal.financial/apply"],
+      ["c1", "tpl-1", "tse-9", "BF", "https://boreal.financial/apply"],
       ["c2", null, null, "BF", "https://boreal.financial/rates"],
     ]);
   });
@@ -104,11 +104,11 @@ describe("email link click capture", () => {
   });
 
   it("exposes a per-URL rollup, optionally for one template", async () => {
-    const r = await get("/api/marketing/link-clicks?templateId=tpl-1&days=30", "BI");
+    const r = await get("/api/marketing/link-clicks?templateId=tpl-1&days=30", "BF");
     expect(r.status).toBe(200);
     expect(r.body.data).toEqual({ items: [{ url: "https://boreal.financial/apply", clicks: 5, contacts: 3, last_clicked: "2026-10-01" }], days: 30, templateId: "tpl-1" });
     const [sql, params] = callsMatching(queryMock, /FROM email_link_clicks/)[0] as [string, unknown[]];
-    expect(params).toEqual(["BI", 30, "tpl-1"]);
+    expect(params).toEqual(["BF", 30, "tpl-1"]);
     expect(sql).toContain("AND template_id = $3");
     expect(sql).toContain("count(DISTINCT contact_id)::int AS contacts");
     // node-postgres returns bigint as a string, so counts are cast to int.

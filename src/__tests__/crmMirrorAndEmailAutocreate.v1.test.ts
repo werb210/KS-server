@@ -20,7 +20,6 @@ vi.mock("../db.js", () => ({
   runQuery: queryMock,
 }));
 vi.mock("../modules/o365/graphClient.js", () => ({ getGraphForUser: vi.fn(async () => ({ fetch: graphFetch })) }));
-vi.mock("../services/biOutreach.js", () => ({ bumpBiOutreachToContacted: vi.fn(async () => undefined) }));
 
 async function mirrorInputFor(body: Record<string, unknown>) {
   vi.doMock("../services/applicationCrmMirror.js", () => ({ mirrorApplicationToCrm: mirrorMock }));

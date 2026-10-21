@@ -53,8 +53,8 @@ describe("template replies channel match v1", () => {
   });
 
   it("is silo scoped", async () => {
-    const { params, sql } = await runAnalytics("BI");
-    expect(params).toEqual(["BI"]);
+    const { params, sql } = await runAnalytics("BF");
+    expect(params).toEqual(["BF"]);
     expect(sql).toContain("m.silo = $1");
     expect(sql).toContain("WHERE t.silo = $1");
   });

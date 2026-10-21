@@ -79,10 +79,10 @@ describe("email audience include/exclude", () => {
   });
 
   it("exposes a live audience-count endpoint for the composer preview", async () => {
-    const r = await auth(request(app).get("/api/marketing/email/audience-count?include=vip,new&exclude=dnc")).set("X-Silo", "BI");
+    const r = await auth(request(app).get("/api/marketing/email/audience-count?include=vip,new&exclude=dnc")).set("X-Silo", "BF");
     expect(r.status).toBe(200);
     expect(r.body.data).toEqual({ n: 7 });
-    expect(callsMatching(queryMock, COUNT)[0][1]).toEqual(["BI", null, ["vip", "new"], ["dnc"]]);
+    expect(callsMatching(queryMock, COUNT)[0][1]).toEqual(["BF", null, ["vip", "new"], ["dnc"]]);
   });
 
   it("the queue worker passes the arrays back into the runner", async () => {

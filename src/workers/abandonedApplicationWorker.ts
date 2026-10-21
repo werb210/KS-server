@@ -34,9 +34,9 @@ const CONSENT_WINDOW_MONTHS = 6;
 // BF_SERVER_v826_TASK_SILO - tasks.silo only accepts 'BF', 'BI' or 'SLF'. An application with a lower-case or other
 // silo made every call-task insert fail ("violates check constraint tasks_silo_check"), and because the failed row
 // was never marked, the same insert failed again every pass.
-export function taskSilo(silo: string | null | undefined): "BF" | "BI" | "SLF" {
-  const s = String(silo ?? "").trim().toUpperCase();
-  return s === "BI" || s === "SLF" ? s : "BF";
+export function taskSilo(silo: string | null | undefined): "BF" {
+  void silo; // KS_SERVER_v1_NO_BI - Keystone has one line of business.
+  return "BF";
 }
 
 export const ABANDON_SMS_BODY =

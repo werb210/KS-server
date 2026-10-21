@@ -48,9 +48,9 @@ describe("brand fonts are allowed by the CSP", () => {
 
   it("keeps every origin the app already depended on", () => {
     for (const origin of [
-      "https://server.boreal.financial",
-      "wss://server.boreal.financial",
-      "https://staff.boreal.financial",
+      "https://ks-server-dev-chb5htbwaue2hygk.canadacentral-01.azurewebsites.net",
+      "wss://ks-server-dev-chb5htbwaue2hygk.canadacentral-01.azurewebsites.net",
+      "https://thankful-wave-04964490f.2.azurestaticapps.net",
       "https://voice-js.twilio.com",
       "wss://eventgw.twilio.com",
     ]) {

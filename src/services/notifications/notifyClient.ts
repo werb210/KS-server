@@ -5,6 +5,7 @@
 // refused it, or the app was uninstalled - it goes by SMS. Never both, never
 // neither without a logged reason. Never throws.
 import type { ApplicantPushCategory } from "../push/applicantPush.js";
+import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 export type ClientNotice = {
   phone: string;
@@ -134,7 +135,7 @@ const defaultDeps: NotifyDeps = {
 // "Text me updates about my application". Uses the email on their CRM contact (same mobile number).
 export function noticeEmailHtml(n: ClientNotice): string {
   const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const base = String(process.env.CLIENT_URL ?? "https://client.boreal.financial").replace(/\/$/, "");
+  const base = String(process.env.CLIENT_URL ?? clientUrl()).replace(/\/$/, "");
   const link = n.applicationId ? base + "/application/" + encodeURIComponent(n.applicationId) : base;
   return "<p>" + esc(n.body) + "</p>"
     + "<p><a href='" + link + "'>Open your Boreal Financial client portal</a></p>"

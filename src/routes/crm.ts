@@ -11,7 +11,6 @@ import { SupportController } from "../modules/support/support.controller.js";
 import { pool } from "../db.js";
 import { askAI } from "../modules/ai/openai.service.js"; // BF_SERVER_CRM_AI_SUMMARY_v1
 import { normalizePhoneNumber } from "../modules/auth/phone.js";
-import { bumpBiOutreachToContacted } from "../services/biOutreach.js"; // BF_SERVER_BLOCK_v344_BI_OUTREACH_AUTOADVANCE_v1
 import { getSilo, resolveSiloFromRequest } from "../middleware/silo.js";
 import { createContact } from "../services/contacts.js";
 import { getStorage } from "../lib/storage/index.js"; // BF_SERVER_CONTACT_DOCUMENTS_v1
@@ -1326,7 +1325,6 @@ router.post("/timeline/calls", requireCrmWrite, safeHandler(async (req: any, res
       silo,
     ],
   );
-  void bumpBiOutreachToContacted(resolvedContactId); // BF_SERVER_BLOCK_v344_BI_OUTREACH_AUTOADVANCE_v1
   res.status(201).json({
     ok: true,
     data: rows[0],

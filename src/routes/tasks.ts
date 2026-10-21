@@ -11,7 +11,6 @@ import { resumeSequenceTask } from "../services/sequenceEngine.js"; // BF_SERVER
 import { safeHandler } from "../middleware/safeHandler.js";
 import { respondOk } from "../utils/respondOk.js";
 import { replayKey } from "../middleware/replayKey.js"; // BF_SERVER_v831_DIALER_POLISH
-import { fetchBiOutreachContact } from "../services/biOutreach.js"; // BF_SERVER_v789_BI_OUTREACH_VIA_API
 
 function respondError(res: any, status: number, message: string): void {
   res.status(status).json({ error: { message } });
@@ -305,40 +304,8 @@ router.post("/", replayKey("tasks"), safeHandler(async (req: any, res: any) => {
     if (cr.rowCount) {
       silo = (cr.rows[0]!.silo || silo) as typeof silo;
     } else {
-      // BF_SERVER_TASKS_BI_CONTACT_PROMOTE_v1 - the id may belong to a BI outreach
-      // lead (bi_contacts), which the tasks table cannot reference (tasks.contact_id
-      // is FK -> contacts). When staff task/call/email an outreach lead, promote it
-      // into the main CRM contacts table (silo='BI') and attach the task to that
-      // real contact - matching how a BF contact behaves. Idempotent: reuse an
-      // existing BI contacts row matched by phone/email before creating one.
-      // BF_SERVER_v789_BI_OUTREACH_VIA_API - bi_contacts is BI-Server's table, so
-      // the lead is read from BI over HTTP (404 -> contact_not_found).
-      const bi = await fetchBiOutreachContact(contactId);
-      if (bi.status === "not_found") { respondError(res, 400, "contact_not_found"); return; }
-      if (bi.status !== "ok") { respondError(res, 502, "bi_contact_lookup_failed"); return; }
-      const lead = bi.lead;
-      const phone = lead.phone_e164 ? String(lead.phone_e164) : null;
-      const email = lead.email ? String(lead.email) : null;
-      let promotedId: string | null = null;
-      if (phone || email) {
-        const dupe = await pool.query<{ id: string }>(
-          `SELECT id FROM contacts
-             WHERE silo = 'BI'
-               AND ( ($1::text IS NOT NULL AND phone = $1) OR ($2::text IS NOT NULL AND lower(email) = lower($2)) )
-             LIMIT 1`,
-          [phone, email],
-        );
-        if (dupe.rowCount) promotedId = dupe.rows[0]!.id;
-      }
-      if (!promotedId) {
-        const ins = await pool.query<{ id: string }>(
-          `INSERT INTO contacts (name, email, phone, silo) VALUES ($1,$2,$3,'BI') RETURNING id`,
-          [lead.full_name ?? "BI Contact", email, phone],
-        );
-        promotedId = ins.rows[0]!.id;
-      }
-      b.contact_id = promotedId; // attach the task to the promoted CRM contact
-      silo = "BI" as typeof silo;
+      // KS_SERVER_v1_NO_BI - no Boreal Insurance outreach leads to promote; the contact must exist.
+      respondError(res, 400, "contact_not_found"); return;
     }
   } else if (companyId) {
     const cr = await pool.query<{ silo: string }>(`SELECT silo FROM companies WHERE id::text = $1`, [companyId]);

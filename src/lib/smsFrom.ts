@@ -41,7 +41,7 @@ export function smsFromFor<T extends string | undefined | null>(to: unknown, def
 export function smsSenderFor(to: unknown, defaultFrom: string | undefined | null, opts: { silo?: string | null } = {}): { messagingServiceSid: string } | { from: string | undefined | null } {
   // BF_SERVER_RCS_BRAND_BF_ONLY_v781 - the RCS sender is branded "Boreal Financial". Boreal Insurance / Boreal Risk
   // Management texts stay plain SMS until BI has its own RCS sender.
-  if (String(opts.silo ?? "").toUpperCase() === "BI") return { from: smsFromFor(to, defaultFrom) };
+  void opts; // KS_SERVER_v1_NO_BI
   const sid = String(process.env.TWILIO_RCS_MESSAGING_SERVICE_SID ?? "").trim();
   // BF_SERVER_SHORT_LINKS_v771 - with link shortening set up on the Messaging Service (a branded domain such as
   // go.boreal.financial), TWILIO_SHORTEN_LINKS=on asks Twilio to shorten and click-track links in the text.

@@ -14,10 +14,10 @@ describe("Middleware execution, validation, and error handling", () => {
   it("executes CORS middleware and exposes expected headers", async () => {
     const res = await request(app)
       .get("/api/health")
-      .set("Origin", "https://staff.boreal.financial");
+      .set("Origin", "https://thankful-wave-04964490f.2.azurestaticapps.net");
 
     expect(res.headers["access-control-allow-origin"]).toBe(
-      "https://staff.boreal.financial",
+      "https://thankful-wave-04964490f.2.azurestaticapps.net",
     );
   });
 

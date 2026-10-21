@@ -36,12 +36,12 @@ beforeEach(() => {
 
 describe("scheduled sends list exposes the campaign name", () => {
   it("the list selects the subject and template id out of the payload, silo scoped", async () => {
-    const r = await get("/api/marketing/send-jobs", "BI");
+    const r = await get("/api/marketing/send-jobs", "BF");
     expect(r.status).toBe(200);
     expect(r.body.data.jobs[0]).toMatchObject({ subject: "October news", template_id: "tpl-9" });
     const [sql, params] = callsMatching(queryMock, JOB_READ)[0] as [string, unknown[]];
     expect(selected(sql)).toContain("payload->>'subject' AS subject, payload->>'templateId' AS template_id");
-    expect(params).toEqual(["BI"]);
+    expect(params).toEqual(["BF"]);
   });
 
   it("the single-job read selects the same columns, scoped to id and silo", async () => {
@@ -72,9 +72,9 @@ describe("scheduled sends list exposes the campaign name", () => {
 describe("cancel explains itself when it cannot cancel", () => {
   it("reports the terminal status of a job that already finished", async () => {
     queryMock.mockImplementation(answerBySql([[/SELECT status FROM marketing_send_jobs WHERE id = \$1 AND silo = \$2/, { rows: [{ status: "done" }] }]]));
-    const r = await post("/api/marketing/send-jobs/job-1/cancel", "BI");
+    const r = await post("/api/marketing/send-jobs/job-1/cancel", "BF");
     expect(r.body.data).toEqual({ canceled: false, status: "done", reason: "already finished" });
-    expect(callsMatching(queryMock, /SELECT status FROM marketing_send_jobs/)[0][1]).toEqual(["job-1", "BI"]);
+    expect(callsMatching(queryMock, /SELECT status FROM marketing_send_jobs/)[0][1]).toEqual(["job-1", "BF"]);
   });
 
   it("says not found when there is no such job in this silo", async () => {
