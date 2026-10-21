@@ -30,7 +30,31 @@ export async function initDb() {
     }
   }
 
+  // KS_SERVER_v2_FRESH_START - on a brand-new database this ran before the migrations, so live_chat_requests already
+  // existed when the schema baseline loaded and the baseline stopped the server ("relation already exists"). On an
+  // empty database the baseline creates the table; an empty copy left behind by an earlier failed start is removed.
+  let hasSchema = true;
   if (connected) {
+    const probe = await pool.query<{ has_schema: boolean }>(
+      "SELECT to_regclass('public.applications') IS NOT NULL AS has_schema",
+    );
+    hasSchema = Boolean(probe.rows?.[0]?.has_schema);
+    if (!hasSchema) {
+      await pool.query(`
+        DO $$
+        BEGIN
+          -- Keep the existence check separate so PostgreSQL does not resolve a missing table in the SELECT.
+          IF to_regclass('public.live_chat_requests') IS NOT NULL THEN
+            IF NOT EXISTS (SELECT 1 FROM public.live_chat_requests) THEN
+              DROP TABLE public.live_chat_requests;
+            END IF;
+          END IF;
+        END $$;
+      `);
+    }
+  }
+
+  if (connected && hasSchema) {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS live_chat_requests (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
