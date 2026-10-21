@@ -4,7 +4,13 @@
 // has never reached the process and the pg client.query deprecation still has
 // no stack. This property is the in-process equivalent and does not depend on
 // the startup command or on an app setting.
-process.traceDeprecation = true;
+// KS_SERVER_v2_FRESH_START - `node --trace-deprecation` (npm start) makes this property read-only, and assigning it then
+// threw at startup ("Cannot assign to read only property 'traceDeprecation'"), so the server never came up.
+try {
+  if (!process.traceDeprecation) process.traceDeprecation = true;
+} catch {
+  /* already on via the command-line flag */
+}
 
 // BF_SERVER_BLOCK_v_SAFE_ERROR_LOGGING_v1 - never console.error the raw error
 // object: pg errors reference the live Connection (TLSSocket, processID,
