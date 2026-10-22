@@ -8,6 +8,7 @@ import { allowedLine, watchAuth, watchError } from "./security.js";
 import { safeHandler } from "../middleware/safeHandler.js"; // BF_SERVER_v789_SAFE_HANDLERS
 import { getBaseUrl } from "../voice/twilioClient.js"; // BF_SERVER_v820_WATCH_CALLS
 import { SCREEN_GATHER_TIMEOUT_SECONDS, contactForPhone, spokenNumber } from "../voice/watchCellFallback.js"; // BF_SERVER_v820_WATCH_CALLS
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const router = Router();
 const normalizeE164 = (raw: unknown): string | null => {
@@ -105,7 +106,7 @@ router.post("/provider/:callId/twiml", urlencoded({ extended: false }), twilioWe
     input: ["dtmf"], numDigits: 1, timeout: SCREEN_GATHER_TIMEOUT_SECONDS, actionOnEmptyResult: true,
     action: `${getBaseUrl()}/api/telephony/watch/provider/${encodeURIComponent(req.params.callId)}/accept`, method: "POST",
   } as any);
-  gather.say({ voice: "Polly.Joanna" }, `Boreal call to ${label}. Press 1 to connect.`);
+  gather.say({ voice: "Polly.Joanna" }, `${brandName()} call to ${label}. Press 1 to connect.`);
   response.hangup();
   return res.type("text/xml").send(response.toString());
 }));

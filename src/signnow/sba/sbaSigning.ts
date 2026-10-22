@@ -17,6 +17,7 @@ import { resolveSbaOwners, loadSbaContext } from "./sbaOwners.js";
 import { buildSba1919, buildSba912, buildSba413, buildSba4506c, type IvesParticipant } from "./sbaFormBuilder.js";
 import { logInfo, logError } from "../../observability/logger.js";
 import { logWarnSwallowed } from "../../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
+import { signnowFromEmail } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 // BF_SERVER_SBA_LOG_ONCE_v752
 const lastBlockedLog = new Map<string, number>();
 export function shouldLogBlocked(key: string, now = Date.now()): boolean {
@@ -139,7 +140,7 @@ export async function createSbaSigningSessions(applicationId: string, opts: { in
     // BF_SERVER_SBA_ONE_SIGNING_v758
     if (appInputs) {
       const appPdf = await buildApplicationPdf(appInputs, undefined, { signOnlyAs: `Owner ${owner.index}` });
-      docs.push({ bytes: appPdf, filename: `boreal-application-owner${owner.index}-${applicationId}.pdf` });
+      docs.push({ bytes: appPdf, filename: `application-owner${owner.index}-${applicationId}.pdf` });
     }
     // Form 1919 is one per co-applicant and goes only to the authorized representative.
     if (owner.index === 1) {
@@ -207,7 +208,7 @@ export async function createSbaSigningSessions(applicationId: string, opts: { in
       const byEmail = Boolean(appInputs) && owner.index > 1;
       let inviteId: string; let url: string | null = null;
       if (byEmail) {
-        inviteId = (await sendGroupEmailInvite(groupId, { email: signerEmail, name: owner.fullName || undefined, roleName: `Owner ${owner.index}`, fromEmail: process.env.SIGNNOW_FROM_EMAIL || "no-reply@boreal.financial", order: 1 })).inviteId ?? "";
+        inviteId = (await sendGroupEmailInvite(groupId, { email: signerEmail, name: owner.fullName || undefined, roleName: `Owner ${owner.index}`, fromEmail: signnowFromEmail(), order: 1 })).inviteId ?? "";
       } else {
         ({ inviteId } = await createEmbeddedGroupInvite(groupId, docIds, [
           { email: signerEmail, name: owner.fullName || undefined, roleName: `Owner ${owner.index}` },

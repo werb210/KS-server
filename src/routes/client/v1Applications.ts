@@ -24,11 +24,12 @@ import { fillDraftContact, furthestStep } from "../../services/draftProgress.js"
 import { logWarnSwallowed } from "../../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
 import { applicationParamGuard } from "../../auth/clientApplicationOwnership.js"; // BF_SERVER_v789_ID_NORMALIZE
 import { checkSubmitCompleteness, type CompletenessResult } from "../../services/applicationCompleteness.js"; // BF_SERVER_v791_SUBMIT_COMPLETENESS
-import { MARKETING_SMS_OPTIN_TEXT } from "../../services/smsConsent.js"; // BF_SERVER_v808_MARKETING_OPTIN
+import { marketingSmsOptinText } from "../../services/smsConsent.js"; // BF_SERVER_v808_MARKETING_OPTIN
 import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 // BF_APP_ID_CAST_v39 - Block 39-A - applications.id comparisons cast to text
 
 import { UNSUBMITTED_CLIENT_DRAFT_EXCLUSION, CLIENT_REMOVED_EXCLUSION, keepNewestUnfinished, removeUnfinishedDrafts } from "./signInDraftFilter.js"; // BF_SERVER_v838_SIGNIN_SKIPS_UNSUBMITTED / v839
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const router = Router();
 
@@ -672,8 +673,8 @@ router.post(
                VALUES (gen_random_uuid(), 'message', 'outbound', 'sent', $1,
                  ${v711_contactSilo},
                  COALESCE((SELECT silo FROM applications WHERE id::text = ($1)::text LIMIT 1), 'BF'),
-                 $2, 'Boreal Financial', now())`,
-              [application.id, `Hello, and thank you for your application. You still have a few quick steps to finish - please complete ${v711_list} using the buttons below.`],
+                 $2, $3, now())`,
+              [application.id, `Hello, and thank you for your application. You still have a few quick steps to finish - please complete ${v711_list} using the buttons below.`, brandName()],
             );
             for (const f of v711_forms) {
               await pool.query(
@@ -698,7 +699,7 @@ router.post(
               const v711_url = `${v711_base}/application/${application.id}`;
               const { notifyClient } = await import("../../services/notifications/notifyClient.js"); // BF_SERVER_BLOCK_v552
               await notifyClient({ phone: String(v711_phone), applicationId: String(application.id), kind: "forms_remaining", categoryId: "DOCUMENT_REQUEST",
-                sms: `Boreal Financial: your application was received. A few quick forms remain - log in to complete them: ${v711_url}`,
+                sms: `${brandName()}: your application was received. A few quick forms remain - log in to complete them: ${v711_url}`,
                 title: "Application received", body: "A few quick forms remain - tap to finish." });
             }
           }
@@ -747,8 +748,8 @@ router.post(
                  VALUES (gen_random_uuid(), 'message', 'outbound', 'sent', $1,
                    (SELECT contact_id FROM applications WHERE id::text = ($1)::text LIMIT 1),
                    COALESCE((SELECT silo FROM applications WHERE id::text = ($1)::text LIMIT 1), 'BF'),
-                   $2, 'Boreal Financial', $3, 'upload_docs', now())`,
-                [application.id, `To continue your application, please upload your supporting documents: ${v775_list}.`, "Upload documents"],
+                   $2, $4, $3, 'upload_docs', now())`,
+                [application.id, `To continue your application, please upload your supporting documents: ${v775_list}.`, "Upload documents", brandName()],
               );
               await pool.query(
                 `UPDATE applications SET pipeline_state = 'Documents Required', updated_at = now()
@@ -787,7 +788,7 @@ router.post(
             const portalUrl = `${clientBase.replace(/\/+$/, "")}/application/${application.id}`;
             const { notifyClient } = await import("../../services/notifications/notifyClient.js"); // BF_SERVER_BLOCK_v552
             await notifyClient({ phone: String(v650_phone), applicationId: String(application.id), kind: "documents_remaining", categoryId: "DOCUMENT_REQUEST",
-              sms: `Boreal Financial: your application was received. To finish, upload your remaining documents here: ${portalUrl}`,
+              sms: `${brandName()}: your application was received. To finish, upload your remaining documents here: ${portalUrl}`,
               title: "Application received", body: "Upload your remaining documents to finish." })
             .then((r) => { if (r.channel === "none") throw new Error(r.error ?? "not_sent"); })
             .catch((err) => {
@@ -1378,7 +1379,7 @@ router.post(
                       consent_text   = $2,
                       updated_at     = now()
                 WHERE id = $1`,
-              [c.id, MARKETING_SMS_OPTIN_TEXT],
+              [c.id, marketingSmsOptinText()],
             );
           } else {
             const { RECORD_INQUIRY_CONSENT_SQL } = await import("../../services/smsConsent.js");

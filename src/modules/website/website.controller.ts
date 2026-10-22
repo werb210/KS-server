@@ -10,6 +10,7 @@ import { parseExpressCaslConsent, recordExpressCaslConsent } from "../../service
 // BF_SERVER_BLOCK_v129a_READINESS_PHONE_NORMALIZE_v1
 import { normalizePhoneNumber } from "../auth/phone.js";
 import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 // BF_SERVER_v?_BLOCK_1_14_V1_READINESS_AND_STAFF_NOTIFY
 export async function submitCreditReadiness(req: Request, res: Response) {
@@ -238,7 +239,7 @@ export async function submitCreditReadiness(req: Request, res: Response) {
     const amountText = requestedAmountNumber
       ? ` ($${requestedAmountNumber.toLocaleString("en-US", { maximumFractionDigits: 0 })})`
       : "";
-    const body = `Boreal: New readiness lead — ${companyName}${amountText}. ${fullName} (${normalizedPhone}). Open the staff portal.`;
+    const body = `${brandName()}: New readiness lead — ${companyName}${amountText}. ${fullName} (${normalizedPhone}). Open the staff portal.`;
 
     await notifyAllStaff({
       pool,

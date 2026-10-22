@@ -57,7 +57,7 @@ describe("media fee agreement - wording", () => {
   );
   it("uses the approved agreement and fee text", () => {
     const all = agreementParagraphs(data).map((p) => (p.bold ?? "") + " " + p.text).join("\n");
-    expect(all).toContain("2630108 Alberta Ltd., trading as Boreal Financial (\"BF\")");
+    expect(all).toContain("between Keystone Demo Brokerage (\"BF\")"); // KS_SERVER_v4_BRANDING - the licensee, no legal name set
     expect(all).toContain("residing/operating in Canada or the United States");
     expect(all).toContain("laws of the Province of Alberta");
     expect(all).not.toMatch(/\bCBF\b|Canadian Business Financing/);

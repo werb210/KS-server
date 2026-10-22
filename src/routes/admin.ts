@@ -16,6 +16,7 @@ import adminOpsRoutes from "./admin.ops.js";
 import adminExportsRoutes from "./admin.exports.js";
 import adminDashboardRoutes from "./admin.dashboard.js";
 import { safeHandler } from "../middleware/safeHandler.js"; // BF_SERVER_v789_SAFE_HANDLERS
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const router = Router();
 
@@ -301,9 +302,9 @@ router.post(
         docs,
         verdict: borealOk
           ? (accordFieldFail
-              ? "Boreal form PASSES fieldextract (signing works); the Accord form fails and is auto-skipped. See the accord doc extractedTags/body."
+              ? "Application form PASSES fieldextract (signing works); the Accord form fails and is auto-skipped. See the accord doc extractedTags/body."
               : "Both signing PDFs pass fieldextract; signing should work for this application.")
-          : "BOREAL form FAILS fieldextract -- this is what 65656s the real signing. Inspect its extractedTags for a malformed {{...}} tag (or open pdfUrl).",
+          : "Application form FAILS fieldextract -- this is what 65656s the real signing. Inspect its extractedTags for a malformed {{...}} tag (or open pdfUrl).",
       });
     } catch (e: any) {
       return res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });
@@ -346,8 +347,8 @@ router.post(
       }
       const r = await sendOne({
         to,
-        subject: "Boreal SendGrid diagnostics",
-        html: "<p>This is a Boreal SendGrid diagnostics test send. If you received this, sending works.</p>",
+        subject: `${brandName()} SendGrid diagnostics`,
+        html: `<p>This is a ${brandName()} SendGrid diagnostics test send. If you received this, sending works.</p>`,
       });
       // Interpret the common failure codes so the operator gets a plain answer.
       let diagnosis = "ok";
@@ -502,7 +503,7 @@ router.post(
         const { uploadDocumentWithFieldExtract } = await import("../signnow/signnowClient.js");
         const { buildReferrerAgreementPdf } = await import("../signnow/referrerAgreementPdfBuilder.js");
         const pdf = await buildReferrerAgreementPdf();
-        const { documentId } = await uploadDocumentWithFieldExtract(pdf, "Boreal referrer-agreement diagnostics probe.pdf");
+        const { documentId } = await uploadDocumentWithFieldExtract(pdf, `${brandName()} referrer-agreement diagnostics probe.pdf`);
         out.bakeProbeOk = true;
         out.probeDocumentId = documentId;
         out.diagnosis = "ok";
@@ -535,12 +536,12 @@ router.post(
       const pdf = await buildReferrerAgreementPdf();
       if (req.body?.pdfOnly === true) {
         res.setHeader("Content-Type", "application/pdf");
-        res.setHeader("Content-Disposition", 'inline; filename="boreal-referral-partner-agreement.pdf"');
+        res.setHeader("Content-Disposition", 'inline; filename="referral-partner-agreement.pdf"');
         return res.end(Buffer.from(pdf));
       }
       const name = typeof req.body?.name === "string" && req.body.name.trim()
         ? req.body.name.trim()
-        : "Boreal Referral Partner Agreement";
+        : `${brandName()} Referral Partner Agreement`;
       const { documentId } = await uploadDocumentWithFieldExtract(pdf, `${name}.pdf`);
       const { templateId } = await createTemplateFromDocument(documentId, name);
       const roleName = (process.env.SIGNNOW_REFERRER_ROLE_NAME ?? "Referrer").trim();
@@ -549,7 +550,7 @@ router.post(
         templateId,
         documentId,
         roleName,
-        next: `Set SIGNNOW_REFERRER_TEMPLATE_ID=${templateId} on boreal-staff-server (tick "Deployment slot setting"), then re-run referrer-agreement-diagnostics with probe:true.`,
+        next: `Set SIGNNOW_REFERRER_TEMPLATE_ID=${templateId} in the server's App Service settings (tick "Deployment slot setting"), then re-run referrer-agreement-diagnostics with probe:true.`,
       });
     } catch (e: any) {
       return res.status(500).json({ ok: false, error: e instanceof Error ? e.message : String(e) });

@@ -10,6 +10,7 @@ import { nextAllowedSendTime, renderTokens } from "./conditions.js";
 import { buildContext, emitWith, stepsOf, type AutomationEvent, type EngineDeps, type Step } from "./automationContext.js";
 import { logStep, OUTWARD, runAction, runCheck, waitMs } from "./automationSteps.js";
 import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export { buildContext, emitWith, stepsOf };
 export type { AutomationEvent, EngineDeps, Step };
@@ -118,7 +119,7 @@ export async function defaultDeps(): Promise<EngineDeps> {
       }
       const { sendSms } = await import("../notifications/sms.service.js");
       const base = String(process.env.CLIENT_URL ?? clientUrl()).replace(/\/$/, "");
-      await sendSms({ to: phone, message: `Boreal: ${body}\n${applicationId ? `${base}/application/${encodeURIComponent(applicationId)}` : `${base}/portal`}`, track: { kind: "automation", applicationId } });
+      await sendSms({ to: phone, message: `${brandName()}: ${body}\n${applicationId ? `${base}/application/${encodeURIComponent(applicationId)}` : `${base}/portal`}`, track: { kind: "automation", applicationId } });
       return "sms";
     },
     // BF_SERVER_v786_WORKFLOW_GRAPH - v2 action senders.

@@ -3,15 +3,17 @@ import { pool } from "../db.js";
 import { logError } from "../observability/logger.js";
 import { accessToken } from "./googleAdsConversions.js";
 import { consentGiven, userIdentifiersFor, type UserIdentifier } from "./googleAdsEnhanced.js";
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export type ListKind = "applicants" | "funded";
 export type Member = { contactId: string; ids: UserIdentifier[]; consented: boolean };
 const DM = "https://datamanager.googleapis.com/v1";
 const BATCH = 500;
 const digits = (value: unknown) => String(value ?? "").replace(/[^0-9]/g, "");
+// KS_SERVER_v4_BRANDING - named after the licensee, read when used.
 export const LIST_NAMES: Record<ListKind, string> = {
-  applicants: "Boreal Financial - Applicants (CRM)",
-  funded: "Boreal Financial - Funded clients (CRM)",
+  get applicants() { return `${brandName()} - Applicants (CRM)`; },
+  get funded() { return `${brandName()} - Funded clients (CRM)`; },
 };
 type Fetch = typeof fetch;
 
@@ -25,7 +27,7 @@ export function customerMatchConfigured(): boolean {
 export function createListBody(kind: ListKind) {
   return {
     displayName: LIST_NAMES[kind],
-    description: kind === "applicants" ? "People who applied to Boreal Financial or Canadian Business Financing, sent from the Boreal portal." : "Boreal Financial clients whose financing funded, sent automatically from the Boreal portal.",
+    description: kind === "applicants" ? `People who applied to ${brandName()}, sent from the ${brandName()} portal.` : `${brandName()} clients whose financing funded, sent automatically from the ${brandName()} portal.`,
     integrationCode: `boreal-${kind}`,
     ingestedUserListInfo: { contactIdInfo: { dataSourceType: "DATA_SOURCE_TYPE_FIRST_PARTY" }, uploadKeyTypes: ["CONTACT_ID"] },
     membershipDuration: `${540 * 86400}s`,

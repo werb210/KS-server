@@ -14,7 +14,7 @@ vi.mock("../services/smsService.js", () => ({ sendSMS: (...a: [string]) => sendS
 vi.mock("../services/notifications/notifyClient.js", () => ({ pushToClientApp: async () => false }));
 vi.mock("../workers/claim.js", () => ({ claimedTick: (_name: string, fn: () => Promise<unknown>) => async () => { await fn(); } }));
 
-import { startAbandonedApplicationWorker, ABANDON_SMS_BODY } from "../workers/abandonedApplicationWorker.js";
+import { startAbandonedApplicationWorker, abandonSmsBody } from "../workers/abandonedApplicationWorker.js";
 
 const MIG = fs.readFileSync("migrations/2026_08_22_v61_abandoned_nudge.sql", "utf8");
 
@@ -68,7 +68,7 @@ describe("it cannot text the same person twice", () => {
     const pool = makePool([[SMS_SELECT, { rows: [smsRow] }]]);
     await runTick(pool);
     expect(callsMatching(pool.query, SMS_SELECT)[0][0]).toContain("a.abandon_sms_sent_at IS NULL");
-    expect(sendSMS).toHaveBeenCalledWith(smsRow.phone, ABANDON_SMS_BODY);
+    expect(sendSMS).toHaveBeenCalledWith(smsRow.phone, abandonSmsBody());
     const stamps = callsMatching(pool.query, stampSql);
     expect(stamps).toHaveLength(1);
     expect(stamps[0][1]).toEqual(["app-1"]);

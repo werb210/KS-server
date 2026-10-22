@@ -24,7 +24,7 @@ export const REPORTS: ReportDef[] = [
   { key: "win_rate", title: "Won vs lost", silo: "BF", group: "operations", size: "full", source: "reports", description: "Submitted files that funded, were lost or are still open - by month and product." },
   { key: "call_outcomes", title: "Call outcomes", silo: "BF", group: "operations", size: "half", source: "reports", description: "Outbound calls by result, per person (staff see their own)." },
   { key: "client_reply_time", title: "Client reply time", silo: "BF", group: "operations", size: "full", source: "reports", description: "How fast staff answer clients, and who is waiting for a reply right now." },
-  { key: "commission_receivable", title: "Commission receivable", silo: "BF", group: "money", size: "full", source: "reports", description: "Commission lenders owe Boreal on funded files, by age; mark it received." },
+  { key: "commission_receivable", title: "Commission receivable", silo: "BF", group: "money", size: "full", source: "reports", description: "Commission lenders owe on funded files, by age; mark it received." },
   // BF_SERVER_REPORTS6_10_v780
   { key: "pipeline_movement", title: "Pipeline movement", silo: "BF", group: "operations", size: "full", source: "reports", description: "Files started, submitted, funded and lost in the period, with amounts." },
   { key: "average_deal_size", title: "Average deal size", silo: "BF", group: "operations", size: "full", source: "reports", description: "Average and median requested amount by product and lead source, and for funded files." },
@@ -55,7 +55,7 @@ export const REPORTS: ReportDef[] = [
   { key: "missed_calls", title: "Missed calls", silo: "BF", group: "operations", size: "full", source: "reports", description: "Missed incoming calls and how long until someone called back." },
   { key: "monthly_cohorts", title: "Monthly cohorts", silo: "BF", group: "marketing", size: "half", source: "reports", description: "Applications started each month and how many submitted and funded." },
   { key: "renewal_opportunities", title: "Renewal opportunities", silo: "BF", group: "operations", size: "full", source: "reports", description: "Clients funded about a year ago - a call list for repeat business." },
-  { key: "insurance_cross_sell", title: "Insurance cross-sell", silo: "BF", group: "operations", size: "half", source: "reports", description: "Funded Financial deals that also have a Boreal Insurance application." },
+  { key: "insurance_cross_sell", title: "Insurance cross-sell", silo: "BF", group: "operations", size: "half", source: "reports", description: "Funded Financial deals that also have an insurance application." },
   // Cards that show the existing portal panels. The v714 catalog listed keys the
   // portal board cannot draw; these four are the ones it renders.
   { key: "ads_story", title: "Ads: the story", silo: "BF", group: "marketing", size: "full", source: "portal", description: "Ad spend to applications, funded deals and return." },

@@ -5,9 +5,10 @@ import { pool } from "../db.js";
 import { logError } from "../observability/logger.js";
 import { sendgridConfigured, sendTransactional } from "./sendgridService.js";
 import { commissionRate } from "./googleDataManager.js";
+import { supportEmail, assistantName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export function weeklyRecipients(): string[] {
-  return String(process.env.GOOGLE_HEALTH_ALERT_EMAILS || "todd.w@boreal.financial,andrew.p@boreal.financial")
+  return String(process.env.GOOGLE_HEALTH_ALERT_EMAILS || supportEmail())
     .split(",").map((s) => s.trim()).filter((s) => s.includes("@"));
 }
 
@@ -42,7 +43,7 @@ export function renderWeeklyEmail(d: WeeklyData, rate: number): { subject: strin
     d.campaigns.length ? "<h3>Campaigns</h3><table>" + d.campaigns.map((c) => row([esc(c.name), money(c.spend), c.clicks + " clicks"])).join("") + "</table>" : "",
     d.wasted.length ? "<h3>Search terms that cost the most with no application</h3><table>" + d.wasted.map((w) => row([esc(w.term), money(w.spend), w.clicks + " clicks"])).join("") + "</table>" : "",
     d.stops.length ? "<h3>Where unfinished applications stopped</h3><table>" + d.stops.map((s) => row(["Step " + s.step, s.stopped + " stopped"])).join("") + "</table>" : "",
-    "<h3>Maya suggests</h3>",
+    "<h3>" + esc(assistantName()) + " suggests</h3>",
     d.suggestions.length ? "<ul>" + d.suggestions.map((s) => "<li>" + esc(s) + "</li>").join("") + "</ul>" : "<p>No changes suggested this week.</p>",
     '<p style="color:#51617D">Suggestions only - nothing has been changed in Google Ads. Full detail: staff portal, Marketing, Google Ads &amp; Analytics.</p>',
     "</div>",

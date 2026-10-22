@@ -12,6 +12,7 @@ import { ssrfSafeFetch, SsrfBlockedError } from "../security/ssrfGuard.js"; // B
 
 const router = Router();
 import { sharedOpenAI } from "../lib/sharedClients.js"; // BF_SERVER_SNAT_REUSE_v784
+import { assistantName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 // BF_SERVER_BLOCK_v332_SETTINGS_AND_AUDIT_HARDENING_v1 -- Edit 1
 // Pre-fix the only privilege gate on this router was router.use(requireCapability
@@ -80,7 +81,7 @@ router.post(
         return res.status(503).json({
           ok: false,
           savedWithoutIndex: true,
-          message: "Saved, but Maya search is degraded — set OPENAI_API_KEY to enable embeddings.",
+          message: `Saved, but ${assistantName()} search is degraded — set OPENAI_API_KEY to enable embeddings.`,
         });
       }
       if (e?.code === "embedding_failed" || e?.code === "no_vector") {
@@ -122,7 +123,7 @@ router.post("/ai-knowledge/text", requireAdminWrite, safeHandler(async (req: any
       return res.status(503).json({
         ok: false,
         savedWithoutIndex: true,
-        message: "Saved, but Maya search is degraded — set OPENAI_API_KEY to enable embeddings.",
+        message: `Saved, but ${assistantName()} search is degraded — set OPENAI_API_KEY to enable embeddings.`,
       });
     }
     if (e?.code === "embedding_failed" || e?.code === "no_vector") {
@@ -217,7 +218,7 @@ router.post("/ai-knowledge/url", requireAdminWrite, safeHandler(async (req: any,
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 15_000);
   try {
-    const { response: r } = await ssrfSafeFetch(url, { method: "GET", headers: { "User-Agent": "BorealMayaBot/1.0" }, signal: ctl.signal });
+    const { response: r } = await ssrfSafeFetch(url, { method: "GET", headers: { "User-Agent": "KeystoneBot/1.0" }, signal: ctl.signal });
     if (!r.ok) return res.status(502).json({ ok: false, error: "fetch_failed", status: r.status });
     const html = await r.text();
     text = htmlToText(html);

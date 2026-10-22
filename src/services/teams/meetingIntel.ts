@@ -5,6 +5,7 @@
 // intel keeps its transcript and simply gets retried on the next tick.
 import type { Pool } from "pg";
 import { askAI } from "../../modules/ai/openai.service.js";
+import { brandName, assistantName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const MAX_TRANSCRIPT_CHARS = 40000;
 const MAX_TASKS = 6;
@@ -73,8 +74,8 @@ async function askMaya(row: IntelRow): Promise<MayaIntel | null> {
     {
       role: "system",
       content:
-        "You are Maya, the assistant for Boreal Financial, a commercial lending marketplace. " +
-        "You are given the transcript of a meeting between Boreal staff and a client or lender. " +
+        `You are ${assistantName()}, the assistant for ${brandName()}, a commercial lending marketplace. ` +
+        `You are given the transcript of a meeting between ${brandName()} staff and a client or lender. ` +
         "Reply with ONLY a JSON object, no prose and no markdown fences, in this exact shape:\n" +
         '{"summary":"2-4 sentences","tasks":[{"title":"short imperative","body":"one line of context","due_in_days":3,"priority":"MEDIUM"}]}\n' +
         "The summary states what was discussed and what was agreed. " +

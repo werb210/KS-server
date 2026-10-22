@@ -14,6 +14,7 @@ import {
   createEmbeddedGroupLink,
   getDocumentGroupStatus,
 } from "../../signnow/signnowClient.js";
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export function referrerAgreementConfigured(): boolean {
   // BF_SERVER_REFERRER_AGREEMENT_BAKE_v1 - agreement generated per-referrer with details
@@ -60,7 +61,7 @@ export async function createReferrerAgreementSession(params: {
   });
   const { documentId } = await uploadDocumentWithFieldExtract(
     pdf,
-    `Boreal Referral Agreement - ${params.fullName} - ${params.referrerId}.pdf`,
+    `${brandName()} Referral Agreement - ${params.fullName} - ${params.referrerId}.pdf`,
   );
   const { groupId } = await createDocumentGroup([documentId], `Referral Agreement ${params.referrerId}`);
   const { inviteId } = await createEmbeddedGroupInvite(groupId, [documentId], [

@@ -8,8 +8,7 @@ import { pool } from "../db.js";
 // SendGrid key that a slot swap can silently replace.
 import { sendViaGraph } from "./email/graphSendService.js";
 import { clientUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
-
-const BOREAL_ADDRESS = "450 Sparling Crt SW, Edmonton, AB T6X 1G9";
+import { brandName, supportPhone } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 function esc(value: string): string {
   return value
@@ -35,13 +34,13 @@ export function buildAccountantInvite(vars: {
 
   const html = [
     `<p>Hello ${esc(vars.accountantName)},</p>`,
-    `<p>${esc(vars.applicantName)} at ${esc(vars.businessName)} has applied for business financing through Boreal Financial and asked us to contact you directly for the financial documents supporting the application.</p>`,
+    `<p>${esc(vars.applicantName)} at ${esc(vars.businessName)} has applied for business financing through ${esc(brandName())} and asked us to contact you directly for the financial documents supporting the application.</p>`,
     `<p>Before we proceed, please confirm with ${esc(vars.applicantName)} that you are authorised to release these documents to us. You can forward this email to them for that confirmation.</p>`,
     `<p>Once confirmed, you can upload everything through our secure client portal. Sign in with this phone number &mdash; ${esc(vars.accountantPhone)} &mdash; and we'll text you a one-time code. No password to set up.</p>`,
     `<p><a href="${esc(vars.portalLink)}">${esc(vars.portalLink)}</a></p>`,
     "<p>You'll see only the documents we need from you, nothing else on the file.</p>",
     `<p>${contactLine}</p>`,
-    `<p>Thank you,<br/>Boreal Financial<br/>${esc(BOREAL_ADDRESS)}</p>`,
+    `<p>Thank you,<br/>${esc(brandName())}</p>`,
   ].join("\n");
 
   return { subject, html };
@@ -96,13 +95,13 @@ export async function sendAccountantInvite(opts: {
     applicantName,
     businessName,
     portalLink: `${portalBase}/accountant`,
-    supportPhone: process.env.BOREAL_SUPPORT_PHONE ?? null,
+    supportPhone: process.env.BOREAL_SUPPORT_PHONE || supportPhone() || null,
   });
 
   const bodyText = [
     `Hello ${opts.accountantName || "there"},`,
     "",
-    `${applicantName} at ${businessName} has applied for business financing through Boreal Financial and asked us to contact you directly for the financial documents supporting the application.`,
+    `${applicantName} at ${businessName} has applied for business financing through ${brandName()} and asked us to contact you directly for the financial documents supporting the application.`,
     "",
     `Before we proceed, please confirm with ${applicantName} that you are authorised to release these documents to us. You can forward this email to them for that confirmation.`,
     "",
@@ -113,7 +112,7 @@ export async function sendAccountantInvite(opts: {
     "You'll see only the documents we need from you, nothing else on the file.",
     "",
     "Thank you,",
-    "Boreal Financial",
+    brandName(),
   ].join("\n");
 
   // BF_SERVER_ACCOUNTANT_INVITE_SCOPE_v1 - lender submissions depend on

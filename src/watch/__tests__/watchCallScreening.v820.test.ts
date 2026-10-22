@@ -43,7 +43,7 @@ describe("Watch callback cell-leg screening", () => {
     expect(res.text).toContain('timeout="8"');
     expect(res.text).toContain('actionOnEmptyResult="true"');
     expect(res.text).toContain(`action="https://server.example.test/api/telephony/watch/provider/${CALL}/accept"`);
-    expect(res.text).toContain("Boreal call to Jane Client. Press 1 to connect.");
+    expect(res.text).toContain("Keystone Demo Brokerage call to Jane Client. Press 1 to connect.");
     expect(res.text).toContain("<Hangup/>");
     expect(res.text).not.toContain("<Dial");
     expect(callsMatching(queryMock, /SET status='bridging'/)).toHaveLength(0);
@@ -52,7 +52,7 @@ describe("Watch callback cell-leg screening", () => {
   it("falls back to the destination's digits when there is no contact name", async () => {
     queryMock.mockImplementation(answerBySql([[BRIDGE, { rows: [{ destination: "+15875550177", contact_id: null }] }]]));
     const res = await twiml();
-    expect(res.text).toContain("Boreal call to 5 8 7, 5 5 5, 0 1 7 7. Press 1 to connect.");
+    expect(res.text).toContain("Keystone Demo Brokerage call to 5 8 7, 5 5 5, 0 1 7 7. Press 1 to connect.");
   });
 
   it("an ended bridge hangs up", async () => {

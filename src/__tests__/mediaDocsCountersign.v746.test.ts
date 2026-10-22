@@ -40,8 +40,8 @@ describe("media fee agreement and media documents", () => {
     const pdf = await buildMediaFeeAgreementPdf({ agreementDate: "October 4, 2026", companyName: "Test Co", clientName: "Dana R" } as any);
     expect(pdf.length).toBeGreaterThan(1000);
     const text = await pdfText(pdf);
-    expect(text).toContain("/s/ Todd Werboweski");
-    expect(text).toContain("Signed electronically for Boreal Financial on October 4, 2026");
+    expect(text).toContain("/s/ Keystone Demo Brokerage"); // KS_SERVER_v4_BRANDING - the licensee signs
+    expect(text).toContain("Signed electronically for Keystone Demo Brokerage on October 4, 2026");
   });
 
   it("system-signed documents are not flagged by the tamper scan", async () => {

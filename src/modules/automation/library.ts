@@ -2,6 +2,7 @@
 // and the library of ready-made workflows (GET /api/automations/library).
 import { ACTION_TYPES, convertV1Rule, DEFAULT_SETTINGS, ENGAGEMENT_FIELDS, OPERATORS, TRIGGER_TYPES, type Goal, type Graph, type Settings } from "./graph.js";
 import { STAGES } from "./catalog.js";
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 type Field = { key: string; label: string; type: "text" | "number" | "stage" | "list" | "boolean" | "date"; options?: string[] };
 
@@ -93,23 +94,23 @@ export function catalogStatic() {
 // ---- library ------------------------------------------------------------------------
 export type LibraryItem = { key: string; name: string; description: string; graph: Graph; settings: Settings; goal: Goal };
 
-const V1_SYSTEM = [
+const v1System = () => [
   { key: "starter_funded", name: "Funded: thank you and referral ask", description: "The application moves to Accepted: thank the client, and 7 days later ask for a referral (with consent).",
     trigger_type: "application.stage_changed", conditions: [{ field: "to_stage", op: "eq", value: "Accepted" }], reenroll: "never",
-    steps: [{ type: "notify_client", title: "Congratulations", body: "Congratulations {{first_name}} - your financing is complete. Thank you for choosing Boreal." }, { type: "wait", amount: 7, unit: "days" }, { type: "send_sms", purpose: "marketing", body: "Hi {{first_name}}, glad we could help. If you know a business owner who needs financing, reply with their name - we look after referrals." }] },
+    steps: [{ type: "notify_client", title: "Congratulations", body: `Congratulations {{first_name}} - your financing is complete. Thank you for choosing ${brandName()}.` }, { type: "wait", amount: 7, unit: "days" }, { type: "send_sms", purpose: "marketing", body: "Hi {{first_name}}, glad we could help. If you know a business owner who needs financing, reply with their name - we look after referrals." }] },
   { key: "starter_missed_call", name: "Missed inbound call", description: "A client call is missed: create a callback task and text them that we will call back shortly.",
     trigger_type: "call.missed", conditions: [], reenroll: "always",
-    steps: [{ type: "create_task", title: "Call back {{full_name}}", taskType: "CALL", priority: "HIGH", dueHours: 0, assignTo: "owner" }, { type: "send_sms", purpose: "transactional", body: "Sorry we missed your call - we will call you back shortly. - Boreal Financial" }] },
+    steps: [{ type: "create_task", title: "Call back {{full_name}}", taskType: "CALL", priority: "HIGH", dueHours: 0, assignTo: "owner" }, { type: "send_sms", purpose: "transactional", body: `Sorry we missed your call - we will call you back shortly. - ${brandName()}` }] },
   { key: "starter_new_lead", name: "New website lead", description: "Someone fills in the website contact form or the readiness check: assign an owner in turn, send an intro text (with consent) and create a call task due within the hour.",
     trigger_type: "contact.created", conditions: [{ field: "source", op: "in", value: ["website", "website_form", "readiness_check"] }], reenroll: "never",
-    steps: [{ type: "assign_owner", mode: "round_robin", userIds: [] }, { type: "send_sms", purpose: "marketing", body: "Hi {{first_name}}, thanks for reaching out to Boreal Financial. {{owner_name}} will call you shortly." }, { type: "create_task", title: "Call new lead {{full_name}}", taskType: "CALL", priority: "HIGH", dueHours: 1, assignTo: "owner" }] },
+    steps: [{ type: "assign_owner", mode: "round_robin", userIds: [] }, { type: "send_sms", purpose: "marketing", body: `Hi {{first_name}}, thanks for reaching out to ${brandName()}. {{owner_name}} will call you shortly.` }, { type: "create_task", title: "Call new lead {{full_name}}", taskType: "CALL", priority: "HIGH", dueHours: 1, assignTo: "owner" }] },
   { key: "starter_offer_unsigned", name: "Offer not accepted after 48 hours", description: "The application moves to Offer. If it is still at Offer 48 hours later, remind the client and give the owner a task.",
     trigger_type: "application.stage_changed", conditions: [{ field: "to_stage", op: "eq", value: "Offer" }], reenroll: "always",
-    steps: [{ type: "wait", amount: 48, unit: "hours" }, { type: "check", check: "still_in_stage" }, { type: "notify_client", title: "Your offer is waiting", body: "Hi {{first_name}}, your offer is ready to review and sign in the Boreal app." }, { type: "create_task", title: "Offer not signed after 48 hours", taskType: "CALL", priority: "HIGH", dueHours: 4, assignTo: "owner" }] },
+    steps: [{ type: "wait", amount: 48, unit: "hours" }, { type: "check", check: "still_in_stage" }, { type: "notify_client", title: "Your offer is waiting", body: `Hi {{first_name}}, your offer is ready to review and sign in the ${brandName()} app.` }, { type: "create_task", title: "Offer not signed after 48 hours", taskType: "CALL", priority: "HIGH", dueHours: 4, assignTo: "owner" }] },
 ];
 
 export function libraryItems(): LibraryItem[] {
-  const fromV1 = V1_SYSTEM.map((r) => ({ key: r.key, name: r.name, description: r.description, ...convertV1Rule(r) }));
+  const fromV1 = v1System().map((r) => ({ key: r.key, name: r.name, description: r.description, ...convertV1Rule(r) }));
   const booked: LibraryItem = {
     key: "booked_call_follow_up", name: "Booked call follow-up",
     description: "A client books a call: the owner gets a prep task right away. A day after the call, if they have not started an application, they get a text with the link.",

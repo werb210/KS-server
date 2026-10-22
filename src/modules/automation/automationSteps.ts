@@ -1,6 +1,7 @@
 // BF_SERVER_BLOCK_v616 - automation steps: logging, waits, checks and actions.
 import { renderTokens } from "./conditions.js";
 import { FALLBACK_USER_SQL, SYSTEM_USER, type EngineDeps, type Query, type Step } from "./automationContext.js";
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export async function logStep(q: Query, e: any, i: number, type: string, outcome: string, detail: string | null) {
   await q(`INSERT INTO automation_step_log (enrollment_id, rule_id, step_index, step_type, outcome, detail) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6)`,
@@ -79,7 +80,7 @@ export async function runAction(deps: EngineDeps, e: any, step: Step): Promise<s
     case "notify_client": {
       const phone = ctx.phone as string | undefined;
       if (!phone) return "skip: no phone";
-      const via = await deps.notifyClient({ silo: e.silo, phone, contactId: e.contact_id, applicationId: e.application_id, title: t(step.title || "Update from Boreal"), body: t(step.body) });
+      const via = await deps.notifyClient({ silo: e.silo, phone, contactId: e.contact_id, applicationId: e.application_id, title: t(step.title || `Update from ${brandName()}`), body: t(step.body) });
       return via === "none" ? "skip: client could not be reached" : `client notified by ${via}`;
     }
     case "notify_staff": {

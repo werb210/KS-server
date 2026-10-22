@@ -10,13 +10,15 @@ import {
   verifyAuthenticationResponse,
 } from "@simplewebauthn/server";
 import { clientTokenFor, submittedApplicationFor } from "./clientDeviceSignIn.js";
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { clientUrl, hostOf } from "../licensee/urls.js"; // KS_SERVER_v4_BRANDING
 
 type Query = (sql: string, params: unknown[]) => Promise<{ rows: any[]; rowCount?: number | null }>;
 
 export function passkeyConfig(env: NodeJS.ProcessEnv = process.env) {
-  const rpID = env.CLIENT_WEBAUTHN_RP_ID || "client.boreal.financial";
+  const rpID = env.CLIENT_WEBAUTHN_RP_ID || hostOf(clientUrl());
   const origins = (env.CLIENT_WEBAUTHN_ORIGINS || `https://${rpID}`).split(",").map((s) => s.trim()).filter(Boolean);
-  return { rpID, rpName: env.CLIENT_WEBAUTHN_RP_NAME || "Boreal Financial", origins };
+  return { rpID, rpName: env.CLIENT_WEBAUTHN_RP_NAME || brandName(), origins };
 }
 
 async function purge(query: Query) {

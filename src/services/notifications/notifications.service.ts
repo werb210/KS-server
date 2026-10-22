@@ -2,6 +2,7 @@
 import { runQuery } from "../../lib/db.js";
 import { pushToUser } from "./pushToUser.js"; // BF_SERVER_BLOCK_v_NOTIF_PUSH_v1
 import { portalUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export interface NotifyMentionsParams {
   newMentions: string[];          // resolved user ids
@@ -64,7 +65,7 @@ export async function notifyMentions(p: NotifyMentionsParams): Promise<{ inserte
         const greet = u.first_name ? `Hi ${u.first_name}, ` : "";
         void sendSms({
           to: u.phone!,
-          message: `${greet}you were mentioned in a Boreal note: "${preview}"\n${url}`,
+          message: `${greet}you were mentioned in a ${brandName()} note: "${preview}"\n${url}`,
         }).catch(() => undefined);
       }
     }

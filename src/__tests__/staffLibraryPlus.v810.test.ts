@@ -127,7 +127,7 @@ describe("v810 recycle bin", () => {
     const r = await request(app).delete("/api/o365/library/item/F1");
     expect(r.status).toBe(200);
     expect(r.body.restoreDays).toBe(30);
-    const bin = [...h.nodes.values()].find((n) => n.name === "Recycle Bin (Boreal)")!;
+    const bin = [...h.nodes.values()].find((n) => n.name === "Recycle Bin (Library)")!;
     expect(h.nodes.get("F1")!.parent).toBe(bin.id);
     expect(db.trash.get("F1")).toMatchObject({ item_name: "Bizcap form.pdf", original_parent_id: "LF" });
     expect(callsMatching(h.query, /INSERT INTO library_activity/).some((c) => (c[1] as unknown[])[3] === "deleted")).toBe(true);
@@ -177,7 +177,7 @@ describe("v810 rename, move, search, versions, stars", () => {
     const names = r.body.items.map((i: any) => i.name);
     expect(names).toContain("Bizcap form.pdf");
     expect(names).not.toContain("Deck.pdf");
-    expect(names).not.toContain("Recycle Bin (Boreal)");
+    expect(names).not.toContain("Recycle Bin (Library)");
   });
   it("lists and restores versions", async () => {
     const v = await request(app).get("/api/o365/library/item/F1/versions");

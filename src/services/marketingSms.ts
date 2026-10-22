@@ -6,6 +6,7 @@ import { fetchTwilioClient } from "./twilio.js";
 import { config } from "../config/index.js";
 import { isUndeliverableNumber } from "../lib/smsDeliverability.js"; // BF_SERVER_GUARD_EVERYWHERE_v136
 import { serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { websiteHost } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 // BF_SERVER_SMS_CASCADE_COMPLETE_v12 - PUBLIC_SERVER_URL is not a setting that
 // exists on the App Service; the deployed names are PUBLIC_BASE_URL and
@@ -18,7 +19,7 @@ const PUBLIC_URL = (
   process.env.SERVER_URL ||
   serverUrl()
 ).replace(/\/+$/, "");
-const CASL_FOOTER = "Reply STOP to opt out. Info: www.boreal.financial/sms";
+const caslFooter = () => `Reply STOP to opt out. Info: ${websiteHost()}`; // KS_SERVER_v4_BRANDING
 
 export function mergeSmsFields(text: string, vars: Record<string, string>): string {
   return text.replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (_match, key) => vars[String(key).toLowerCase()] ?? "");
@@ -27,7 +28,7 @@ export function mergeSmsFields(text: string, vars: Record<string, string>): stri
 /** Build the exact recipient-facing marketing SMS in one consistent order. */
 export function renderMarketingSms(opts: { body: string; vars: Record<string, string>; link?: string | null }): string {
   const mergedBody = mergeSmsFields(opts.body, opts.vars).trim();
-  return [mergedBody, opts.link?.trim(), CASL_FOOTER].filter(Boolean).join(" ");
+  return [mergedBody, opts.link?.trim(), caslFooter()].filter(Boolean).join(" ");
 }
 
 function fromNumber(): string {

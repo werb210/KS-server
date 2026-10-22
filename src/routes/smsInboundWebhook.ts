@@ -5,6 +5,7 @@ import { persistTwilioMediaToBlob } from "../services/mmsMedia.js"; // BF_SERVER
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
 import { twilioWebhookValidation } from "../middleware/twilioWebhookValidation.js";
 import { safeHandler } from "../middleware/safeHandler.js"; // BF_SERVER_v789_SAFE_HANDLERS // BF_SERVER_v784_WEBHOOK_SIGNATURES
+import { brandName, contactLine, supportPhone, supportEmail } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const router = Router();
 
@@ -71,15 +72,22 @@ async function resolveInboundSmsContact(from: string): Promise<string | null> {
 }
 
 // BF_SERVER_SMS_KEYWORDS_v780 - the replies registered with Twilio for RCS and toll-free verification (Oct 2026).
-const SMS_HELP = "Boreal Financial: For help call 1-866-631-8939 or email info@boreal.financial. Msg frequency varies. Standard message & data rates may apply. Reply STOP to opt out.";
-const SMS_AIDE = "Boreal Financial : Pour de l'aide, appelez le 1-866-631-8939 ou écrivez à info@boreal.financial. La fréquence des messages varie. Des frais standard de messagerie et de données peuvent s'appliquer. Répondez ARRET pour vous désabonner.";
+// KS_SERVER_v4_BRANDING - the licensee's name and support contacts (were Boreal's).
+function smsHelp(): string {
+  return `${brandName()}: For help ${contactLine() || "reply to this message"}. Msg frequency varies. Standard message & data rates may apply. Reply STOP to opt out.`;
+}
+function smsAide(): string {
+  const phone = supportPhone(), email = supportEmail();
+  const how = phone && email ? `appelez le ${phone} ou écrivez à ${email}` : phone ? `appelez le ${phone}` : email ? `écrivez à ${email}` : "répondez à ce message";
+  return `${brandName()} : Pour de l'aide, ${how}. La fréquence des messages varie. Des frais standard de messagerie et de données peuvent s'appliquer. Répondez ARRET pour vous désabonner.`;
+}
 export function smsKeywordReply(kw: string): { kind: "out" | "in" | "help"; text: string } | null {
-  if (["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT", "OPTOUT"].includes(kw)) return { kind: "out", text: "Boreal Financial: You've been unsubscribed and won't receive any more messages. Reply START to resubscribe." };
-  if (kw === "ARRET" || kw === "ARRT") return { kind: "out", text: "Boreal Financial : Vous êtes désabonné et ne recevrez plus de messages. Répondez START pour vous réabonner." };
-  if (["START", "UNSTOP", "SUBSCRIBE", "OPTIN", "YES"].includes(kw)) return { kind: "in", text: "Boreal Financial: You're subscribed to texts about your financing application. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out." };
-  if (kw === "HELP") return { kind: "help", text: SMS_HELP };
-  if (kw === "AIDE") return { kind: "help", text: SMS_AIDE };
-  if (kw === "INFO") return { kind: "help", text: SMS_HELP + " / " + SMS_AIDE };
+  if (["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT", "OPTOUT"].includes(kw)) return { kind: "out", text: `${brandName()}: You've been unsubscribed and won't receive any more messages. Reply START to resubscribe.` };
+  if (kw === "ARRET" || kw === "ARRT") return { kind: "out", text: `${brandName()} : Vous êtes désabonné et ne recevrez plus de messages. Répondez START pour vous réabonner.` };
+  if (["START", "UNSTOP", "SUBSCRIBE", "OPTIN", "YES"].includes(kw)) return { kind: "in", text: `${brandName()}: You're subscribed to texts about your financing application. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out.` };
+  if (kw === "HELP") return { kind: "help", text: smsHelp() };
+  if (kw === "AIDE") return { kind: "help", text: smsAide() };
+  if (kw === "INFO") return { kind: "help", text: smsHelp() + " / " + smsAide() };
   return null;
 }
 

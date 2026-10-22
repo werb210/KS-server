@@ -11,6 +11,7 @@
 // only SignNow field is the client's signature (white field-extract tag). The
 // date is baked server-side because t:d breaks fieldextract on this account.
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from "pdf-lib";
+import { brandName, legalName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export const MEDIA_FEE_AGREEMENT_ROLE = "Client";
 export const MEDIA_FEE_RATE_TEXT = "Two Percent (2.0%)";
@@ -39,9 +40,15 @@ export type MediaFeeAgreementData = {
 
 // Paragraph text. Bold run first, then the body. Kept as data so the unit test
 // can assert the agreed wording without parsing a PDF.
+// KS_SERVER_v4_BRANDING - "<legal name>, trading as <name>" (or just the name when they are the same).
+function tradingAs(): string {
+  const legal = legalName(), name = brandName();
+  return legal && legal !== name ? legal + ", trading as " + name : name;
+}
+
 export function agreementParagraphs(d: MediaFeeAgreementData): Array<{ bold?: string; text: string }> {
   return [
-    { text: "THIS SERVICES AGREEMENT is made in one (1) original copy as of " + d.agreementDate + " between 2630108 Alberta Ltd., trading as Boreal Financial (\"BF\") having an office at 450 Sparling Crt SW, Edmonton, Alberta T6X 1G9 and the Company identified in Schedule \"A\" (known as the \"Client\")." },
+    { text: "THIS SERVICES AGREEMENT is made in one (1) original copy as of " + d.agreementDate + " between " + tradingAs() + " (\"BF\") and the Company identified in Schedule \"A\" (known as the \"Client\")." },
     { text: "WHEREAS the Client desires to obtain assistance from BF in financing or refinancing the Client presently residing/operating in Canada or the United States. BF will assist by procuring financing in the approximate amount listed in Schedule \"A\". This Agreement will set forth the terms of the engagement in respect of BF procuring financing on behalf of the Client." },
     { text: "THEREFORE, in consideration of the mutual covenants contained herein and for other good and valuable consideration, the receipt and sufficiency of which is hereby acknowledged, the parties agree as follows:" },
     { bold: "1. Definition.", text: "For the purpose of this Agreement, the term \"financing\" shall mean the procuring of a written commitment for any form of debt funding for the purpose of financing the Client." },
@@ -174,14 +181,14 @@ export async function buildMediaFeeAgreementPdf(d: MediaFeeAgreementData): Promi
   ctx.page.drawLine({ start: { x: M + sigW + 40, y: lineY }, end: { x: M + CW, y: lineY }, thickness: 0.8, color: rgb(0.3, 0.3, 0.3) });
   // Signature box sits above the line (h:20 box anchored top-left, extends down).
   ctx.page.drawText("{{t:s;r:y;o:\"" + MEDIA_FEE_AGREEMENT_ROLE + "\";w:200;h:20;}}", { x: M + 2, y: lineY + 22, size: 6, font: F, color: WHITE });
-  ctx.page.drawText("2630108 Alberta Ltd., trading as Boreal Financial", { x: M + sigW + 40, y: lineY + 34, size: 9.5, font: B, color: BLACK });
+  ctx.page.drawText(pdfSafe(tradingAs()), { x: M + sigW + 40, y: lineY + 34, size: 9.5, font: B, color: BLACK });
   // BF_SERVER_FEE_COUNTERSIGN_v746 - Boreal signs its side when the agreement is issued, so the copy the
   // client signs is complete and nothing waits on a second signature. (Electronic signature, Alberta ETA.)
-  ctx.page.drawText("/s/ Todd Werboweski", { x: M + sigW + 44, y: lineY + 6, size: 15, font: SIG, color: BLACK });
+  ctx.page.drawText(pdfSafe("/s/ " + legalName()), { x: M + sigW + 44, y: lineY + 6, size: 15, font: SIG, color: BLACK });
   ctx.y += 13;
   ctx.page.drawText("Signing Authority on behalf of Company, and Personally", { x: M, y: PH - ctx.y, size: 9, font: F, color: BLACK });
-  ctx.page.drawText("Per: Todd Werboweski, Director", { x: M + sigW + 40, y: PH - ctx.y, size: 9, font: F, color: BLACK });
-  ctx.page.drawText(pdfSafe("Signed electronically for Boreal Financial on " + d.agreementDate), { x: M + sigW + 40, y: PH - ctx.y - 14, size: 8, font: F, color: GREY });
+  ctx.page.drawText("Per: Authorized signatory", { x: M + sigW + 40, y: PH - ctx.y, size: 9, font: F, color: BLACK });
+  ctx.page.drawText(pdfSafe("Signed electronically for " + brandName() + " on " + d.agreementDate), { x: M + sigW + 40, y: PH - ctx.y - 14, size: 8, font: F, color: GREY });
   ctx.y += 14;
   ctx.page.drawText(pdfSafe(d.clientName ?? ""), { x: M, y: PH - ctx.y, size: 9, font: F, color: GREY });
 

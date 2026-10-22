@@ -5,6 +5,7 @@
 // submitted, rendered, and attached to the Documents list as-is.
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from "pdf-lib";
 import { dbQuery } from "../db.js";
+import { brandName, winAnsi } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const PW = 612, PH = 792, M = 42, CW = PW - 2 * M;
 const NAVY = rgb(0.118, 0.227, 0.435);
@@ -15,7 +16,6 @@ const GREY = rgb(0.42, 0.46, 0.52);
 const LINE = rgb(0.82, 0.84, 0.87);
 const ROWBG = rgb(0.965, 0.973, 0.984);
 const WHITE = rgb(1, 1, 1);
-const MOUNTAIN = "M 99.82 70.67 L 75.05 14.75 L 73.04 13.84 L 62.11 20.77 L 55.56 2.19 L 52.64 0.0 L 36.07 31.15 L 28.78 24.59 L 0.0 71.22 Z M 50.82 17.3 L 67.58 64.48 L 34.97 64.48 L 17.67 56.83 L 30.24 35.88 L 35.34 42.62 L 36.98 42.44 Z";
 
 const sv = (v: unknown): string => (v === null || v === undefined ? "" : String(v));
 const num = (v: unknown): number => { const n = Number(String(v ?? "").replace(/[^0-9.\-]/g, "")); return Number.isFinite(n) ? n : 0; };
@@ -53,8 +53,9 @@ async function createCanvas(title: string, subtitle: string): Promise<Canvas> {
 
   const header = () => {
     rect(0, 0, PW, 78, HDR); rect(0, 78, PW, 4, GOLD);
-    pg.drawSvgPath(MOUNTAIN, { x: 64, y: PH - 22, scale: 0.42, color: WHITE });
-    T("Boreal", 112, 40, 18, FB, WHITE); T("Financial", 112, 62, 18, FB, WHITE);
+    // KS_SERVER_v4_BRANDING - the licensee's name (was Boreal's mountain mark and wordmark).
+    const brand = winAnsi(brandName()); const brandSize = Math.min(18, 230 / Math.max(1, FB.widthOfTextAtSize(brand, 1)));
+    T(brand, M, 50, brandSize, FB, WHITE);
     TR(title.toUpperCase(), PW - M, 40, 14, FB, WHITE);
     TR(subtitle, PW - M, 58, 9.5, F, rgb(0.78, 0.82, 0.88));
   };

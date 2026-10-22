@@ -59,8 +59,10 @@ describe("wiring", () => {
     ]));
     sendTransactional.mockReset();
     sendTransactional.mockResolvedValue({ ok: true, status: 202 });
+    vi.stubEnv("KS_SUPPORT_EMAIL", "ops@licensee.example"); // KS_SERVER_v4_BRANDING - default recipient
   });
   afterEach(() => {
+    vi.unstubAllEnvs();
     if (prevMutate === undefined) delete process.env.GOOGLE_ADS_ALLOW_MUTATE;
     else process.env.GOOGLE_ADS_ALLOW_MUTATE = prevMutate;
   });

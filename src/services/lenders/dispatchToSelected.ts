@@ -280,7 +280,7 @@ export async function dispatchToSelected(
         const headers: Record<string, string> = {
           "Content-Type": "application/json",
           "Accept": "application/json",
-          "User-Agent": "BorealFinancial/1.0",
+          "User-Agent": "Keystone/1.0",
         };
         if (l.api_key_encrypted) {
           try {

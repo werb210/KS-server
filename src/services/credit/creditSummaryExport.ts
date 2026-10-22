@@ -1,6 +1,7 @@
 // BF_SERVER_BLOCK_v540_CREDIT_SUMMARY_EXPORT
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { pool } from "../../db.js";
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 type Section = { key: string; title: string; text: string; bullets?: string[]; risks?: { risk: string; mitigant: string }[] };
 export type ExportDoc = {
@@ -48,7 +49,7 @@ export function layout(doc: ExportDoc, meta: ExportMeta): Block[] {
   const commentary = section(doc, "financial_commentary"); if (commentary?.text) blocks.push({ t: "p", text: commentary.text });
   const rationale = section(doc, "rationale"); if (rationale?.bullets?.length) blocks.push({ t: "h", text: "Rationale for approval include:" }, { t: "bullets", items: rationale.bullets });
   const risks = section(doc, "risks"); if (risks?.risks?.length) blocks.push({ t: "h", text: "Risks and mitigants" }, { t: "table", head: ["Risk", "Mitigant"], rows: risks.risks.map(({ risk, mitigant }) => [risk, mitigant]) });
-  blocks.push({ t: "p", text: "If you have any questions, please give me a call." }, { t: "p", text: "Thanks," }, { t: "p", text: meta.signedBy ?? "", bold: true }, { t: "p", text: "Boreal Financial" });
+  blocks.push({ t: "p", text: "If you have any questions, please give me a call." }, { t: "p", text: "Thanks," }, { t: "p", text: meta.signedBy ?? "", bold: true }, { t: "p", text: brandName() });
   if (meta.phone) blocks.push({ t: "p", text: meta.phone }); return blocks;
 }
 

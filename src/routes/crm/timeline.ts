@@ -170,7 +170,7 @@ export async function loadCrmTimeline(isContact: boolean, id: string, silo: stri
                   WHEN 'sms_marketing_sent' THEN 'Marketing SMS sent'
                   WHEN 'email_cascade_sent' THEN 'Marketing email sent (no mobile)'
                   WHEN 'email_notice_sent' THEN 'Email sent'
-                  WHEN 'client_notice_sent' THEN ('Notice sent' || CASE payload->>'channel' WHEN 'app' THEN ' - Boreal app' WHEN 'sms' THEN ' - SMS (app not reachable)' WHEN 'bi' THEN ' - Boreal Risk app / SMS' ELSE ' - NOT delivered' END) -- BF_SERVER_NOTIFY_CONTACT_v626
+                  WHEN 'client_notice_sent' THEN ('Notice sent' || CASE payload->>'channel' WHEN 'app' THEN ' - client app' WHEN 'sms' THEN ' - SMS (app not reachable)' WHEN 'bi' THEN ' - insurance app / SMS' ELSE ' - NOT delivered' END) -- BF_SERVER_NOTIFY_CONTACT_v626
                   -- BF_SERVER_ATTRIBUTION_ON_TIMELINE_v1 - render the ad click
                   -- readably; the portal shows kind='system' rows as-is.
                   WHEN 'attribution' THEN 'Ad click attribution'

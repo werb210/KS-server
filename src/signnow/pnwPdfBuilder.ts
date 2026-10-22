@@ -7,6 +7,7 @@
 // (Owner 1) so the page is wet-signable when added to the signing envelope.
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from "pdf-lib";
 import { dbQuery } from "../db.js";
+import { brandName, legalName, supportEmail, winAnsi } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const PW = 612, PH = 792, M = 42, CW = PW - 2 * M;
 const NAVY = rgb(0.118, 0.227, 0.435);
@@ -17,7 +18,6 @@ const GREY = rgb(0.42, 0.46, 0.52);
 const LINE = rgb(0.82, 0.84, 0.87);
 const ROWBG = rgb(0.965, 0.973, 0.984);
 const WHITE = rgb(1, 1, 1);
-const MOUNTAIN = "M 99.82 70.67 L 75.05 14.75 L 73.04 13.84 L 62.11 20.77 L 55.56 2.19 L 52.64 0.0 L 36.07 31.15 L 28.78 24.59 L 0.0 71.22 Z M 50.82 17.3 L 67.58 64.48 L 34.97 64.48 L 17.67 56.83 L 30.24 35.88 L 35.34 42.62 L 36.98 42.44 Z";
 
 const sv = (v: unknown): string => (v === null || v === undefined ? "" : String(v));
 const money = (v: unknown): string => { if (v === null || v === undefined || v === "") return ""; const n = Number(String(v).replace(/[^0-9.\-]/g, "")); return Number.isFinite(n) ? "$" + Math.round(n).toLocaleString() : sv(v); };
@@ -43,8 +43,9 @@ export async function buildPnwPdfFromData(payload: PnwPayload): Promise<Uint8Arr
 
   const header = (pg: PDFPage) => {
     rect(pg, 0, 0, PW, 78, HDR); rect(pg, 0, 78, PW, 4, GOLD);
-    pg.drawSvgPath(MOUNTAIN, { x: 64, y: PH - 22, scale: 0.42, color: WHITE });
-    T(pg, "Boreal", 112, 40, 18, FB, WHITE); T(pg, "Financial", 112, 62, 18, FB, WHITE);
+    // KS_SERVER_v4_BRANDING - the licensee's name (was Boreal's mountain mark and wordmark).
+    const brand = winAnsi(brandName()); const brandSize = Math.min(18, 230 / Math.max(1, FB.widthOfTextAtSize(brand, 1)));
+    T(pg, brand, M, 50, brandSize, FB, WHITE);
     TR(pg, "PERSONAL STATEMENT OF AFFAIRS", PW - M, 40, 14, FB, WHITE);
     TR(pg, "Personal Net Worth Declaration", PW - M, 58, 9.5, F, rgb(0.78, 0.82, 0.88));
   };
@@ -73,7 +74,7 @@ export async function buildPnwPdfFromData(payload: PnwPayload): Promise<Uint8Arr
   y += 8; y = bar(p1, "Personal References", y);
   for (const n of [1, 2, 3]) y = row(p1, y, 22, [{ l: `Reference ${n} — Name`, v: g(`ref${n}_name`), f: 0.28, o: { size: 8.5 } }, { l: "Relationship", v: g(`ref${n}_rel`), f: 0.22, o: { size: 8.5 } }, { l: "Address", v: g(`ref${n}_address`), f: 0.3, o: { size: 8 } }, { l: "Cell Phone", v: g(`ref${n}_phone`), f: 0.2, o: { size: 8.5 } }]);
   y += 8; y = bar(p1, "Disclosures", y);
-  const DISC = ["Previous dealings with Boreal Financial (any division or subsidiary)?", "Ever filed for bankruptcy, consumer proposal, or any form of insolvency?", "Ever convicted of a criminal offence not pardoned?", "Income taxes for previous year(s) fully satisfied?", "Any legal actions, pending / looming actions or judgments against you?", "Are you a co-signor, guarantor or obligor to any other party's debts?"];
+  const DISC = ["Previous dealings with " + winAnsi(brandName()) + " (any division or subsidiary)?", "Ever filed for bankruptcy, consumer proposal, or any form of insolvency?", "Ever convicted of a criminal offence not pardoned?", "Income taxes for previous year(s) fully satisfied?", "Any legal actions, pending / looming actions or judgments against you?", "Are you a co-signor, guarantor or obligor to any other party's debts?"];
   const ansX = M + CW - 92;
   DISC.forEach((q, i) => { const h = 18; box(p1, M, y, CW, h); box(p1, ansX, y, 92, h); T(p1, q, M + 6, y + 12, 8, F, INK); T(p1, "PRIMARY", ansX + 6, y + 8, 6, F, GREY); T(p1, yn(g(`disc_${i}_primary`)) || "—", ansX + 6, y + 15.5, 8.5, FB, INK); y += h; });
   { const h = 30; box(p1, M, y, CW, h); T(p1, "ADDITIONAL DISCLOSURE / DETAILS", M + 6, y + 9, 6, F, GREY); T(p1, g("disclosure_details"), M + 6, y + 20, 8.5, F, INK); y += h; }
@@ -95,7 +96,7 @@ export async function buildPnwPdfFromData(payload: PnwPayload): Promise<Uint8Arr
   T(p2, "TOTAL LIABILITIES", M + colW + 6, y2 + 8, 6.5, FB, INK); TR(p2, money(totals.liabilities), M + CW - 8, y2 + 13, 9.5, FB, INK); y2 += 18;
   rect(p2, M, y2, CW, 22, HDR); T(p2, "NET WORTH  (Total Assets - Total Liabilities)", M + 8, y2 + 15, 10, FB, WHITE); TR(p2, money(totals.net), M + CW - 10, y2 + 15.5, 12, FB, GOLD); y2 += 22;
   y2 += 12; y2 = bar(p2, "Authorization & Warranty", y2); y2 += 6;
-  const ENTITY = "Boreal Financial Corp.", CONTACT = "info@boreal.financial";
+  const ENTITY = winAnsi(legalName()), CONTACT = winAnsi(supportEmail()) || "us"; // KS_SERVER_v4_BRANDING
   const paras = [
     `The undersigned authorizes ${ENTITY} and its representatives, at any time and on an on-going basis, to obtain, verify, use, communicate with and disclose to third parties (including credit reporting agencies, credit exchanges, leasing brokers and credit grantors) any of my credit, financial and personal information that ${ENTITY} and its lending partners deem necessary to complete, service or enforce any lease, ancillary deed or transaction, including assignments and securitizations.`,
     `${ENTITY} may collect, hold, exchange and disclose your personal information to administer your contract and determine eligibility as permitted by law, and for internal statistical analysis. To review or correct your information, contact ${CONTACT}.`,

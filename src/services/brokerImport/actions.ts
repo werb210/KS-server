@@ -6,6 +6,7 @@ import { pool } from "../../db.js";
 import { toE164 } from "./extract.js";
 import { BrokerImportError } from "./importBrokerFile.js";
 import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export const CLIENT_APP_URL = (process.env.CLIENT_APP_URL || clientUrl()).replace(/\/+$/, "");
 
@@ -52,7 +53,7 @@ export async function setBrokerImportPhone(importId: string, rawPhone: unknown):
 
 export function clientInviteText(firstName: string | null, brokerName: string): string {
   const hi = firstName && firstName.trim() ? `Hi ${firstName.trim()}, ` : "Hi, ";
-  return `${hi}${brokerName} has sent Boreal Financial your financing application. To check it and finish, sign in with this mobile number at ${CLIENT_APP_URL}`;
+  return `${hi}${brokerName} has sent ${brandName()} your financing application. To check it and finish, sign in with this mobile number at ${CLIENT_APP_URL}`;
 }
 
 export async function textBrokerClient(importId: string): Promise<{ sentTo: string }> {

@@ -3,6 +3,7 @@
 // use triggers, actions, fields, templates, lists and workflows that exist; the route then validates
 // the result strictly and refuses anything with issues.
 import { ACTION_TYPES, DEFAULT_TZ, normalizeSettings, type Goal, type Graph, type Settings } from "./graph.js";
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export type Draft = { name: string; graph: Graph; settings: Settings; goal: Goal };
 
@@ -82,7 +83,7 @@ export async function draftWorkflowFromText(prompt: string, catalog: Record<stri
       temperature: 0.2,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: "You design marketing and sales workflows for Boreal Financial's CRM.\n" + FORMAT + "\nCatalog:\n" + JSON.stringify(catalog) },
+        { role: "system", content: `You design marketing and sales workflows for ${brandName()}'s CRM.\n` + FORMAT + "\nCatalog:\n" + JSON.stringify(catalog) },
         { role: "user", content: prompt },
         ...(repair ? [
           { role: "assistant", content: repair.previous },

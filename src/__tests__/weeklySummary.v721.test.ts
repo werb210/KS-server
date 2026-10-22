@@ -51,7 +51,7 @@ describe("Monday week-in-review email", () => {
   const d = { submitted: 4, funded: 1, fundedAmount: 200000, pipeline: [{ stage: "Off to Lender", files: 3 }], stuck: [{ name: "Acme <Ltd>", stage: "In Review", days_in_stage: 12 }], missedNotReturned: 2, splitsWaiting: 1, feeAgreementsWaiting: 0 };
   it("covers the week, the pipeline and what is stuck or waiting", () => {
     const { subject, html } = renderSummary(d, 0.03);
-    expect(subject).toBe("Boreal week in review: 4 submitted, 1 funded");
+    expect(subject).toBe("Keystone Demo Brokerage week in review: 4 submitted, 1 funded");
     expect(html).toContain("about $6,000 commission");
     expect(html).toContain("Off to Lender");
     expect(html).toContain("In Review, 12 days");
@@ -101,7 +101,7 @@ describe("Monday week-in-review email", () => {
       kicks[0]();
       await vi.waitFor(() => expect(h.send).toHaveBeenCalledTimes(RECIPIENTS.split(",").length));
       expect(h.adsEmail).toHaveBeenCalledTimes(1);
-      expect(String(h.send.mock.calls[0][0].subject)).toContain("Boreal week in review");
+      expect(String(h.send.mock.calls[0][0].subject)).toContain("Keystone Demo Brokerage week in review");
     } finally {
       worker.stop();
       vi.useRealTimers();

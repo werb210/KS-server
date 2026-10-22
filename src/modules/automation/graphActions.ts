@@ -8,6 +8,7 @@ import { ssrfSafeFetch, SsrfBlockedError } from "../../security/ssrfGuard.js"; /
 import { recordAuditEvent, type AuditParams } from "../audit/audit.service.js"; // BF_SERVER_v789_SSRF_GUARD
 import { logWarnSwallowed } from "../../lib/logWarnSwallowed.js";
 import { portalUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const TASK_TYPES = ["CALL", "EMAIL", "SMS", "TODO"];
 const TASK_PRIORITIES = ["NONE", "LOW", "MEDIUM", "HIGH"];
@@ -146,7 +147,7 @@ export async function runGraphAction(deps: EngineDeps, e: any, node: ActionNode)
       if (!email) return "skip: staff member has no email";
       if (!deps.sendStaffEmail) throw new Error("email sending is not configured");
       const base = portalUrl();
-      const r = await deps.sendStaffEmail({ to: email, subject: "Boreal automation: " + message.slice(0, 80), html: `<p>${esc(message)}</p><p><a href="${base}${link}">Open in the portal</a></p>` });
+      const r = await deps.sendStaffEmail({ to: email, subject: `${brandName()} automation: ` + message.slice(0, 80), html: `<p>${esc(message)}</p><p><a href="${base}${link}">Open in the portal</a></p>` });
       if (!r.ok) throw new Error(`staff email failed: ${String(r.error ?? "").slice(0, 200)}`);
       return `staff ${userId} emailed`;
     }

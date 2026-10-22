@@ -1,5 +1,6 @@
 // BF_SERVER_CALLER_DISPLAY_v148
 // Resolves a human name for whoever is on the other end of a call.
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 export type IdentityKind = "staff" | "client_application" | "client_anonymous" | "pstn" | "unknown";
 export type ParsedIdentity = { kind: IdentityKind; ref: string | null; fallback: string };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -22,7 +23,7 @@ export function parseIdentity(raw: string | null | undefined): ParsedIdentity {
     return { kind: "client_application", ref: UUID_RE.test(ref) ? ref : null, fallback: "Applicant" };
   }
   if (value.startsWith("+") || /^[0-9()\-\s]{7,}$/.test(value)) return { kind: "pstn", ref: null, fallback: formatPhoneForDisplay(value) };
-  if (UUID_RE.test(value)) return { kind: "staff", ref: value, fallback: "Boreal staff" };
+  if (UUID_RE.test(value)) return { kind: "staff", ref: value, fallback: `${brandName()} staff` };
   return { kind: "unknown", ref: null, fallback: value };
 }
 

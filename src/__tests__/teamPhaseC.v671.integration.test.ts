@@ -44,7 +44,7 @@ describe("v671 team phase C", () => {
     const ch = await pool.query("SELECT id FROM team_channels WHERE name = $1", [name]);
     made.push(ch.rows[0].id);
     const msg = await pool.query("SELECT sender_id, bot, body FROM team_messages WHERE channel_id = $1", [ch.rows[0].id]);
-    expect(msg.rows[0]).toMatchObject({ sender_id: null, bot: "Boreal", body: "Missed call from +14035550100" });
+    expect(msg.rows[0]).toMatchObject({ sender_id: null, bot: "Keystone Demo Brokerage", body: "Missed call from +14035550100" });
     const contact = await pool.query("INSERT INTO contacts (name, phone, silo) VALUES ($1, '+14035550199', 'BF') RETURNING id::text AS id", ["Card " + tag]);
     const cards = await request(app).get("/api/team/cards?ids=contact:" + contact.rows[0].id).set("Authorization", tok);
     expect(cards.status).toBe(200);
@@ -79,7 +79,7 @@ describe("v671 team phase C", () => {
       await new Promise((r) => setTimeout(r, 50));
       replies = (await pool.query("SELECT bot, body FROM team_messages WHERE thread_root_id = $1", [m.body.message.id])).rows;
     }
-    expect(replies[0]).toMatchObject({ bot: "Maya", body: "Three deals are waiting on documents." });
+    expect(replies[0]).toMatchObject({ bot: "Assistant", body: "Three deals are waiting on documents." });
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, any];
     expect(url).toBe("http://maya.test/api/maya/message");
     expect(init.headers["X-Maya-Audience"]).toBe("staff");

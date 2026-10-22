@@ -22,6 +22,7 @@ import { sendSMS } from '../../services/smsService.js';
 import { randomUUID } from 'node:crypto';
 import { logWarnSwallowed } from "../../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
 import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 // BF_APP_ID_CAST_v39 — Block 39-A — applications.id comparisons cast to text
 
 const router = Router();
@@ -399,8 +400,8 @@ router.post('/:id/request-steps', requireCapability([CAPABILITIES.CRM_WRITE]), s
     await pool.query(
       `INSERT INTO communications_messages
          (id, type, direction, status, application_id, contact_id, silo, body, staff_name, cta_label, cta_action, created_at)
-       VALUES (gen_random_uuid(), 'message', 'outbound', 'sent', $1, ${contactSub}, ${siloSub}, $2, 'Boreal Financial', $3, $4, now())`,
-      [id, `Please complete the ${label} step to continue your application.`, label, fid],
+       VALUES (gen_random_uuid(), 'message', 'outbound', 'sent', $1, ${contactSub}, ${siloSub}, $2, $5, $3, $4, now())`,
+      [id, `Please complete the ${label} step to continue your application.`, label, fid, brandName()],
     );
     postedForms.push(fid);
   }
@@ -414,8 +415,8 @@ router.post('/:id/request-steps', requireCapability([CAPABILITIES.CRM_WRITE]), s
       await pool.query(
         `INSERT INTO communications_messages
            (id, type, direction, status, application_id, contact_id, silo, body, staff_name, cta_label, cta_action, created_at)
-         VALUES (gen_random_uuid(), 'message', 'outbound', 'sent', $1, ${contactSub}, ${siloSub}, $2, 'Boreal Financial', 'Upload documents', 'upload_docs', now())`,
-        [id, `To continue your application, please upload your supporting documents: ${list}.`],
+         VALUES (gen_random_uuid(), 'message', 'outbound', 'sent', $1, ${contactSub}, ${siloSub}, $2, $3, 'Upload documents', 'upload_docs', now())`,
+        [id, `To continue your application, please upload your supporting documents: ${list}.`, brandName()],
       );
     } else {
       // BF_SERVER_CHECKLIST_MSG_IDEMPOTENT_v1 - this plain checklist message has
@@ -426,12 +427,12 @@ router.post('/:id/request-steps', requireCapability([CAPABILITIES.CRM_WRITE]), s
       await pool.query(
         `INSERT INTO communications_messages
            (id, type, direction, status, application_id, contact_id, silo, body, staff_name, created_at)
-         SELECT gen_random_uuid(), 'message', 'outbound', 'sent', $1, ${contactSub}, ${siloSub}, $2, 'Boreal Financial', now()
+         SELECT gen_random_uuid(), 'message', 'outbound', 'sent', $1, ${contactSub}, ${siloSub}, $2, $3, now()
          WHERE NOT EXISTS (
            SELECT 1 FROM communications_messages
             WHERE application_id::text = ($1)::text AND body = $2
          )`,
-        [id, `We've added more documents to your checklist: ${list}. Please upload them using the Upload documents button.`],
+        [id, `We've added more documents to your checklist: ${list}. Please upload them using the Upload documents button.`, brandName()],
       );
     }
   }
@@ -457,7 +458,7 @@ router.post('/:id/request-steps', requireCapability([CAPABILITIES.CRM_WRITE]), s
       // BF_SERVER_BLOCK_v481_NO_SILENT_SEND_FAILURES - only report sent when it actually went out.
       try {
         const r = await notifyClient({ phone: String(phone), applicationId: id, kind: 'additional_steps', categoryId: 'DOCUMENT_REQUEST',
-          sms: `Boreal Financial: we need a few more items to continue your application. Please log in to complete them: ${url}`,
+          sms: `${brandName()}: we need a few more items to continue your application. Please log in to complete them: ${url}`,
           title: 'A few more items needed', body: 'Open your application to complete them.' });
         if (r.channel === 'none') throw new Error(r.error ?? 'not_sent');
         smsSent = true;
@@ -2107,7 +2108,7 @@ router.post('/:id/lender-response', requireAuth, safeHandler(async (req: any, re
     if (labels.rows.length > 0) reasonSummary = labels.rows.map((x) => x.label.toLowerCase()).join('; ');
   }
 
-  const staffName = String(req.user?.name ?? req.user?.email ?? 'Boreal Financial');
+  const staffName = String(req.user?.name ?? req.user?.email ?? brandName());
   await pool.query(
     `INSERT INTO application_lender_responses
        (application_id, lender_id, ordinal, outcome, reason, created_by, updated_at)
@@ -2168,7 +2169,7 @@ router.post('/:id/reject', requireAuth, safeHandler(async (req: any, res: any) =
   if (codes.length === 0) throw new AppError('validation_error', 'At least one reason is required.', 400);
   await assertApplicationInCallerSilo(res, id); // BF_SERVER_v789_SILO_SCOPING
   const note = String(req.body?.note ?? '').trim().slice(0, 2000);
-  const staffName = String(req.user?.name ?? req.user?.email ?? 'Boreal Financial');
+  const staffName = String(req.user?.name ?? req.user?.email ?? brandName());
 
   for (const code of codes) {
     await pool.query(

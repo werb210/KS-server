@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 import { sendSMS } from "../smsService.js";
 import { logWarnSwallowed } from "../../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export type NotifyCtx = {
   pool: Pool;
@@ -29,7 +30,7 @@ export async function notifyAdminsForCreditSummary(ctx: NotifyCtx): Promise<{
     ? ""
     : ` ($${Number(amountRaw).toLocaleString("en-US", { maximumFractionDigits: 0 })})`;
   const body =
-    `Boreal: ${appName}${amountText} is ready for credit summary + signing. ` +
+    `${brandName()}: ${appName}${amountText} is ready for credit summary + signing. ` +
     "Open the staff portal to continue.";
 
   const admins = await ctx.pool.query<{

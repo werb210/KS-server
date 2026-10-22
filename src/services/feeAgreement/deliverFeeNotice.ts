@@ -1,4 +1,5 @@
 import { clientUrl, hostOf } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { brandName, supportPhone } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 // BF_SERVER_FEE_NOTICE_DELIVERY_v740
 // Tells the applicant there is a fee agreement to sign. It used to be push OR text: when
 // Apple accepted a push the text was skipped, even though an accepted push is not a shown
@@ -25,7 +26,7 @@ export async function deliverFeeNotice(input: { applicationId: string; phone: st
   const phone10 = input.phone ? digits10(input.phone) : "";
   if (phone10.length === 10 && input.phone) {
     out.phoneLast4 = phone10.slice(-4);
-    const smsText = hi + " Boreal Financial has a fee agreement for you to sign. Sign in at client.boreal.financial with this phone number to review and sign. Reply STOP to opt out.";
+    const smsText = hi + " " + brandName() + " has a fee agreement for you to sign. Sign in at " + hostOf(clientUrl()) + " with this phone number to review and sign. Reply STOP to opt out.";
     try {
       out.push = await deps.pushApp({ phone: input.phone, applicationId: input.applicationId, kind: FEE_NOTICE_KIND, sms: smsText, title: "Fee agreement to sign", body: "Please review and sign your fee agreement.", categoryId: "APPLICATION_UPDATE" });
     } catch (err: any) {
@@ -52,10 +53,10 @@ export async function deliverFeeNotice(input: { applicationId: string; phone: st
     if (!deps.emailReady()) {
       out.errors.push("email not configured on the server (SendGrid)");
     } else {
-      const html = "<p>" + hi + "</p><p>Boreal Financial has a fee agreement (2% on funding) for you to review and sign.</p>"
+      const html = "<p>" + hi + "</p><p>" + brandName() + " has a fee agreement (2% on funding) for you to review and sign.</p>"
         + "<p>Sign in at <a href='" + clientUrl() + "'>" + hostOf(clientUrl()) + "</a> with your mobile number, then open <b>Sign your fee agreement</b>.</p>"
-        + "<p>Questions? Call (866) 631-8939.</p>";
-      const r = await deps.email(input.email, "Your Boreal Financial fee agreement is ready to sign", html);
+        + (supportPhone() ? "<p>Questions? Call " + supportPhone() + ".</p>" : "");
+      const r = await deps.email(input.email, "Your " + brandName() + " fee agreement is ready to sign", html);
       if (r.ok) { out.email = true; out.emailTo = input.email; }
       else out.errors.push("email failed: " + String(r.error ?? "unknown"));
       await deps.record(input.applicationId, phone10 || "0000000000", r.ok ? "email" : "none", r.ok ? null : "email: " + String(r.error ?? "unknown"));

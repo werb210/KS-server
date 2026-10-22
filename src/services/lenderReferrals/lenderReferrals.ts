@@ -15,6 +15,7 @@
 // The lender sees status only: never which lenders the file went to or what they offered.
 import { pool } from "../../db.js";
 import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount?: number | null }> };
 
@@ -56,7 +57,7 @@ export function parseReferralDetails(raw: unknown): ReferralDetails {
   const clientPhone = toE164(r.client_phone ?? r.clientPhone);
   if (!clientPhone) throw new LenderReferralError("client_phone_required", "Enter the client's 10-digit cell number.");
   if (r.consent !== true && r.consent !== "true" && r.consent !== "1") {
-    throw new LenderReferralError("consent_required", "Confirm the client agreed to be referred to Boreal Financial.");
+    throw new LenderReferralError("consent_required", `Confirm the client agreed to be referred to ${brandName()}.`);
   }
   const amountRaw = r.requested_amount ?? r.requestedAmount;
   const amount = amountRaw === null || amountRaw === undefined || amountRaw === "" ? null : Number(String(amountRaw).replace(/[$,\s]/g, ""));
@@ -91,12 +92,12 @@ export function referralProgress(r: { status: string; pipeline_state?: string | 
 /** The lender's share, as the lender portal shows it. */
 export function referralShare(r: { status: string; complete_package?: boolean | null }): string {
   if (r.status !== "accepted") return "-";
-  return r.complete_package ? `${REFERRAL_SHARE_PCT}% of Boreal's fee` : "None (incomplete package)";
+  return r.complete_package ? `${REFERRAL_SHARE_PCT}% of ${brandName()}'s fee` : "None (incomplete package)";
 }
 
 export function clientInviteText(firstName: string | null, appUrl: string): string {
   const hi = firstName && firstName.trim() ? `Hi ${firstName.trim()}, ` : "Hi, ";
-  return `${hi}Boreal Financial has your business financing application ready. To check it and finish, sign in with this mobile number at ${appUrl}`;
+  return `${hi}${brandName()} has your business financing application ready. To check it and finish, sign in with this mobile number at ${appUrl}`;
 }
 
 export async function lenderName(lenderId: string, db: Q = pool): Promise<string> {
@@ -124,7 +125,7 @@ export async function saveReferral(
       LIMIT 1`,
     [input.lenderId, input.details.clientPhone],
   );
-  if (dup.rows[0]) throw new LenderReferralError("already_sent", "You already sent a file for this client. Boreal is reviewing it.", 409);
+  if (dup.rows[0]) throw new LenderReferralError("already_sent", `You already sent a file for this client. ${brandName()} is reviewing it.`, 409);
   const d = input.details;
   const r = await db.query(
     `INSERT INTO lender_referrals
@@ -350,7 +351,7 @@ export async function acceptReferral(
      VALUES ($1, $2, $3, $4, $5, $6, 'Lender referral terms', CURRENT_DATE, $7, 'accepted', now())
      ON CONFLICT (application_id) DO NOTHING`,
     [applicationId, lender, 100 - share, share,
-      opts.completePackage ? `Lender referral, complete package: ${REFERRAL_SHARE_PCT}% of Boreal's fee` : "Lender referral, incomplete package: no referral share",
+      opts.completePackage ? `Lender referral, complete package: ${REFERRAL_SHARE_PCT}% of ${brandName()}'s fee` : "Lender referral, incomplete package: no referral share",
       opts.note, opts.staffId],
   );
   await db.query(

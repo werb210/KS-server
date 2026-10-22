@@ -4,6 +4,7 @@
 // background lenderPackageWorker and the submissionOrchestration route.
 import type { SubmissionAdapter, SubmissionResult } from "../SubmissionAdapter.js";
 import { sendViaGraph, type GraphAttachment } from "../../../services/email/graphSendService.js";
+import { brandName } from "../../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 type EmailSendInput = {
   lender: { id: string; name: string; submission_email: string | null; contact_email?: string | null };
@@ -28,7 +29,7 @@ export class EmailAdapter implements SubmissionAdapter {
   constructor(private readonly params: { to: string; payload: Record<string, unknown> }) {}
 
   async submit(): Promise<SubmissionResult> {
-    const subject = `Boreal submission package`;
+    const subject = `${brandName()} submission package`;
     const bodyText = `A new submission package is attached.`;
     const send = await sendViaGraph({ to: this.params.to, subject, bodyText });
     if (send.ok) {

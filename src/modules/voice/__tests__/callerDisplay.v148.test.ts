@@ -8,7 +8,7 @@ const empty = db([]);
 
 describe("BF_SERVER_CALLER_DISPLAY_v148", () => {
   it("classifies staff, client, anonymous, and phone identities", () => {
-    expect(parseIdentity(STAFF)).toMatchObject({ kind: "staff", ref: STAFF, fallback: "Boreal staff" });
+    expect(parseIdentity(STAFF)).toMatchObject({ kind: "staff", ref: STAFF, fallback: "Keystone Demo Brokerage staff" });
     expect(parseIdentity(`client-${APP}`)).toMatchObject({ kind: "client_application", ref: APP, fallback: "Applicant" });
     expect(parseIdentity("client-anon-x9f2")).toMatchObject({ kind: "client_anonymous", fallback: "Website visitor" });
     expect(parseIdentity("+15875551234").kind).toBe("pstn");
@@ -37,7 +37,7 @@ describe("BF_SERVER_CALLER_DISPLAY_v148", () => {
 
   it("uses safe fallbacks instead of identifiers", async () => {
     expect(await resolveDisplayName(empty, "+15875551234")).toBe("(587) 555-1234");
-    expect(await resolveDisplayName(empty, STAFF)).toBe("Boreal staff");
+    expect(await resolveDisplayName(empty, STAFF)).toBe("Keystone Demo Brokerage staff");
     expect(await resolveDisplayName(empty, `client-${APP}`)).toBe("Applicant");
     expect(await resolveDisplayName(empty, "")).toBe("Unknown caller");
     expect(await resolveDisplayName(empty, null)).toBe("Unknown caller");
@@ -45,12 +45,12 @@ describe("BF_SERVER_CALLER_DISPLAY_v148", () => {
 
   it("honours real supplied names but ignores echoed identifiers", async () => {
     expect(await resolveDisplayName(empty, STAFF, "Caden W")).toBe("Caden W");
-    expect(await resolveDisplayName(empty, STAFF, STAFF)).toBe("Boreal staff");
+    expect(await resolveDisplayName(empty, STAFF, STAFF)).toBe("Keystone Demo Brokerage staff");
   });
 
   it("never throws when the database is unavailable", async () => {
     const broken: Queryable = { query: async () => { throw new Error("no db"); } };
-    expect(await resolveDisplayName(broken, STAFF)).toBe("Boreal staff");
+    expect(await resolveDisplayName(broken, STAFF)).toBe("Keystone Demo Brokerage staff");
     expect(await resolveDisplayName(broken, "+15875551234")).toBe("(587) 555-1234");
   });
 });

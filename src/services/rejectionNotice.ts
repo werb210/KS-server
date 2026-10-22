@@ -4,6 +4,7 @@ import { sendViaGraph } from "./email/graphSendService.js";
 // BF_SERVER_CLIENT_EMAIL_RESOLVER_v194
 import { resolveClientEmail } from "./clientEmail.js";
 import { logInfo, logError } from "../observability/logger.js";
+import { brandName, legalName, supportPhone } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 function esc(v: string): string {
   return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -76,11 +77,11 @@ export async function sendRejectionNoticeToClient(applicationId: string, note?: 
     <p>Thanks for the time you put into your application${biz ? ` for ${esc(biz)}` : ""}. We have reviewed it with our lending partners, and we are not able to move forward right now.</p>
     <p>We would rather tell you exactly why than leave you guessing. ${count} in the way:</p>${items}${extra}
     <p>None of this is permanent. When any of the above has changed, reply to this email or call us and we will take another look - you will not need to start over.</p>
-    <p style="margin-top:20px">Boreal Financial Corp.<br/>+1 (866) 631-8939</p></div><!-- BF_SERVER_MAIN_LINE_866_v693 -->`;
-  const text = [first ? `Hi ${first},` : "Hi,", "", `Thanks for the time you put into your application${biz ? ` for ${biz}` : ""}. We have reviewed it with our lending partners, and we are not able to move forward right now.`, "", `We would rather tell you exactly why than leave you guessing. ${count} in the way:`, "", ...reasons.flatMap((r, i) => [`${i + 1}. ${r.label}`, r.why_it_matters, ...(r.what_helps ? [`What helps: ${r.what_helps}`] : []), ""]), ...(String(note ?? "").trim() ? [String(note).trim(), ""] : []), "None of this is permanent. When any of the above has changed, reply to this email or call us and we will take another look - you will not need to start over.", "", "Boreal Financial Corp.", "+1 (866) 631-8939"].join("\n");
+    <p style="margin-top:20px">${esc(legalName())}${supportPhone() ? `<br/>${esc(supportPhone())}` : ""}</p></div>`;
+  const text = [first ? `Hi ${first},` : "Hi,", "", `Thanks for the time you put into your application${biz ? ` for ${biz}` : ""}. We have reviewed it with our lending partners, and we are not able to move forward right now.`, "", `We would rather tell you exactly why than leave you guessing. ${count} in the way:`, "", ...reasons.flatMap((r, i) => [`${i + 1}. ${r.label}`, r.why_it_matters, ...(r.what_helps ? [`What helps: ${r.what_helps}`] : []), ""]), ...(String(note ?? "").trim() ? [String(note).trim(), ""] : []), "None of this is permanent. When any of the above has changed, reply to this email or call us and we will take another look - you will not need to start over.", "", legalName(), ...(supportPhone() ? [supportPhone()] : [])].join("\n");
 
   try {
-    await sendViaGraph({ to, subject: "Your Boreal Financial application - decision and next steps", bodyText: text, bodyHtml: html });
+    await sendViaGraph({ to, subject: `Your ${brandName()} application - decision and next steps`, bodyText: text, bodyHtml: html });
     logInfo("rejection_notice_sent", { applicationId, reasons: reasons.length });
     return { sent: true };
   } catch (err) {

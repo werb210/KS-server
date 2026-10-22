@@ -11,6 +11,7 @@ import multer from "multer";
 import { pool } from "../db.js";
 import { ROLES } from "../auth/roles.js";
 import { safeHandler } from "../middleware/safeHandler.js";
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 type BrokerReq = Request & { broker?: { id: string; company: string; name: string } };
 const router = Router();
@@ -86,11 +87,11 @@ router.post("/files/:applicationId/split", requireBroker, safeHandler(async (req
   if (!own.rows[0]) return void res.status(404).json({ error: "not_found" });
   const deal = await pool.query<{ status: string }>("SELECT status FROM broker_deal_confirmations WHERE application_id = $1 LIMIT 1", [appId]);
   const status = deal.rows[0]?.status;
-  if (!status) return void res.status(409).json({ error: "no_proposal", message: "Boreal has not proposed a split for this file yet." });
+  if (!status) return void res.status(409).json({ error: "no_proposal", message: `${brandName()} has not proposed a split for this file yet.` });
   if (status === "accepted") return void res.status(409).json({ error: "already_accepted", message: "The split for this file is already agreed." });
   const action = String((req.body as any)?.action ?? "");
   if (action === "accept") {
-    if (status !== "proposed") return void res.status(409).json({ error: "waiting_on_boreal", message: "Boreal is reviewing your counter-proposal." });
+    if (status !== "proposed") return void res.status(409).json({ error: "waiting_on_boreal", message: `${brandName()} is reviewing your counter-proposal.` });
     const r = await pool.query(
       `UPDATE broker_deal_confirmations SET status = 'accepted', accepted_at = now(), agreed_by_broker = $2, agreed_on = CURRENT_DATE, updated_at = now() WHERE application_id = $1 RETURNING status`,
       [appId, `${req.broker!.name} (${req.broker!.company}) in the broker portal`],

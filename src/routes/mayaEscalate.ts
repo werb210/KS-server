@@ -12,6 +12,7 @@ import { createContact } from "../services/contacts.js";
 import { rateLimitKeyFromRequest } from "../middleware/clientIp.js";
 import { issueConversationToken } from "../services/publicConversationTokens.js"; // BF_SERVER_v789_CONVERSATION_TOKENS
 import { parseExpressCaslConsent, recordExpressCaslConsent } from "../services/smsConsent.js"; // BF_SERVER_v789_CASL_EXPRESS_CONSENT
+import { assistantName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const router = Router();
 
@@ -244,7 +245,7 @@ router.post("/maya/escalate", escalateIpLimiter, escalatePhoneLimiter, escalateE
           const recipients = await hasAvailableStaff() ? "available" : "fallback";
           await sendStaffNotification({
             recipients,
-            body: `Maya talk-to-human${contactBit}: ${summary}`,
+            body: `${assistantName()} talk-to-human${contactBit}: ${summary}`,
           });
         } catch (err: unknown) {
           const m = err instanceof Error ? err.message : String(err);
@@ -332,7 +333,7 @@ router.post("/maya/escalate", escalateIpLimiter, escalatePhoneLimiter, escalateE
         const recipients = await hasAvailableStaff() ? "available" : "fallback";
         await sendStaffNotification({
           recipients,
-          body: `Maya issue report${pageBit}: ${summary}`,
+          body: `${assistantName()} issue report${pageBit}: ${summary}`,
         });
       } catch (err: unknown) {
         const m = err instanceof Error ? err.message : String(err);

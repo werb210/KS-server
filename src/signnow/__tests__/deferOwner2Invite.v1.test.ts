@@ -111,7 +111,7 @@ describe("owner 2 invite is deferred to the correct sequential step", () => {
       const res = await owner1Signed();
       expect(res.status).toBe(200);
       expect(linkMock).toHaveBeenCalledWith("group-1", "invite-1", "owner2@x.com");
-      expect(sendMock.mock.calls[0]![0]).toMatchObject({ to: "owner2@x.com", subject: "Your Boreal application is ready to sign" });
+      expect(sendMock.mock.calls[0]![0]).toMatchObject({ to: "owner2@x.com", subject: "Your Keystone Demo Brokerage application is ready to sign" });
       expect(sendMock.mock.calls[0]![0].bodyHtml).toContain("https://sign.test/owner2@x.com");
     });
 

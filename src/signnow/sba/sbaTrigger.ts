@@ -13,6 +13,7 @@ import { createSbaSigningSessions } from "./sbaSigning.js";
 import { resolveSbaOwners, ownerFingerprint } from "./sbaOwners.js";
 import { logInfo } from "../../observability/logger.js";
 import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 /** Is this an SBA deal at all? Non-SBA applications must not be gated. */
 // BF_SERVER_BLOCK_v455_SEND_FOLLOWUP - application_lender_selections has no
@@ -201,7 +202,7 @@ async function notifyOwnerOne(applicationId: string): Promise<{ sms: boolean; em
         (out as any).smsSkipped = "no_sms_updates_consent";
       } else if (!inApp) {
         const { sendSms } = await import("../../modules/notifications/sms.service.js");
-        await sendSms({ to: phone, message: `Boreal Financial: your application and SBA forms are ready to sign. Sign in at ${portal} and tap "Sign your application documents". Reply STOP to opt out.` });
+        await sendSms({ to: phone, message: `${brandName()}: your application and SBA forms are ready to sign. Sign in at ${portal} and tap "Sign your application documents". Reply STOP to opt out.` });
         out.sms = true;
       } else {
         (out as any).app = true;
@@ -214,7 +215,7 @@ async function notifyOwnerOne(applicationId: string): Promise<{ sms: boolean; em
     if (r.email) {
       const { sendTransactional } = await import("../../services/sendgridService.js");
       const hi = r.firstName ? `Hi ${r.firstName},` : "Hello,";
-      const sent = await sendTransactional({ to: r.email, subject: "Your application and SBA forms are ready to sign", html: `<p>${hi}</p><p>Your Boreal Financial application and SBA forms are ready to sign, all in one place.</p><p><a href="${portal}">Sign in to your client portal</a> and tap <strong>Sign your application documents</strong>.</p><p>Boreal Financial</p>` });
+      const sent = await sendTransactional({ to: r.email, subject: "Your application and SBA forms are ready to sign", html: `<p>${hi}</p><p>Your ${brandName()} application and SBA forms are ready to sign, all in one place.</p><p><a href="${portal}">Sign in to your client portal</a> and tap <strong>Sign your application documents</strong>.</p><p>${brandName()}</p>` });
       out.email = sent.ok;
     }
   } catch (err) { console.warn("[sba_send] owner 1 email failed", { applicationId, message: err instanceof Error ? err.message : String(err) }); }

@@ -15,6 +15,7 @@ import { ROLES } from "../auth/roles.js";
 import { resolveSiloFromRequest } from "../middleware/silo.js";
 import { sendSMS } from "../services/smsService.js";
 import { safeHandler } from "../middleware/safeHandler.js"; // BF_SERVER_v789_SAFE_HANDLERS
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const router: Router = Router();
 
@@ -43,8 +44,8 @@ async function notifyClient(appId: string, count: number): Promise<void> {
        VALUES (gen_random_uuid(), 'message', 'outbound', 'sent', $1,
          (SELECT contact_id FROM applications WHERE id::text = ($1)::text LIMIT 1),
          COALESCE((SELECT silo FROM applications WHERE id::text = ($1)::text LIMIT 1), 'BF'),
-         $2, 'Boreal Financial', 'Answer lender questions', 'lender_qa', now())`,
-      [appId, body],
+         $2, $3, 'Answer lender questions', 'lender_qa', now())`,
+      [appId, body, brandName()],
     );
   } catch (e) {
     console.warn("[qa] nudge failed", e instanceof Error ? e.message : String(e));
@@ -58,7 +59,7 @@ async function notifyClient(appId: string, count: number): Promise<void> {
     if (phone) {
       const { notifyClient } = await import("../services/notifications/notifyClient.js"); // BF_SERVER_BLOCK_v552
       await notifyClient({ phone: String(phone), applicationId: appId, kind: "lender_questions", categoryId: "APPLICATION_UPDATE",
-        sms: "Boreal Financial: the lender has questions about your application. Please open your application to answer them.",
+        sms: brandName() + ": the lender has questions about your application. Please open your application to answer them.",
         title: "The lender has a question", body: "Open your application to answer it." });
     }
   } catch (e) {

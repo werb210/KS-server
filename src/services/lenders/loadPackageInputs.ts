@@ -335,7 +335,7 @@ export async function loadPackageInputs(ctx: LoadCtx): Promise<PackageInputs> {
   // BF_SERVER_BLOCK_v_FORM_PDFS_v1 — generated CMP form PDFs ride in at package root.
   // BF_SERVER_SBA_FIELD_PLACEMENT_v793 - the signed SBA forms were in the package twice (filed under SBA Forms and
   // attached again loose), and owner 1's signed application three times. Keep one of each.
-  const isAppCopy = (n: string) => /^signed-boreal-application-/i.test(n);
+  const isAppCopy = (n: string) => /^signed-(boreal-)?application-owner/i.test(n); // KS_SERVER_v4_BRANDING - new copies drop the old prefix
   const docsOut = documents
     .map((d) => ({ ...d, files: d.files.filter((f) => !isAppCopy(f.filename)) }))
     .filter((d) => d.files.length > 0);

@@ -1,6 +1,7 @@
 // BF_SERVER_CRM_CONTEXT_v653 - optional context used by CRM summaries and Maya.
 import { pool } from "../../db.js";
 import { buildActionCenter } from "../applicantActions.js";
+import { assistantName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 type Rows = { rows: any[] };
 export type ContextDeps = {
@@ -41,7 +42,7 @@ export async function journeyLines(deps: ContextDeps, contactId: string): Promis
 
 export async function mayaChatLines(deps: ContextDeps, contactId: string): Promise<string[]> {
   const messages = await rows(deps, "maya_chats", `SELECT m.role, COALESCE(m.content, m.message) AS text, m.created_at FROM chat_messages m JOIN chat_sessions s ON s.id = m.session_id WHERE s.crm_contact_id::text = $1 ORDER BY m.created_at DESC LIMIT 40`, [contactId]);
-  return messages.reverse().filter((message) => clip(message.text, 1)).map((message) => `- ${day(message.created_at)} ${message.role === "user" ? "Visitor" : "Maya"}: ${clip(message.text, 300)}`);
+  return messages.reverse().filter((message) => clip(message.text, 1)).map((message) => `- ${day(message.created_at)} ${message.role === "user" ? "Visitor" : assistantName()}: ${clip(message.text, 300)}`);
 }
 
 export async function readinessLines(deps: ContextDeps, email: string | null, phone: string | null): Promise<string[]> {
@@ -78,7 +79,7 @@ export async function insuranceLines(deps: ContextDeps, email: string | null, ph
   if (!email && !phone) return []; let bi: any = null;
   try { bi = await deps.biPerson(email, phone); } catch (error) { console.warn("[crm-context] bi_person_failed", { message: (error as Error)?.message }); }
   if (!bi) return []; const out: string[] = [];
-  if (bi.contact) out.push(`- Boreal Insurance contact: ${clip(bi.contact.name, 60)}${bi.contact.lifecycle_stage ? `, ${clip(bi.contact.lifecycle_stage, 30)}` : ""}${bi.contact.outreach_status ? `, outreach ${clip(bi.contact.outreach_status, 30)}` : ""}`);
+  if (bi.contact) out.push(`- Insurance contact: ${clip(bi.contact.name, 60)}${bi.contact.lifecycle_stage ? `, ${clip(bi.contact.lifecycle_stage, 30)}` : ""}${bi.contact.outreach_status ? `, outreach ${clip(bi.contact.outreach_status, 30)}` : ""}`);
   for (const app of Array.isArray(bi.applications) ? bi.applications.slice(0, 3) : []) out.push(`- PGI application ${clip(app.public_id || app.application_code, 20)} for ${clip(app.business_name, 60) || "a business"}: stage ${clip(app.stage, 30).replace(/_/g, " ") || "unknown"}${app.coverage_amount ? `, coverage ${money(app.coverage_amount)}` : ""}${app.annual_premium ? `, premium ${money(app.annual_premium)}` : ""}${app.lender_name ? `, lender ${clip(app.lender_name, 40)}` : ""}${app.carrier_last_event ? `, carrier: ${clip(app.carrier_last_event, 40)}` : ""}, updated ${day(app.updated_at)}`);
   return out;
 }
@@ -87,7 +88,7 @@ export async function contactContextSections(contact: any, apps: any[], deps: Co
   const id = String(contact?.id ?? ""); const email = clip(contact?.email, 200) || null; const phone = clip(contact?.phone, 40) || null;
   const [ads, journey, chats, readiness, referral, depth, insurance] = await Promise.all([id ? adsLines(deps, id) : [], id ? journeyLines(deps, id) : [], id ? mayaChatLines(deps, id) : [], readinessLines(deps, email, phone), referrerLines(deps, contact), applicationDepthLines(deps, apps), insuranceLines(deps, email, phone)]);
   const section = (title: string, lines: string[]) => lines.length ? `${title}:\n${lines.join("\n")}` : "";
-  return [section("How they found us (Google Ads)", ads), section("Referral", referral), section("Capital readiness check", readiness), section("Website journey (oldest first)", journey), section("Maya chat (oldest first)", chats), section("Application detail", depth), section("Boreal Insurance side", insurance)].filter(Boolean);
+  return [section("How they found us (Google Ads)", ads), section("Referral", referral), section("Capital readiness check", readiness), section("Website journey (oldest first)", journey), section(`${assistantName()} chat (oldest first)`, chats), section("Application detail", depth), section("Insurance side", insurance)].filter(Boolean);
 }
 
 // KS_SERVER_v1_NO_BI - Keystone has no Boreal Insurance, so there is no insurance person to look up.

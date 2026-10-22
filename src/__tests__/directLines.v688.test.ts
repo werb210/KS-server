@@ -130,7 +130,8 @@ describe("v688b: caller ID and receptionist reach", () => {
     expect(String(lookup[0]![0])).toMatch(/last_heartbeat > now\(\) - interval '90 seconds'\) OR EXISTS \(\s*SELECT 1 FROM staff_device_credentials dc/);
   });
 
-  it("rejection emails give the 866", async () => {
+  it("rejection emails give the licensee's support phone (KS_SERVER_v4_BRANDING - was Boreal's 866)", async () => {
+    vi.stubEnv("KS_SUPPORT_PHONE", "+1 (403) 555-0123");
     h.queryMock.mockReset();
     h.queryMock.mockImplementation(answerBySql([
       [/SET rejection_email_sent_at = NOW\(\)/, { rows: [{ already: "app-1" }] }],
@@ -140,9 +141,11 @@ describe("v688b: caller ID and receptionist reach", () => {
     expect(await sendRejectionNoticeToClient("app-1")).toEqual({ sent: true });
     const mail = (h.sendViaGraph.mock.calls[0] as unknown[])[0] as { bodyText: string; bodyHtml: string };
     for (const body of [mail.bodyText, mail.bodyHtml]) {
-      expect(body).toContain("+1 (866) 631-8939");
+      expect(body).toContain("+1 (403) 555-0123");
+      expect(body).not.toContain("631-8939");
       expect(body).not.toContain("451-1768");
     }
+    vi.unstubAllEnvs();
   });
 });
 

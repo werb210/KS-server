@@ -10,6 +10,7 @@
 // Canadian NANP area codes. A +1 number is NOT necessarily Canadian, and nothing in the
 // SMS path checked country at all -- US numbers in the list were being sent a
 // CASL footer and no TCPA compliance.
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 const CANADA_NPA = new Set([
   "204","226","236","249","250","263","289","306","343","354","365","367","368","382",
   "387","403","416","418","428","431","437","438","450","468","474","506","514","519",
@@ -80,8 +81,9 @@ export const CAMPAIGN_ELIGIBLE_SQL = `(
 // BF_SERVER_v808_MARKETING_OPTIN - the exact wording of the optional "Text me offers" box on the client app's
 // Step 6 (BF-client MARKETING_SMS_OPTIN_TEXT). Stored as consent_text with consent_source 'marketing_sms_optin';
 // only these contacts may get marketing texts from the toll-free number.
-export const MARKETING_SMS_OPTIN_TEXT =
-  "Optional: Text me news, tips and offers from Boreal Financial. Up to 4 messages per month. Message and data rates may apply. Reply STOP to opt out at any time. Not required to apply.";
+// KS_SERVER_v4_BRANDING - names the licensee; a function so it reads the current name.
+export const marketingSmsOptinText = (): string =>
+  `Optional: Text me news, tips and offers from ${brandName()}. Up to 4 messages per month. Message and data rates may apply. Reply STOP to opt out at any time. Not required to apply.`;
 export const MARKETING_SMS_OPTIN_SOURCE = "marketing_sms_optin";
 
 // BF_SERVER_APPLICANT_CONSENT_v728 - starting an application is an inquiry, which gives

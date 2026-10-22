@@ -13,7 +13,7 @@ vi.mock("../../services/smsService.js", () => ({ sendSMS: vi.fn(async () => { if
 vi.mock("../../services/notifications/notifyClient.js", () => ({ pushToClientApp: async () => false }));
 
 import { sendSMS } from "../../services/smsService.js";
-import { ABANDON_SMS_BODY, startAbandonedApplicationWorker } from "../abandonedApplicationWorker.js";
+import { abandonSmsBody, startAbandonedApplicationWorker } from "../abandonedApplicationWorker.js";
 
 const mig = readFileSync(
   resolve(__dirname, "..", "..", "..", "migrations", "2026_08_26_v119_abandon_sms_attempts.sql"),
@@ -108,7 +108,7 @@ describe("the counter", () => {
 describe("success path is unchanged", () => {
   it("still stamps only after a successful send", async () => {
     const query = await tick();
-    expect(sendSMS).toHaveBeenCalledWith("+14035230100", ABANDON_SMS_BODY);
+    expect(sendSMS).toHaveBeenCalledWith("+14035230100", abandonSmsBody());
     expect(retired(query)).toEqual(["app-1"]);
     expect(callsMatching(query, /SET abandon_sms_attempts = abandon_sms_attempts \+ 1/)).toHaveLength(0);
   });

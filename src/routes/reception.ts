@@ -29,6 +29,7 @@ import {
 } from "../voice/recordedDial.js";
 import { awayStatus, identitiesOutsideHours } from "../voice/callHours.js";
 import { awayTwiml, openInboundRecord, ringDirectLine, staffVoicemail } from "../voice/staffRing.js";
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const router = Router();
 
@@ -41,13 +42,14 @@ const BASE = "/api/webhooks/twilio/reception";
 
 const PHRASES: Record<string, string> = {
   // BF_SERVER_RECEPTION_MENU_v698 - wording approved by Todd 2026-10-01.
-  greeting: "This call may be recorded. Thank you for calling the Boreal Group of Companies. Are you looking for Boreal Financial, or Boreal Risk Management? You can say it, or press 1 for Financial, 2 for Risk Management. To join a scheduled meeting, press 3.",
+  // KS_SERVER_v4_BRANDING - getters, so the greeting names the licensee as it is now (was Boreal).
+  get greeting() { return `This call may be recorded. Thank you for calling ${brandName()}. Are you looking for financing, or risk management? You can say it, or press 1 for Financial, 2 for Risk Management. To join a scheduled meeting, press 3.`; },
   // BF_SERVER_MEETING_ROOMS_v736 - option 3: join a conference room with its access code.
   meeting_prompt: "Please enter your six digit meeting access code, then press pound.",
   meeting_retry: "Sorry, that code isn't valid for a meeting happening now. Please enter your six digit access code, then press pound.",
   meeting_joining: "Thank you. Joining your meeting now.",
   meeting_failed: "Sorry, we couldn't find a meeting with that code. Please check the code in your invitation and call back, or stay on the line to reach our team.",
-  intent_prompt: "Thank you for contacting Boreal Financial. For client engagement, press 1. For credit, press 2.",
+  get intent_prompt() { return `Thank you for contacting ${brandName()}. For client engagement, press 1. For credit, press 2.`; },
   intent_retry: "Sorry, I didn't catch that. For client engagement, press 1. For credit, press 2.",
   connect_engagement: "One moment, connecting you to our client engagement team.",
   engagement_unavail: "Sorry, no one is available to take your call right now.",
@@ -527,7 +529,7 @@ router.post("/screen", twilioWebhookValidation, safeHandler(async (req: Request,
   const from = String(req.query.from ?? "").trim() || callerFrom(req);
   const label = await callerLabel(pool, from);
   const g = v.gather({ input: "dtmf", numDigits: 1, timeout: SCREEN_GATHER_TIMEOUT_SECONDS, action: `${BASE}/screen-result`, method: "POST" });
-  g.say({ voice: VOICE }, `Boreal call from ${label}. Press 1 to accept.`);
+  g.say({ voice: VOICE }, `${brandName()} call from ${label}. Press 1 to accept.`);
   v.hangup();
   return send(res, v);
 }));

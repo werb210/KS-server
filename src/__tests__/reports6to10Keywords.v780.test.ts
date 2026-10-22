@@ -45,7 +45,7 @@ async function inbound(body: string) {
 
 describe("SMS keywords match what Boreal registered with Twilio", () => {
   it("STOP and French ARRET opt out with the registered wording", () => {
-    expect(smsKeywordReply("STOP")).toEqual({ kind: "out", text: "Boreal Financial: You've been unsubscribed and won't receive any more messages. Reply START to resubscribe." });
+    expect(smsKeywordReply("STOP")).toEqual({ kind: "out", text: "Keystone Demo Brokerage: You've been unsubscribed and won't receive any more messages. Reply START to resubscribe." });
     expect(smsKeywordReply("ARRET")?.kind).toBe("out");
   });
   it("HELP, AIDE and INFO get the support reply; normal words get nothing", () => {

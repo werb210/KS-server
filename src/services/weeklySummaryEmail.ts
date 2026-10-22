@@ -9,6 +9,7 @@ import { commissionRate } from "./googleDataManager.js";
 import { weeklyRecipients, mondayWindow } from "./adsWeeklyEmail.js";
 import { stuckDeals } from "./reports/data.js";
 import { missedCalls } from "./reports/data2.js";
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>\"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;" }[c] as string));
 const money = (n: unknown) => "$" + Math.round(Number(n ?? 0)).toLocaleString("en-CA");
@@ -53,7 +54,7 @@ export function renderSummary(d: SummaryData, rate: number): { subject: string; 
   const row = (a: string, b: string) => `<tr><td style="padding:4px 12px 4px 0;color:#475569">${esc(a)}</td><td style="padding:4px 0;font-weight:600">${esc(b)}</td></tr>`;
   const html = [
     `<div style="font-family:Arial,sans-serif;color:#0f172a;max-width:640px">`,
-    `<h2 style="margin:0 0 4px">Boreal Financial - week in review</h2>`,
+    `<h2 style="margin:0 0 4px">${esc(brandName())} - week in review</h2>`,
     `<p style="margin:0 0 16px;color:#475569">The last 7 days.</p>`,
     `<table>`,
     row("Applications submitted", String(d.submitted)),
@@ -69,7 +70,7 @@ export function renderSummary(d: SummaryData, rate: number): { subject: string; 
     `<p style="margin-top:18px;color:#64748b;font-size:12px">Full detail: staff portal, Reports.</p>`,
     `</div>`,
   ].join("");
-  return { subject: `Boreal week in review: ${d.submitted} submitted, ${d.funded} funded`, html };
+  return { subject: `${brandName()} week in review: ${d.submitted} submitted, ${d.funded} funded`, html };
 }
 
 /** Sends this week's summary if it is Monday morning and it has not gone yet. */

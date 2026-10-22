@@ -7,6 +7,7 @@ import { logWarnSwallowed } from "../../lib/logWarnSwallowed.js";
 import * as signnow from "../../signnow/signnowClient.js";
 import { crmContactEmail } from "../clientEmail.js"; // BF_SERVER_CRM_EMAIL_WINS_v756
 import { buildMediaFeeAgreementPdf, MEDIA_FEE_AGREEMENT_ROLE, type MediaFeeAgreementData } from "../../signnow/mediaFeeAgreementPdfBuilder.js";
+import { signnowFromEmail } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export const FEE_AGREEMENT_DOCUMENT_CATEGORY = "Fee Agreement";
 export const FEE_AGREEMENT_DOCUMENT_TYPE = "media_fee_agreement";
@@ -73,7 +74,7 @@ async function notifySigner(applicationId: string, signer: FeeSigner, row: any, 
   if (signer.isApplicant) { const { deliverFeeNotice } = await import("./deliverFeeNotice.js"); const first = (signer.name ?? "").trim().split(" ")[0] || null; const delivery = await deliverFeeNotice({ applicationId, phone: usablePhone(signer.phone), email: signer.email, firstName: first }); await query("UPDATE media_fee_agreements SET sent_at=now(), updated_at=now() WHERE application_id=$1", [applicationId]); return delivery; }
   if (!signnow.isApiKeyConfigured()) throw new Error("e-signature (SignNow) is not configured on the server"); if (!signer.email) throw new Error("no email for the signer");
   const pdf = await buildMediaFeeAgreementPdf(agreementDataFrom(row, signer)), { documentId } = await signnow.uploadDocumentWithFieldExtract(pdf, `fee-agreement-${applicationId}.pdf`), { groupId } = await signnow.createDocumentGroup([documentId], `Fee Agreement ${applicationId}`);
-  const { inviteId } = await signnow.sendGroupEmailInvite(groupId, { email: signer.email, name: signer.name ?? undefined, roleName: MEDIA_FEE_AGREEMENT_ROLE, fromEmail: process.env.SIGNNOW_FROM_EMAIL || "no-reply@boreal.financial", order: 1 });
+  const { inviteId } = await signnow.sendGroupEmailInvite(groupId, { email: signer.email, name: signer.name ?? undefined, roleName: MEDIA_FEE_AGREEMENT_ROLE, fromEmail: signnowFromEmail(), order: 1 });
   await query("UPDATE media_fee_agreements SET signnow_group_id=$2,signnow_doc_id=$3,signnow_invite_id=$4,sent_at=now(),updated_at=now() WHERE application_id=$1", [applicationId, groupId, documentId, inviteId ?? null]);
   return { push: false, sms: false, email: true, phoneLast4: null, emailTo: signer.email, errors: [] };
 }

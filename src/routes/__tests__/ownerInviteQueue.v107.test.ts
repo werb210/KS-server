@@ -68,7 +68,7 @@ describe("owner invite queue", () => {
     await signerEvent();
     expect(linkMock.mock.calls.map((c) => c[2])).toEqual(["four@x.com"]);
     expect(sendMock).toHaveBeenCalledTimes(1);
-    expect(sendMock.mock.calls[0]![0]).toMatchObject({ to: "four@x.com", subject: "Your Boreal application is ready to sign" });
+    expect(sendMock.mock.calls[0]![0]).toMatchObject({ to: "four@x.com", subject: "Your Keystone Demo Brokerage application is ready to sign" });
     expect(sendMock.mock.calls[0]![0].bodyHtml).toContain("https://sign.test/four@x.com");
     expect(markSent()[0]![1]).toEqual([APP, 4]);
   });

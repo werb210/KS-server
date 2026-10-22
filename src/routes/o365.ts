@@ -11,6 +11,7 @@ import { resolveSiloFromRequest } from "../middleware/silo.js";
 import { randomUUID } from "node:crypto";
 import staffLibraryPlus from "./staffLibraryPlus.js"; // BF_SERVER_v810_LIBRARY_PLUS
 import { serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 // BF_SERVER_BLOCK_v513_LARGE_EMAIL_ATTACHMENTS - Graph sendMail takes at most ~3 MB
 // of inline attachments per request. Bigger files go on a draft: small ones by
@@ -94,7 +95,7 @@ router.post("/meetings/schedule", safeHandler(async (req: any, res: any) => {
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const contactId = typeof body.contact_id === "string" ? body.contact_id : null;
-  const subject = typeof body.subject === "string" && body.subject.trim() ? body.subject.trim() : "Boreal meeting";
+  const subject = typeof body.subject === "string" && body.subject.trim() ? body.subject.trim() : `${brandName()} meeting`;
   const startIso = typeof body.start === "string" ? body.start : null;
   const endIso = typeof body.end === "string" ? body.end : null;
   const attendees = Array.isArray(body.attendees)
@@ -922,11 +923,12 @@ router.post("/contacts/:id/folder", safeHandler(async (req: any, res: any) => {
   if (!graph) return res.status(412).json({ error: "o365_not_connected" });
   const safeName = String(contact.name || "Contact").replace(/[<>:"/\\|?*]/g, "-").slice(0, 80);
   const folderName = `${safeName} (${contactId.slice(0, 8)})`;
+  const crmFolder = `${brandName()} CRM`.replace(/[<>:"/\\|?*]/g, "-"); // KS_SERVER_v4_BRANDING
   await graph.fetch("/me/drive/root/children", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Boreal CRM", folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
+    body: JSON.stringify({ name: crmFolder, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }),
   }).catch(() => undefined);
-  const r = await graph.fetch("/me/drive/root:/Boreal CRM:/children", {
+  const r = await graph.fetch("/me/drive/root:/" + encodeURIComponent(crmFolder) + ":/children", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name: folderName, folder: {}, "@microsoft.graph.conflictBehavior": "rename" }),
   });
@@ -967,7 +969,7 @@ router.get("/contacts/:id/folder/files", safeHandler(async (req: any, res: any) 
 // BF_SERVER_STAFF_LIBRARY_v776 - one company-wide "Boreal Staff Library" OneDrive folder (with
 // "Lender Forms" and "Read This"), shared with everyone in the organization. It lives in the
 // OneDrive of whoever creates it; any staff member can browse it and share its files in Team chat.
-const LIBRARY_NAME = "Boreal Staff Library";
+const libraryName = () => `${brandName()} Staff Library`.replace(/[<>:"/\\|?*]/g, "-"); // KS_SERVER_v4_BRANDING
 const LIBRARY_SUBFOLDERS = ["Lender Forms", "Read This"];
 function shareId(url: string): string {
   return "u!" + Buffer.from(url).toString("base64").replace(/=+$/, "").replace(/\//g, "_").replace(/\+/g, "-");
@@ -984,8 +986,8 @@ router.post("/library/ensure", safeHandler(async (req: any, res: any) => {
   const graph = await getGraphForUser(pool, userId);
   if (!graph) return res.status(412).json({ error: "o365_not_connected" });
   const json = { "Content-Type": "application/json" };
-  let r = await graph.fetch("/me/drive/root/children", { method: "POST", headers: json, body: JSON.stringify({ name: LIBRARY_NAME, folder: {}, "@microsoft.graph.conflictBehavior": "fail" }) });
-  if (r.status === 409) r = await graph.fetch("/me/drive/root:/" + encodeURIComponent(LIBRARY_NAME));
+  let r = await graph.fetch("/me/drive/root/children", { method: "POST", headers: json, body: JSON.stringify({ name: libraryName(), folder: {}, "@microsoft.graph.conflictBehavior": "fail" }) });
+  if (r.status === 409) r = await graph.fetch("/me/drive/root:/" + encodeURIComponent(libraryName()));
   if (!r.ok) { const d = (await r.text()).slice(0, 400); return res.status(r.status === 401 || r.status === 403 ? 412 : 502).json({ error: "library_create_failed", detail: d }); }
   const folder: any = await r.json();
   for (const name of LIBRARY_SUBFOLDERS) {

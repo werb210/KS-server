@@ -3,6 +3,7 @@ import { ALBERTA_TZ } from "../lib/albertaTime.js"; // BF_SERVER_ALBERTA_TIME_v7
 import { randomUUID } from "node:crypto";
 import { pool } from "../db.js";
 import { graphAppFetch, isAppGraphConfigured } from "./teams/graphAppClient.js";
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export const TZ = ALBERTA_TZ;
 export const SLOT_MIN = 30;
@@ -128,8 +129,8 @@ export async function createBooking(input: { kind: BookingKind; startsAt: Date; 
   if (!staff) return { ok: false, reason: "staff_unavailable" };
   const phone = input.phone ? bookingPhoneE164(input.phone) : null;
   const end = new Date(input.startsAt.getTime() + SLOT_MIN * 60_000);
-  const subject = (input.kind === "teams" ? "Teams meeting" : "Phone call") + " with " + input.name + " - Boreal Financial";
-  const location = input.kind === "phone" ? "Phone call - Boreal calls " + (phone ?? "") : "Microsoft Teams";
+  const subject = (input.kind === "teams" ? "Teams meeting" : "Phone call") + " with " + input.name + " - " + brandName();
+  const location = input.kind === "phone" ? "Phone call - " + brandName() + " calls " + (phone ?? "") : "Microsoft Teams";
 
   // 1. Contact: find by email or last-10 phone; fill what is missing; tag; owner if none.
   const contact = await pool.query<{ id: string; name: string | null; email: string | null; phone: string | null; owner_id: string | null }>(

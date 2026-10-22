@@ -2,6 +2,7 @@
 // Pure: no SQL. Types, condition evaluation, validation, v1 -> v2 conversion and the time helpers
 // the engine uses for delays and quiet hours.
 import { ALBERTA_TZ } from "../../lib/albertaTime.js";
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export type Condition = { field: string; op: string; value?: unknown };
 export type Trigger = { type: string; filters?: Condition[]; filterLogic?: "all" | "any"; params?: Record<string, unknown> } & Record<string, unknown>;
@@ -364,7 +365,7 @@ function v1StepToNode(step: Record<string, any>, id: string): GraphNode | null {
     case "create_task": return { id, kind: "action", action: "create_task", params: { title: p.title ?? "Follow up", body: p.body ?? undefined, type: p.taskType ?? "TODO", priority: p.priority ?? "MEDIUM", dueInHours: p.dueHours != null ? Number(p.dueHours) : p.dueDays != null ? Number(p.dueDays) * 24 : 24, assignee: p.assignTo === "user" && p.userId ? p.userId : "owner" }, next: null };
     case "send_sms": return { id, kind: "action", action: "send_sms", params: { body: p.body ?? "", kind: p.purpose === "transactional" ? "transactional" : "marketing" }, next: null };
     case "send_push":
-    case "notify_client": return { id, kind: "action", action: "notify_client", params: { title: p.title ?? "Update from Boreal", body: p.body ?? "" }, next: null };
+    case "notify_client": return { id, kind: "action", action: "notify_client", params: { title: p.title ?? `Update from ${brandName()}`, body: p.body ?? "" }, next: null };
     case "notify_staff": return { id, kind: "action", action: "notify_staff", params: { channel: "in_app", to: p.userId || "owner", message: p.body ?? "Automation update" }, next: null };
     case "assign_owner": return p.mode === "user" && p.userId
       ? { id, kind: "action", action: "assign_owner", params: { userId: p.userId }, next: null }

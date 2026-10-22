@@ -3,6 +3,7 @@ import { v4 as uuid } from "uuid";
 import { AiMessage, AiSession } from "./ai.types.js";
 import { dbQuery } from "../../db.js";
 import { config } from "../../config/index.js";
+import { brandName, assistantName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 type AiReply = {
   reply: string;
@@ -11,8 +12,8 @@ type AiReply = {
 
 const LENDER_LANGUAGE = "We have lenders across different capital types, including Institutional lenders, Banking, and Private Capital sources as well as our own funding offerings.";
 
-const LEGACY_SYSTEM_PROMPT = [
-  "You are a financing assistant for Boreal Financial.",
+const legacySystemPrompt = () => [
+  `You are a financing assistant for ${brandName()}.`,
   "Output only valid JSON with keys: reply (string), askIntakeQuestions (boolean).",
   "Never name lenders.",
   LENDER_LANGUAGE,
@@ -117,7 +118,7 @@ export async function handleMessage(sessionId: string, content: string): Promise
 
   const aiRules = await loadActiveAiRules();
   const systemPrompt = `
-You are Maya, Boreal Financial AI assistant.
+You are ${assistantName()}, ${brandName()} AI assistant.
 You are professional and friendly.
 Never mention lender names.
 Always show ranges only.
@@ -202,7 +203,7 @@ export async function generateAIResponse(_sessionId: string, message: string): P
     temperature: 0.2,
     response_format: { type: "json_object" },
     messages: [
-      { role: "system", content: `${LEGACY_SYSTEM_PROMPT}\n${aiRules.length > 0 ? `Admin override rules:\n${aiRules.join("\n")}` : ""}` },
+      { role: "system", content: `${legacySystemPrompt()}\n${aiRules.length > 0 ? `Admin override rules:\n${aiRules.join("\n")}` : ""}` },
       { role: "user", content: message },
     ],
   });

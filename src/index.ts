@@ -105,6 +105,14 @@ export async function start(): Promise<void> {
       process.exit(1);
     }
   }
+  // KS_SERVER_v4_BRANDING - load the licensee's name before anything sends a message, then refresh it every minute.
+  try {
+    const { pool } = await import("./db.js");
+    const { startBrandRefresh } = await import("./licensee/brand.js");
+    await startBrandRefresh(pool).ready;
+  } catch (err) {
+    console.warn("[startup] licensee brand refresh not started:", err instanceof Error ? err.message : String(err));
+  }
   // BF_SERVER_TEMPLATE_LANDING_BACKFILL_v28 - repair marketing template landing
   // pages (bad host from a misconfigured LANDING_BASE_URL, or seeded rows that
   // never had html and so never had a page). Deliberately not fatal.

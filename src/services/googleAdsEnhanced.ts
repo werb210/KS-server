@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { pool } from "../db.js";
 import { accessToken } from "./googleAdsConversions.js";
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const API = "https://googleads.googleapis.com/v24";
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -114,8 +115,8 @@ async function ensureList(customerId: string): Promise<string> {
   const response = await call(`customers/${customerId}/userLists:mutate`, {
     operations: [{
       create: {
-        name: "Boreal funded clients (auto)",
-        description: "Funded Boreal Financial clients. Updated weekly by BF-Server.",
+        name: `${brandName()} funded clients (auto)`,
+        description: `Funded ${brandName()} clients. Updated weekly by the server.`,
         membershipLifeSpan: 10000,
         crmBasedUserList: { uploadKeyType: "CONTACT_INFO", dataSourceType: "FIRST_PARTY" },
       },

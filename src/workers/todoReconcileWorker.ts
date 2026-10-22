@@ -15,6 +15,7 @@ import { getGraphForUser, type GraphClient } from "../modules/o365/graphClient.j
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js";
 import { claimedTick } from "./claim.js"; // BF_SERVER_v789_WORKER_CLAIM
 import { portalUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const TICK_MS = 5 * 60 * 1000;
 const MAX_USERS_PER_TICK = 50;
@@ -117,7 +118,7 @@ async function pushUser(pool: Pool, graph: GraphClient, listId: string, userId: 
         }
       } else {
         const payload = todoPayload(t);
-        if (t.contact_id) payload.linkedResources = [{ webUrl: portalUrl() + "/crm/contacts/" + t.contact_id, applicationName: "Boreal CRM", displayName: todoTitle(t) }];
+        if (t.contact_id) payload.linkedResources = [{ webUrl: portalUrl() + "/crm/contacts/" + t.contact_id, applicationName: `${brandName()} CRM`, displayName: todoTitle(t) }];
         const created = await call(graph, base, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         await markSynced(pool, t.id, (created as { id?: string } | null)?.id ?? null);
       }

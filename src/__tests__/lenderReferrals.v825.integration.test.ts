@@ -86,9 +86,9 @@ describe("v825 lender referrals against the real schema", () => {
     expect(phone.rows[0].p).toBe(phoneA); // the client's cell from the lender, not the one read off the form
     expect(app.rows[0].ref.status).toBe("accepted");
     const split = await pool.query("SELECT boreal_pct, broker_pct, status, terms FROM broker_deal_confirmations WHERE application_id = $1", [appId]);
-    expect(split.rows[0]).toMatchObject({ status: "accepted", terms: "Lender referral, complete package: 50% of Boreal's fee" });
+    expect(split.rows[0]).toMatchObject({ status: "accepted", terms: "Lender referral, complete package: 50% of Keystone Demo Brokerage's fee" });
     expect([Number(split.rows[0].boreal_pct), Number(split.rows[0].broker_pct)]).toEqual([50, 50]);
-    expect(texts[0]).toBe("Hi Jane, Boreal Financial has your business financing application ready. To check it and finish, sign in with this mobile number at https://client.test");
+    expect(texts[0]).toBe("Hi Jane, Keystone Demo Brokerage has your business financing application ready. To check it and finish, sign in with this mobile number at https://client.test");
     expect(await referralZip(acceptedId)).toBeNull();
     const imp = await pool.query("SELECT summary->>'client_texted_at' AS texted FROM broker_imports WHERE id = $1", [importId]);
     expect(imp.rows[0].texted).toBeTruthy();
@@ -101,6 +101,6 @@ describe("v825 lender referrals against the real schema", () => {
     const mine = await listForLender(lenderId);
     const by = Object.fromEntries(mine.map((f) => [f.business_name, [f.progress, f.share]]));
     expect(by[`Contoso ${tag}`]).toEqual(["Not accepted", "-"]);
-    expect(by[`Northwind ${tag}`]).toEqual(["Accepted - waiting for the client", "50% of Boreal's fee"]);
+    expect(by[`Northwind ${tag}`]).toEqual(["Accepted - waiting for the client", "50% of Keystone Demo Brokerage's fee"]);
   });
 });

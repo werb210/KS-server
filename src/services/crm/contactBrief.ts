@@ -6,6 +6,7 @@ import { askAI } from "../../modules/ai/openai.service.js";
 import { loadCrmTimeline } from "../../routes/crm/timeline.js";
 import { contactContextSections } from "./contactContext.js"; // BF_SERVER_CRM_CONTEXT_v653
 import { logWarnSwallowed } from "../../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
+import { websiteUrl } from "../../licensee/urls.js"; // KS_SERVER_v4_BRANDING
 
 const FREE_EMAIL = new Set([
   "gmail.com", "googlemail.com", "yahoo.com", "yahoo.ca", "hotmail.com", "hotmail.ca", "outlook.com", "live.com", "live.ca",
@@ -67,7 +68,7 @@ async function fetchHomepage(domain: string): Promise<string | null> {
     try {
       const response = await fetch(url, {
         redirect: "manual", signal: controller.signal,
-        headers: { "user-agent": "BorealCRM/1.0 (+https://boreal.financial)", accept: "text/html" },
+        headers: { "user-agent": `KeystoneCRM/1.0 (+${websiteUrl()})`, accept: "text/html" },
       });
       const location = response.headers.get("location");
       if (response.status >= 300 && response.status < 400 && location) {

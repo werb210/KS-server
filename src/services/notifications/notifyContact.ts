@@ -5,6 +5,7 @@
 import { pool } from "../../db.js";
 import { logError } from "../../observability/logger.js";
 import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export type NotifyChannel = "app" | "sms" | "bi" | "none";
 export type NotifyContactInput = { contactId: string; title: string; body: string; actorUserId?: string | null; staffName?: string | null };
@@ -47,7 +48,7 @@ export async function notifyContact(input: NotifyContactInput): Promise<NotifyCo
         const { sendSms } = await import("../../modules/notifications/sms.service.js");
         const base = String(process.env.CLIENT_URL ?? clientUrl()).replace(/\/$/, "");
         const link = applicationId ? base + "/application/" + encodeURIComponent(applicationId) : base + "/portal";
-        await sendSms({ to: contact.phone, message: "Boreal: " + input.body + "\n" + link, track: { kind: "staff_notice", applicationId } } as any);
+        await sendSms({ to: contact.phone, message: brandName() + ": " + input.body + "\n" + link, track: { kind: "staff_notice", applicationId } } as any);
         result = { ok: true, channel: "sms" };
       } catch (err: any) {
         result = { ok: false, channel: "none", error: String(err?.message ?? err) };

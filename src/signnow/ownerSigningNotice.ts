@@ -6,6 +6,8 @@
 // reports who was texted so the portal can say. Owner 1 is never emailed; only
 // additional owners get an email invite (see embeddedSigningSession).
 import { dbQuery } from "../db.js";
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { clientUrl, hostOf } from "../licensee/urls.js"; // KS_SERVER_v4_BRANDING
 
 export type SigningNotice = {
   name: string | null;
@@ -19,7 +21,6 @@ export type SigningNotice = {
 type Contact = { name: string | null; phone: string | null; lastSentAt: string | null };
 
 const RESEND_MIN_SECONDS = 120;
-const PORTAL = "client.boreal.financial";
 
 function usablePhone(raw: string | null): string | null {
   const s = (raw ?? "").trim();
@@ -76,7 +77,7 @@ export async function remindOwner1ToSign(applicationId: string, now: Date = new 
     const { notifyClient } = await import("../services/notifications/notifyClient.js");
     const sent = await notifyClient({
       phone: c.phone, applicationId, kind: "owner1_signing", categoryId: "APPLICATION_UPDATE",
-      sms: `${first ? `Hi ${first},` : "Hi,"} your Boreal Financial application is ready for your signature. Sign in at ${PORTAL} with this phone number to review and sign. Reply STOP to opt out.`,
+      sms: `${first ? `Hi ${first},` : "Hi,"} your ${brandName()} application is ready for your signature. Sign in at ${hostOf(clientUrl())} with this phone number to review and sign. Reply STOP to opt out.`,
       title: "Ready for your signature", body: "Your application is ready to sign.",
       track: { kind: "owner1_signing", applicationId }, // BF_SERVER_BLOCK_v464_SMS_DELIVERY
     });
