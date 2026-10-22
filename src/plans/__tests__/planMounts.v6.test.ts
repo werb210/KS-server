@@ -15,8 +15,11 @@ describe("plan-gated mounts", () => {
     expect(Object.fromEntries(API_ROUTE_MOUNTS.filter((m) => m.feature).map((m) => [m.path, m.feature]))).toEqual({
       "/watch": "watch_ipad_apps",
       "/lender": "lender_portal",
+      "/referrer": "referrer_portal", // KS_SERVER_v9_PORTAL_PLANS
+      "/broker": "broker_portal",
       "/lender-referrals": "lender_portal",
       "/admin/referrers": "referrer_portal",
+      "/broker-imports": "broker_portal",
       "/templates": "templates",
       "/reporting": "full_reports", // KS_SERVER_v7_NO_REPORTS_ON_STARTER
     });
@@ -33,7 +36,7 @@ describe("plan-gated mounts", () => {
   });
 
   it("answers 402 on a starter copy", async () => {
-    for (const [path, feature] of [["/api/templates", "templates"], ["/api/lender/me", "lender_portal"], ["/api/admin/referrers", "referrer_portal"], ["/api/watch/face", "watch_ipad_apps"], ["/api/reporting", "full_reports"]]) {
+    for (const [path, feature] of [["/api/templates", "templates"], ["/api/admin/referrers", "referrer_portal"], ["/api/referrer/me", "referrer_portal"], ["/api/broker/me", "broker_portal"], ["/api/broker-imports", "broker_portal"], ["/api/watch/face", "watch_ipad_apps"], ["/api/reporting", "full_reports"]]) {
       const r = await request(app).get(path);
       expect(r.status, path).toBe(402);
       expect(r.body).toMatchObject({ ok: false, error: "feature_not_in_plan", feature });
@@ -42,6 +45,9 @@ describe("plan-gated mounts", () => {
 
   it("leaves other mounts alone", async () => {
     expect((await request(app).get("/api/plan")).status).toBe(401);
+    // KS_SERVER_v9_PORTAL_PLANS - the lender portal is on every plan, starter included.
+    expect((await request(app).get("/api/lender/me")).status).not.toBe(402);
+    expect((await request(app).get("/api/lender-referrals")).status).not.toBe(402);
     expect((await request(app).get("/api/calls")).status).not.toBe(402);
   });
 });

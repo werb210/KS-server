@@ -249,8 +249,8 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/calendar", router: calendarRoutes },
   { path: "/calls", router: callsRoutes },
   { path: "/lender", router: lenderSelfRoutes, feature: "lender_portal" }, // BF_SERVER_LENDER_SELF_v1 // KS_SERVER_v6_PLANS
-  { path: "/referrer", router: referrerSelfRoutes }, // BF_SERVER_REFERRER_SELF_v1
-  { path: "/broker", router: brokerSelfRoutes }, // BF_SERVER_BROKER_PORTAL_v717
+  { path: "/referrer", router: referrerSelfRoutes, feature: "referrer_portal" }, // BF_SERVER_REFERRER_SELF_v1 // KS_SERVER_v9_PORTAL_PLANS
+  { path: "/broker", router: brokerSelfRoutes, feature: "broker_portal" }, // BF_SERVER_BROKER_PORTAL_v717 // KS_SERVER_v9_PORTAL_PLANS
   { path: "/lender-referrals", router: lenderReferralRoutes, feature: "lender_portal" }, // BF_SERVER_v825_LENDER_REFERRALS // KS_SERVER_v6_PLANS
   { path: "/application-origin", router: applicationOriginRoutes }, // BF_SERVER_v828_APPLICATION_ORIGIN
   { path: "/admin/referrers", router: adminReferrersRoutes, feature: "referrer_portal" }, // BF_SERVER_ADMIN_REFERRERS_v1 // KS_SERVER_v6_PLANS
@@ -341,7 +341,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/credit-research", router: creditResearchRoutes }, // BF_SERVER_BLOCK_v537
   { path: "/credit-collateral", router: creditCollateralRoutes }, // BF_SERVER_BLOCK_v536
   { path: "/credit-financials", router: creditFinancialsRoutes }, // BF_SERVER_BLOCK_v535
-  { path: "/broker-imports", router: brokerImportRoutes }, // BF_SERVER_BLOCK_v521_BROKER_IMPORT
+  { path: "/broker-imports", router: brokerImportRoutes, feature: "broker_portal" }, // BF_SERVER_BLOCK_v521_BROKER_IMPORT // KS_SERVER_v9_PORTAL_PLANS
   { path: "/templates", router: templatesRoutes, feature: "templates" }, // v693 // KS_SERVER_v6_PLANS
   { path: "/licensee", router: licenseeRoutes }, // KS_SERVER_v1_LICENSEE
   { path: "/plan", router: planRoutes }, // KS_SERVER_v6_PLANS

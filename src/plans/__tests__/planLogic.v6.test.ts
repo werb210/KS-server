@@ -24,9 +24,11 @@ describe("plan catalogue", () => {
     const g = featuresFor("growth");
     const p = featuresFor("pro");
     expect(s.contacts && s.ai_assistant).toBe(true);
-    expect(s.call_recording || s.lender_portal).toBe(false);
+    expect(s.call_recording || s.referrer_portal || s.broker_portal).toBe(false);
+    expect(s.lender_portal).toBe(true); // KS_SERVER_v9_PORTAL_PLANS - lender portal on every plan
     expect(g.call_recording && g.templates && g.toll_free_number).toBe(true);
-    expect(g.lender_portal || g.sso).toBe(false);
+    expect(g.referrer_portal && g.broker_portal).toBe(true);
+    expect(g.sso).toBe(false);
     expect(FEATURES.every((f) => p[f.key])).toBe(true);
   });
 
@@ -80,8 +82,12 @@ describe("the free trial", () => {
 
   it("checkFeature says when a feature is open only because of the trial", () => {
     expect(checkFeature(starter(), "contacts", t0)).toEqual({ allowed: true, viaTrial: false });
-    expect(checkFeature(starter(), "lender_portal", t0)).toEqual({ allowed: false, required_plan: "pro", trial_available: true });
-    expect(checkFeature({ ...starter(), plan: "growth" }, "lender_portal", t0)).toEqual({ allowed: false, required_plan: "pro", trial_available: false });
+    expect(checkFeature(starter(), "sso", t0)).toEqual({ allowed: false, required_plan: "pro", trial_available: true });
+    expect(checkFeature({ ...starter(), plan: "growth" }, "sso", t0)).toEqual({ allowed: false, required_plan: "pro", trial_available: false });
+    // KS_SERVER_v9_PORTAL_PLANS
+    expect(checkFeature(starter(), "lender_portal", t0)).toEqual({ allowed: true, viaTrial: false });
+    expect(checkFeature(starter(), "broker_portal", t0)).toEqual({ allowed: false, required_plan: "growth", trial_available: true });
+    expect(checkFeature({ ...starter(), plan: "growth" }, "broker_portal", t0)).toEqual({ allowed: true, viaTrial: false });
     expect(checkFeature(inTrial(), "call_recording", t0)).toEqual({ allowed: true, viaTrial: true });
     expect(checkFeature(inTrial(), "contacts", t0)).toEqual({ allowed: true, viaTrial: false });
     const after = new Date(t0.getTime() + 20 * DAY);
