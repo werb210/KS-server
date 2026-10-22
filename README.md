@@ -199,7 +199,6 @@ Every outside service is optional. A check whose service is not set reports `not
 | `CORPORATIONS_CANADA_API_KEY` (ISED API store, `user-key`) | 6 registry, directors | registry part "not set up" |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` (already set) | 6, 7 line type (Lookup v2, about 1 cent each, cached 30 days) | phone part "not set up" |
 | `IPINFO_TOKEN` (ipinfo.io; VPN flags need its privacy data) | 9 IP country, region, network, VPN | device sharing still checked |
-| `FLINKS_BASE_URL`, `FLINKS_CUSTOMER_ID`, `FLINKS_AUTH_KEY` (optional) | 3 statement vs live bank | "not set up" |
 | `FRAUD_RDAP=off` | 6, 7 domain age via rdap.org (public, on by default) | - |
 | `FRAUD_STAFF_HOURLY_FILE_LIMIT` (default 150) | 14 high-volume alert | - |
 | `FRAUD_EXTRA_DISPOSABLE_DOMAINS` (comma separated) | 7 | built-in list only |

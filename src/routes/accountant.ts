@@ -25,7 +25,6 @@ export const ACCOUNTANT_DOC_CATEGORIES: string[] = [
   "Corporate structure / org chart",
   "Business plan / projections",
   "Debt stack",
-  "Banking connection (Flinks view-only)",
   "CRA view-only access",
   "Equipment collateral",
   "Professional advisors (CPA / lawyer / insurance)",
@@ -114,7 +113,6 @@ export const ACCOUNTANT_FORM_DOC_TYPES: string[] = [
   "real_estate_collateral_disclosure",
   "professional_advisors",
   "cra_view_only_authorization",
-  "flinks_banking",
 ];
 
 const FORM_ALLOWED = new Set(ACCOUNTANT_FORM_DOC_TYPES);

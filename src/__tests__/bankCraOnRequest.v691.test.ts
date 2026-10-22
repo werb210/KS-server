@@ -84,7 +84,8 @@ describe("Connect Bank and CRA Authorization only when staff request them", () =
     const [existing] = callsMatching(queryMock, /SELECT DISTINCT cta_action FROM communications_messages/)[0]!;
     expect(sqlText(existing)).toContain(AUTO);
     // The automatic prompts are not counted, so the staff request posts real buttons.
-    expect(res.body.posted.forms).toEqual(["cra", "flinks"]);
+    // KS_SERVER_NO_BANK_CONNECT - Connect Bank (Flinks) is not a step Keystone can request.
+    expect(res.body.posted.forms).toEqual(["cra"]);
   });
 
   it("the client thread hides an old automatic prompt (no staff name)", async () => {

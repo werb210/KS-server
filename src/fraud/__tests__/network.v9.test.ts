@@ -150,8 +150,9 @@ describe("check 16: score and pre-screen", () => {
     expect(s.band).toBe("medium");
     expect(s.reasons[0]!.severity).toBe("red");
     expect(s.covered.map((c) => c.check)).toEqual(["fraud_1", "fraud_5", "fraud_7"]);
-    expect(s.not_covered.some((c) => c.check === "fraud_3")).toBe(true);
-    const many = computeScore(["fraud_1", "fraud_2", "fraud_3", "fraud_4"].map((k) => row(k, "red")), all);
+    expect(s.not_covered.some((c) => c.check === "fraud_2")).toBe(true);
+    expect(all.has("fraud_3" as any)).toBe(false); // KS_SERVER_NO_BANK_CONNECT
+    const many = computeScore(["fraud_1", "fraud_2", "fraud_4", "fraud_6"].map((k) => row(k, "red")), all);
     expect(many.score).toBe(100);
     expect(band(19)).toBe("low");
     expect(band(50)).toBe("high");
@@ -193,11 +194,11 @@ describe("profile, hashing, plans", () => {
     expect(localHash("device", "", {} as any)).toBeNull();
   });
 
-  it("starter = 1, 2, 4, 5; growth adds 6, 7, 8; pro has all 16", () => {
+  it("starter = 1, 2, 4, 5; growth adds 6, 7, 8; pro has all 15 (fraud_3 retired)", () => {
     const on = (plan: "starter" | "growth" | "pro") => Object.entries(featuresFor(plan)).filter(([k, v]) => k.startsWith("fraud_") && v).map(([k]) => Number(k.slice(6))).sort((a, b) => a - b);
     expect(on("starter")).toEqual([1, 2, 4, 5]);
     expect(on("growth")).toEqual([1, 2, 4, 5, 6, 7, 8]);
-    expect(on("pro")).toEqual(Array.from({ length: 16 }, (_, i) => i + 1));
+    expect(on("pro")).toEqual(Array.from({ length: 16 }, (_, i) => i + 1).filter((n) => n !== 3));
     expect(FRAUD_CHECKS.every((c) => FEATURES.some((f) => f.key === c.key))).toBe(true);
   });
 });
