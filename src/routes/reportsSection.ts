@@ -5,6 +5,15 @@ import { requireAuth } from "../middleware/auth.js";
 import { safeHandler } from "../middleware/safeHandler.js";
 import { catalogFor, reportByKey, canSee, normalizeRole } from "../services/reports/catalog.js";
 import { DATA } from "../services/reports/data.js";
+import { STARTER_DASHBOARD_REPORTS, checkFeature } from "../plans/catalogue.js"; // KS_SERVER_v7_NO_REPORTS_ON_STARTER
+import { getPlanState, type Q } from "../plans/state.js";
+import { requireFeature } from "../plans/requireFeature.js";
+
+// KS_SERVER_v7_NO_REPORTS_ON_STARTER - reports are growth and up; starter keeps the basic Dashboard sections.
+const reportsGate = requireFeature("full_reports");
+async function reportsAllowed(): Promise<boolean> {
+  return checkFeature(await getPlanState(pool as unknown as Q), "full_reports").allowed;
+}
 
 const router = Router();
 const SILOS = new Set(["BF"]);
@@ -29,7 +38,9 @@ router.get("/catalog", requireAuth, safeHandler(async (req: any, res: any) => {
   const silo = siloOf(req.query?.silo);
   // BF_SERVER_DASHBOARD_BOARD_v730 - the standard Dashboard sections are only offered on the Dashboard.
   const forDashboard = req.query?.for === "dashboard";
-  res.json({ role: normalizeRole(req.user?.role), reports: catalogFor(req.user?.role).filter((r) => r.silo === silo && (forDashboard || r.source !== "dashboard")) });
+  const allowed = await reportsAllowed(); // KS_SERVER_v7_NO_REPORTS_ON_STARTER
+  res.json({ role: normalizeRole(req.user?.role), reports: catalogFor(req.user?.role).filter((r) => r.silo === silo && (forDashboard || r.source !== "dashboard")
+    && (allowed || STARTER_DASHBOARD_REPORTS.has(r.key))) });
 }));
 router.get("/layouts", requireAuth, safeHandler(async (req: any, res: any) => {
   const silo = siloOf(req.query?.silo);
@@ -69,7 +80,7 @@ router.put("/team-tabs", requireAuth, safeHandler(async (req: any, res: any) => 
   } catch (err) { await client.query("ROLLBACK"); throw err; } finally { client.release(); }
   res.json({ ok: true });
 }));
-router.get("/data/:key", requireAuth, safeHandler(async (req: any, res: any) => {
+router.get("/data/:key", requireAuth, (req: any, res: any, next: any) => (STARTER_DASHBOARD_REPORTS.has(String(req.params?.key ?? "")) ? next() : reportsGate(req, res, next)), safeHandler(async (req: any, res: any) => {
   const def = reportByKey(String(req.params?.key ?? "")); const run = def ? DATA[def.key] : undefined;
   if (!def || !run) { res.status(404).json({ error: "unknown_report" }); return; }
   if (!canSee(req.user?.role, def.group)) { res.status(403).json({ error: "not_allowed" }); return; }
@@ -77,7 +88,7 @@ router.get("/data/:key", requireAuth, safeHandler(async (req: any, res: any) => 
 }));
 // BF_SERVER_REPORTS_BATCH5_v776 - record (or clear) commission received from the lender. Admin only.
 // POST /api/reports/commission-received  { applicationId, amount?, receivedOn?: "YYYY-MM-DD", clear?: true }
-router.post("/commission-received", requireAuth, safeHandler(async (req: any, res: any) => {
+router.post("/commission-received", requireAuth, reportsGate, safeHandler(async (req: any, res: any) => {
   if (normalizeRole(req.user?.role) !== "Admin") { res.status(403).json({ error: "admin_only" }); return; }
   const appId = String(req.body?.applicationId ?? "").trim();
   if (!appId) { res.status(400).json({ error: "application_id_required" }); return; }
@@ -96,7 +107,7 @@ router.post("/commission-received", requireAuth, safeHandler(async (req: any, re
   res.json({ ok: true });
 }));
 // BF_SERVER_REPORTS6_10_v780 - PUT /api/reports/goals { userId, fundingTarget?, commissionTarget? } (this month; Admin only)
-router.put("/goals", requireAuth, safeHandler(async (req: any, res: any) => {
+router.put("/goals", requireAuth, reportsGate, safeHandler(async (req: any, res: any) => {
   if (normalizeRole(req.user?.role) !== "Admin") { res.status(403).json({ error: "admin_only" }); return; }
   const userId = String(req.body?.userId ?? "").trim();
   if (!/^[0-9a-f-]{36}$/i.test(userId)) { res.status(400).json({ error: "user_id_required" }); return; }

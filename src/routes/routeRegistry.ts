@@ -283,7 +283,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   // BF_SERVER_BLOCK_53_v1
   { path: "/client/voice", router: clientVoiceRoutes },
   { path: "/client/documents-needed", router: clientDocumentsNeededRoutes },
-  { path: "/reporting", router: reportingRoutes },
+  { path: "/reporting", router: reportingRoutes, feature: "full_reports" }, // KS_SERVER_v7_NO_REPORTS_ON_STARTER
   { path: "/reports", router: reportsRoutes },
   { path: "/settings", router: settingsRoutes },
   // BF_SERVER_v820_WATCH_CALLS - before "/staff": that router requires STAFF_OVERVIEW for everything under it.
