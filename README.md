@@ -199,10 +199,17 @@ Every outside service is optional. A check whose service is not set reports `not
 | `CORPORATIONS_CANADA_API_KEY` (ISED API store, `user-key`) | 6 registry, directors | registry part "not set up" |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` (already set) | 6, 7 line type (Lookup v2, about 1 cent each, cached 30 days) | phone part "not set up" |
 | `IPINFO_TOKEN` (ipinfo.io; VPN flags need its privacy data) | 9 IP country, region, network, VPN | device sharing still checked |
+| `FLINKS_BASE_URL`, `FLINKS_CUSTOMER_ID`, `FLINKS_AUTH_KEY` (optional) | 3 statement vs live bank - only with the `bank_connect` add-on (below) | "not set up" |
 | `FRAUD_RDAP=off` | 6, 7 domain age via rdap.org (public, on by default) | - |
 | `FRAUD_STAFF_HOURLY_FILE_LIMIT` (default 150) | 14 high-volume alert | - |
 | `FRAUD_EXTRA_DISPOSABLE_DOMAINS` (comma separated) | 7 | built-in list only |
 | `FRAUD_IDV_PROVIDER`, `FRAUD_VOICE_PROVIDER`, `FRAUD_ADDRESS_PROVIDER` | 8, 15, 6 | no vendor is wired in yet: "not set up" |
+
+**Bank connect is a hidden add-on, not a plan feature** (KS_SERVER_BANK_CONNECT_ADDON). Keystone operations switches it
+on for one licensee (`PUT /api/plan { "addons": { "bank_connect": true } }`, pushed by KS-Ops). While it is off (the
+default) nothing about it exists on the copy: no Connect Bank (View-Only) applicant step or Request Items entry, no fraud
+check 3 (not listed, not locked, not scored), no Flinks row on the Fraud settings card, and the bank-link routes answer
+404. `GET /api/plan` lists `addons` with only the ones that are on.
 
 What is stored (privacy): check results with plain-English reasons; per file its SHA-256 and 64-bit picture hashes,
 image size and editor/camera flags (never a copy of an ID); from the client app a keyed hash of a random device id

@@ -2,7 +2,8 @@
 //   GET  /api/plan                   any signed-in staff: plan, trial, features, allowances, storage, trial usage
 //   POST /api/plan/trial             Admin: start the free 14-day trial (409 { reason } when not available)
 //   POST /api/plan/upgrade-request   Admin: { plan, extra_storage_blocks? } - emails Keystone sales
-//   PUT  /api/plan                   operations only (X-KS-Ops-Key = KS_OPS_KEY): { plan?, extra_storage_blocks?, status? }
+//   PUT  /api/plan                   operations only (X-KS-Ops-Key = KS_OPS_KEY): { plan?, extra_storage_blocks?, status?, addons? }
+//                                    addons = { bank_connect?: boolean } (KS_SERVER_BANK_CONNECT_ADDON; not a plan feature)
 //   GET  /api/plan/usage-report?period=YYYY-MM   operations only: the UsageReport (KS_SERVER_v8_USAGE)
 // Licensee admins cannot change their own plan; that is set by operations.
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -18,6 +19,7 @@ import { planOverview, storageFor } from "../plans/overview.js";
 import { getPlanState, setPlan, startTrial, trialUsage, type Q } from "../plans/state.js";
 import { buildUsageReport, isPeriod, licenseeTimeZone, periodOf } from "../plans/usage.js"; // KS_SERVER_v8_USAGE
 import { postToOps, opsConfig } from "../plans/opsLink.js"; // KS_SERVER_v8_OPS_LINK
+import { parseAddonPatch } from "../plans/addons.js"; // KS_SERVER_BANK_CONNECT_ADDON
 
 const router = Router();
 const db = () => pool as unknown as Q;
@@ -138,9 +140,12 @@ router.put("/", safeHandler(async (req: any, res) => {
   const rawStatus = req.body?.status;
   const status = rawStatus === undefined || rawStatus === null || rawStatus === "" ? undefined : String(rawStatus).trim().toLowerCase();
   if (status !== undefined && !isServiceStatus(status)) return res.status(400).json({ ok: false, error: "invalid_status" });
-  if (plan === undefined && blocks.value === undefined && status === undefined) return res.status(400).json({ ok: false, error: "nothing_to_change" });
+  // KS_SERVER_BANK_CONNECT_ADDON - { addons: { bank_connect: true|false } }; only operations can set it.
+  const addons = parseAddonPatch(req.body?.addons);
+  if (!addons.ok) return res.status(400).json({ ok: false, error: "invalid_addons" });
+  if (plan === undefined && blocks.value === undefined && status === undefined && addons.value === undefined) return res.status(400).json({ ok: false, error: "nothing_to_change" });
   const by = String(req.headers["x-ks-ops-user"] ?? "ops").slice(0, 120);
-  await setPlan(db(), { plan: plan as any, extra_storage_blocks: blocks.value, status: status as any }, by);
+  await setPlan(db(), { plan: plan as any, extra_storage_blocks: blocks.value, status: status as any, addons: addons.value }, by);
   return res.json(await planOverview(db()));
 }));
 

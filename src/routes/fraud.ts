@@ -4,6 +4,8 @@
 //   GET  /api/fraud/applications/:id/network      pro (fraud_12): the network graph (masked labels)
 //   GET  /api/fraud/applications/:id/prescreen    pro (fraud_16): the pre-screen summary text
 //   PUT  /api/fraud/applications/:id/prescreen    pro (fraud_16): { include_in_package: boolean }
+//   PUT  /api/fraud/applications/:id/bank-link    bank_connect add-on (fraud_3): { login_id } from Flinks Connect; DELETE
+//                                                 removes it. 404 while the add-on is off (KS_SERVER_BANK_CONNECT_ADDON).
 //   GET  /api/fraud/settings                      Admin: watchlist opt-in, pre-screen default, which services are set up
 //   PUT  /api/fraud/settings                      Admin: { watchlist_opt_in?, include_prescreen_in_package? }
 //   GET  /api/fraud/staff-alerts                  Admin, pro (fraud_14): recent inside-job events
@@ -14,6 +16,8 @@ import { auth, requireAuthorization } from "../middleware/auth.js";
 import { ROLES } from "../auth/roles.js";
 import { safeHandler } from "../middleware/safeHandler.js";
 import { requireFeature } from "../plans/requireFeature.js";
+import { requireAddon } from "../plans/addonGate.js"; // KS_SERVER_BANK_CONNECT_ADDON
+import { ADDON_FRAUD_CHECKS } from "../plans/addons.js";
 import { checkFeature, featureDef } from "../plans/catalogue.js";
 import { getPlanState, type Q } from "../plans/state.js";
 import { FRAUD_CHECKS } from "../fraud/catalogue.js";
@@ -54,7 +58,8 @@ router.get("/applications/:id", ...staff, safeHandler(async (req: any, res) => {
        FROM documents WHERE application_id::text = $1 ORDER BY created_at ASC`,
     [app.id],
   );
-  const checks = FRAUD_CHECKS.map((c) => {
+  // KS_SERVER_BANK_CONNECT_ADDON - an add-on check is left out entirely (not "locked") while its add-on is off.
+  const checks = FRAUD_CHECKS.filter((c) => !ADDON_FRAUD_CHECKS[c.key] || allowed.has(c.key)).map((c) => {
     const locked = !allowed.has(c.key);
     const mine = rows.filter((r) => r.check_key === c.key && r.subject === "");
     const r = mine[0];
@@ -111,6 +116,25 @@ router.put("/applications/:id/prescreen", ...staff, requireFeature("fraud_16"), 
   return res.json({ ok: true, include_in_package: req.body.include_in_package });
 }));
 
+router.put("/applications/:id/bank-link", ...staff, requireAddon("bank_connect"), safeHandler(async (req: any, res) => {
+  const loginId = String(req.body?.login_id ?? "").trim();
+  if (!/^[A-Za-z0-9-]{8,80}$/.test(loginId)) return res.status(400).json({ ok: false, error: "login_id must be the Flinks LoginId" });
+  const app = await appExists(String(req.params.id));
+  if (!app) return res.status(404).json({ ok: false, error: "not_found" });
+  await db().query(
+    `INSERT INTO fraud_bank_links (application_id, provider, login_id, created_by) VALUES ($1, 'flinks', $2, $3)
+     ON CONFLICT (application_id) DO UPDATE SET login_id = EXCLUDED.login_id, created_by = EXCLUDED.created_by, created_at = now()`,
+    [app.id, loginId, userIdOf(req)],
+  );
+  await enqueueFraudRun(db(), app.id, "bank_link");
+  return res.json({ ok: true });
+}));
+
+router.delete("/applications/:id/bank-link", ...staff, requireAddon("bank_connect"), safeHandler(async (req: any, res) => {
+  await db().query(`DELETE FROM fraud_bank_links WHERE application_id = $1`, [String(req.params.id)]);
+  return res.json({ ok: true });
+}));
+
 router.get("/settings", ...admin, safeHandler(async (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
   const allowed = await allowedChecks(db());
@@ -118,7 +142,7 @@ router.get("/settings", ...admin, safeHandler(async (_req, res) => {
     ok: true,
     settings: await getFraudSettings(db()),
     watchlist: { available: allowed.has("fraud_13"), ready: watchlistReady().ok, why: watchlistReady().ok ? null : (watchlistReady() as { why: string }).why },
-    services: providerStatus(fraudProviders()),
+    services: providerStatus(fraudProviders(), { bankConnect: allowed.has("fraud_3") }),
     allowed: [...allowed],
   });
 }));

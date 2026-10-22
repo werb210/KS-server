@@ -136,7 +136,7 @@ export async function gatherFacts(applicationId: string) {
     loadFinancialTable(applicationId), loadCollateral(applicationId), loadResearch(applicationId).then((r) => r.facts as any[]),
     app.contact_id ? loadCrmTimeline(true, String(app.contact_id), String(app.silo ?? "BF")).catch((e) => { console.warn("[credit-summary-v2] timeline_failed", (e as Error)?.message); return []; }) : Promise.resolve([]),
     // BF_SERVER_CREDIT_DOC_KINDS_v783 - "6 months business banking statements" counts as bank statements.
-    import("./docKinds.js").then((m) => m.documentsOfKinds(applicationId, ["bank_statements_6_months"])).then((d) => d.length),
+    import("./docKinds.js").then((m) => m.documentsOfKinds(applicationId, ["bank_statements_6_months", "flinks_banking"])).then((d) => d.length),
   ]);
   const md = app.metadata ?? {}; const usable = research.filter((f) => f.status === "reported" || f.status === "confirmed");
   const facts = { application: { business: md.business ?? null, requested_amount: app.requested_amount, product: app.product_category,

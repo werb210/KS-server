@@ -36,14 +36,15 @@ export const FORM_TASKS: Array<{ key: string; label: string; match: RegExp }> = 
   { key: "debt", label: "Debt Stack", match: /debt/i },
   { key: "equipment", label: "Equipment Details", match: /equipment/i },
   { key: "realestate", label: "Real Estate Schedule", match: /real.?estate/i },
+  { key: "flinks", label: "Connect Bank (View-Only)", match: /flinks|bank/i },
 ];
 
 const norm = (s: string): string => String(s ?? "").trim().toLowerCase();
 
 // BF_SERVER_v807_FORM_DOCS - a lender's required "document" that is really one of our forms (the PNW
 // statement, debt stack, equipment list, real estate schedule, advisors list). The client fills these in as
-// forms; they used to show as a file to upload (and the form itself read "Optional"). CRA is not here on
-// purpose: it is listed only when staff tick it in Request Items.
+// forms; they used to show as a file to upload (and the form itself read "Optional"). CRA and bank
+// connection are not here on purpose: they are listed only when staff tick them in Request Items.
 export const FORM_DOC_TYPES: Record<string, string> = {
   personal_net_worth: "networth",
   net_worth_statement: "networth",

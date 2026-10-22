@@ -22,12 +22,12 @@ describe("credit summary readers find documents filed under their requirement la
   it("financials, collateral and bank statements each get their documents", async () => {
     expect((await documentsOfKinds("A1", ["financial_statements", "tax_returns"])).map((d) => d.id)).toEqual(["1", "5"]);
     expect((await documentsOfKinds("A1", ["accounts_receivable_aging", "accounts_payable_aging"])).map((d) => d.id)).toEqual(["2", "3"]);
-    expect((await documentsOfKinds("A1", ["bank_statements_6_months"])).map((d) => d.id)).toEqual(["4"]);
+    expect((await documentsOfKinds("A1", ["bank_statements_6_months", "flinks_banking"])).map((d) => d.id)).toEqual(["4"]);
   });
   it("all three readers use it; research reports a count; a numeric legal name is not used as the name", () => {
     expect(readFileSync("src/services/credit/financials.ts", "utf8")).toContain("documentsOfKinds(applicationId, [\"financial_statements\"");
     expect(readFileSync("src/services/credit/collateral.ts", "utf8")).toContain("documentsOfKinds(applicationId, Object.keys(CATEGORY_KIND))");
-    expect(readFileSync("src/services/credit/creditSummaryV2.ts", "utf8")).toContain("m.documentsOfKinds(applicationId, [\"bank_statements_6_months\"])");
+    expect(readFileSync("src/services/credit/creditSummaryV2.ts", "utf8")).toContain("m.documentsOfKinds(applicationId, [\"bank_statements_6_months\", \"flinks_banking\"])");
     expect(readFileSync("src/routes/creditResearch.ts", "utf8")).toContain("res.json({ ...result, list: loaded.facts, found: result.facts });");
     expect(readFileSync("src/services/credit/creditSummaryV2.ts", "utf8")).toContain("!/^[\\d\\s-]+$/.test(String(n))");
   });

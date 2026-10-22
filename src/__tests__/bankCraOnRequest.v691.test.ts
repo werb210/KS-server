@@ -24,7 +24,8 @@ const STAFF_ID = "00000000-0000-4000-8000-0000000000b1";
 const AUTO = "NOT (staff_name IS NULL AND cta_action IN ('cra','flinks','form:cra','form:flinks'))";
 const staffToken = () => jwt.sign({ sub: STAFF_ID, role: "Staff", tokenVersion: 0, tv: 0 }, process.env.JWT_SECRET as string);
 
-beforeEach(() => {
+beforeEach(async () => {
+  (await import("../plans/state.js")).clearPlanCache();
   queryMock.mockReset();
   notifyClient.mockClear();
 });
@@ -72,6 +73,7 @@ describe("Connect Bank and CRA Authorization only when staff request them", () =
     queryMock.mockImplementation(answerBySql([
       [/SELECT id FROM applications WHERE id::text/, { rows: [{ id: APP_ID }] }],
       [/SELECT silo FROM applications/, { rows: [{ silo: "BF" }] }],
+      [/FROM licensee_plan WHERE id = 1/, { rows: [{ plan: "pro", addons: { bank_connect: true } }] }], // KS_SERVER_BANK_CONNECT_ADDON
     ]));
     const router = (await import("../modules/applications/applications.routes.js")).default;
     const { errorHandler } = await import("../middleware/errors.js");
@@ -84,8 +86,7 @@ describe("Connect Bank and CRA Authorization only when staff request them", () =
     const [existing] = callsMatching(queryMock, /SELECT DISTINCT cta_action FROM communications_messages/)[0]!;
     expect(sqlText(existing)).toContain(AUTO);
     // The automatic prompts are not counted, so the staff request posts real buttons.
-    // KS_SERVER_NO_BANK_CONNECT - Connect Bank (Flinks) is not a step Keystone can request.
-    expect(res.body.posted.forms).toEqual(["cra"]);
+    expect(res.body.posted.forms).toEqual(["cra", "flinks"]);
   });
 
   it("the client thread hides an old automatic prompt (no staff name)", async () => {

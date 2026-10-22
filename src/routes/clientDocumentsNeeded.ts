@@ -14,6 +14,7 @@ import { logInfo } from "../observability/logger.js"; // BF_SERVER_SBA_1919_ATTA
 
 import { callerOwnsApplication } from "../auth/clientApplicationOwnership.js";
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js";
+import { bankConnectEnabled } from "../plans/addonGate.js"; // KS_SERVER_BANK_CONNECT_ADDON
 import { safeHandler } from "../middleware/safeHandler.js"; // BF_SERVER_v789_SAFE_HANDLERS // BF_SERVER_SILENT_QUERIES_v678
 
 const router = Router();
@@ -133,7 +134,7 @@ function humanize(category: string): string {
 }
 
 const CMP_FORM =
-  /net worth|\bcra\b|debt stack|real estate collateral|equipment collateral|professional advisor|\badvisor/i; // BF_SERVER_CMP_FORM_FIX_v1
+  /net worth|flinks|banking connection|connect bank|\bcra\b|debt stack|real estate collateral|equipment collateral|professional advisor|\badvisor/i; // BF_SERVER_CMP_FORM_FIX_v1
 
 // BF_SERVER_SBA_DOC_LIST_v113
 // Forms Boreal BUILDS and the applicant SIGNS in SignNow. They must never appear
@@ -539,13 +540,13 @@ export async function computeOutstandingDocs(
 // BF_SERVER_BLOCK_v_FORM_WAIVERS_v1 - form ids that have been requested of the
 // client (posted as task prompts). Mirrors the cta_action contract used by
 // task-status so the Request Items tab and the Application tab agree on forms.
-const FORM_IDS = ["networth", "cra", "debt", "realestate", "equipment", "advisors"];
+const FORM_IDS = ["networth", "flinks", "cra", "debt", "realestate", "equipment", "advisors"];
 export async function getRequestedFormIds(applicationId: string): Promise<string[]> {
   const res = await pool.query<{ cta_action: string }>(
     `SELECT DISTINCT cta_action FROM communications_messages
       WHERE application_id::text = ($1)::text
         AND (cta_action LIKE 'form:%'
-             OR cta_action IN ('networth','cra','debt','realestate','equipment','advisors'))
+             OR cta_action IN ('networth','flinks','cra','debt','realestate','equipment','advisors'))
         AND NOT (staff_name IS NULL AND cta_action IN ('cra','flinks','form:cra','form:flinks')) -- BF_SERVER_BANK_CRA_ON_REQUEST_v691`,
     [applicationId]
   ).catch((swallowedErr: unknown) => logWarnSwallowed(swallowedErr, "routes/clientDocumentsNeeded.ts:499", ({ rows: [] as Array<{ cta_action: string }> })));
@@ -555,6 +556,8 @@ export async function getRequestedFormIds(applicationId: string): Promise<string
     if (k.startsWith("form:")) k = k.slice(5);
     if (FORM_IDS.includes(k)) ids.add(k);
   }
+  // KS_SERVER_BANK_CONNECT_ADDON - Connect Bank is never a requested form while the bank_connect add-on is off.
+  if (ids.has("flinks") && !(await bankConnectEnabled())) ids.delete("flinks");
   return Array.from(ids);
 }
 

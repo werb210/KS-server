@@ -9,6 +9,7 @@ import { renderPrescreenPdf } from "../prescreen.js";
 import { buildProfile, parseMoneyRange } from "../profile.js";
 import { localHash, normAddress, normEmail, normPhone, watchlistHash, normDomain } from "../hash.js";
 import { featuresFor, FEATURES } from "../../plans/catalogue.js";
+import { ADDON_FRAUD_CHECKS } from "../../plans/addons.js";
 import { FRAUD_CHECKS } from "../catalogue.js";
 import { maskEmail, maskPhone, streetKey } from "../network.js";
 
@@ -150,9 +151,8 @@ describe("check 16: score and pre-screen", () => {
     expect(s.band).toBe("medium");
     expect(s.reasons[0]!.severity).toBe("red");
     expect(s.covered.map((c) => c.check)).toEqual(["fraud_1", "fraud_5", "fraud_7"]);
-    expect(s.not_covered.some((c) => c.check === "fraud_2")).toBe(true);
-    expect(all.has("fraud_3" as any)).toBe(false); // KS_SERVER_NO_BANK_CONNECT
-    const many = computeScore(["fraud_1", "fraud_2", "fraud_4", "fraud_6"].map((k) => row(k, "red")), all);
+    expect(s.not_covered.some((c) => c.check === "fraud_3")).toBe(true);
+    const many = computeScore(["fraud_1", "fraud_2", "fraud_3", "fraud_4"].map((k) => row(k, "red")), all);
     expect(many.score).toBe(100);
     expect(band(19)).toBe("low");
     expect(band(50)).toBe("high");
@@ -194,11 +194,13 @@ describe("profile, hashing, plans", () => {
     expect(localHash("device", "", {} as any)).toBeNull();
   });
 
-  it("starter = 1, 2, 4, 5; growth adds 6, 7, 8; pro has all 15 (fraud_3 retired)", () => {
+  it("starter = 1, 2, 4, 5; growth adds 6, 7, 8; pro has all but 3 (3 is the bank_connect add-on)", () => {
     const on = (plan: "starter" | "growth" | "pro") => Object.entries(featuresFor(plan)).filter(([k, v]) => k.startsWith("fraud_") && v).map(([k]) => Number(k.slice(6))).sort((a, b) => a - b);
     expect(on("starter")).toEqual([1, 2, 4, 5]);
     expect(on("growth")).toEqual([1, 2, 4, 5, 6, 7, 8]);
     expect(on("pro")).toEqual(Array.from({ length: 16 }, (_, i) => i + 1).filter((n) => n !== 3));
-    expect(FRAUD_CHECKS.every((c) => FEATURES.some((f) => f.key === c.key))).toBe(true);
+    // KS_SERVER_BANK_CONNECT_ADDON - every check is a plan feature except the add-on ones, which never are.
+    expect(FRAUD_CHECKS.every((c) => FEATURES.some((f) => f.key === c.key) !== Boolean(ADDON_FRAUD_CHECKS[c.key]))).toBe(true);
+    expect(FEATURES.some((f) => f.key === "bank_connect")).toBe(false);
   });
 });

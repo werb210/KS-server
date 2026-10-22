@@ -36,5 +36,7 @@ export async function planOverview(db: Q, now: Date = new Date()) {
     cancelled_at: state.cancelled_at ? state.cancelled_at.toISOString() : null,
     purge_after: state.cancelled_at ? new Date(state.cancelled_at.getTime() + 180 * 86_400_000).toISOString() : null,
     usage: monthly, // KS_SERVER_v8_USAGE - this month's minutes, texts, assistant chats, storage vs pooled allowances
+    // KS_SERVER_BANK_CONNECT_ADDON - only the add-ons that are ON ({} when none). Off add-ons are never named.
+    addons: { ...(state.addons ?? {}) },
   };
 }
