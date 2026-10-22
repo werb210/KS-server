@@ -3,6 +3,7 @@ import type { Q } from "../plans/state.js";
 import { getPlanState } from "../plans/state.js";
 import { checkFeature } from "../plans/catalogue.js";
 import { FRAUD_CHECKS } from "./catalogue.js";
+import { ADDON_FRAUD_CHECKS, hasAddon } from "../plans/addons.js"; // KS_SERVER_BANK_CONNECT_ADDON
 import type { CheckResult, FraudStatus, Reason } from "./types.js";
 
 export type ResultRow = {
@@ -87,8 +88,12 @@ export async function saveFraudSettings(db: Q, patch: Partial<Pick<FraudSettings
   return getFraudSettings(db);
 }
 
-/** The fraud checks the plan in force (or the running trial) includes. */
+/** The fraud checks the plan in force (or the running trial) includes. KS_SERVER_BANK_CONNECT_ADDON - an add-on check
+ *  (fraud_3) is included only while its add-on is on, whatever the plan; when off it is simply not a check here. */
 export async function allowedChecks(db: Q, now = new Date()): Promise<Set<string>> {
   const state = await getPlanState(db, now.getTime());
-  return new Set(FRAUD_CHECKS.filter((c) => checkFeature(state, c.key, now).allowed).map((c) => c.key));
+  return new Set(FRAUD_CHECKS.filter((c) => {
+    const addon = ADDON_FRAUD_CHECKS[c.key];
+    return addon ? hasAddon(state, addon) : checkFeature(state, c.key, now).allowed;
+  }).map((c) => c.key));
 }

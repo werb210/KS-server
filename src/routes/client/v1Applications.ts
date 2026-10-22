@@ -626,6 +626,7 @@ router.post(
         // mini-portal chip id so the form opens as a modal.
         const FORM_BY_KEYWORD: Array<[RegExp, string, string]> = [
           [/net worth/i, "networth", "Personal Net Worth"],
+          [/flinks|banking connection|connect bank/i, "flinks", "Connect Bank (View-Only)"],
           [/\bcra\b/i, "cra", "CRA Authorization"],
           [/debt/i, "debt", "Debt Stack"],
           [/real estate/i, "realestate", "Real Estate Collateral"],
@@ -636,7 +637,7 @@ router.post(
           // was redundant and left a task perpetually incomplete.
         ];
         const v711_already = await pool.query(
-          `SELECT 1 FROM communications_messages WHERE application_id = $1 AND (cta_action LIKE 'form:%' OR cta_action IN ('networth','cra','debt','realestate','equipment','upload','upload_docs')) LIMIT 1`,
+          `SELECT 1 FROM communications_messages WHERE application_id = $1 AND (cta_action LIKE 'form:%' OR cta_action IN ('networth','flinks','cra','debt','realestate','equipment','upload','upload_docs')) LIMIT 1`,
           [application.id],
         );
         if (!v711_already.rows.length) {
@@ -656,8 +657,8 @@ router.post(
             const v711_isAdvisor = /professional advisor|\badvisor/i.test(String(row?.document_type ?? ""));
             if (!v711_isAdvisor && Number(row?.stage ?? 1) !== 2) continue;
             const hit = FORM_BY_KEYWORD.find(([re]) => re.test(String(row?.document_type ?? "")));
-            // BF_SERVER_BANK_CRA_ON_REQUEST_v691 - CRA Authorization appears only when staff request it (no Connect Bank in Keystone).
-            if (hit && hit[1] === "cra") continue;
+            // BF_SERVER_BANK_CRA_ON_REQUEST_v691 - Connect Bank and CRA Authorization appear only when staff request them.
+            if (hit && (hit[1] === "flinks" || hit[1] === "cra")) continue;
             if (hit && !v711_forms.some((f) => f.id === hit[1])) v711_forms.push({ id: hit[1], name: hit[2] });
           }
           if (v711_forms.length) {

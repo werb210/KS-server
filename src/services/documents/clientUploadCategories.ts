@@ -41,6 +41,7 @@ export const CLIENT_UPLOADABLE_LABELS: readonly string[] = [
   "Lease agreement (if applicable)",
   "Lease agreement",
   "Debt stack",
+  "Banking connection (Flinks view-only)",
   "CRA view-only access",
   "Real estate collateral",
   "Equipment collateral",

@@ -4,6 +4,8 @@
 // copy behaves as pro for features, assistant chats and storage, but calls/texts stay at starter's allowance plus a
 // small trial bonus. Growth and pro brokerages are not offered a trial. Nothing here touches the database.
 
+import type { Addons } from "./addons.js";
+
 export const PLANS = ["starter", "growth", "pro"] as const;
 export type Plan = (typeof PLANS)[number];
 export type TrialStatus = "available" | "active" | "used" | "not_offered";
@@ -53,9 +55,9 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "api_access", label: "API access", plan: "pro" },
   { key: "sso", label: "Single sign-on", plan: "pro" },
   // KS_SERVER_v9_FRAUD - the fraud-protection suite (Todd, Oct 23): starter = 1, 2, 4, 5; growth adds 6, 7, 8;
-  // pro has all 15. The key number matches the feature list in src/fraud/catalogue.ts.
-  // KS_SERVER_NO_BANK_CONNECT - no Flinks / bank connect in Keystone (owner decision): bank_connect and fraud_3
-  // are gone and the other keys keep their numbers.
+  // pro has all of them except fraud_3. The key number matches the feature list in src/fraud/catalogue.ts.
+  // KS_SERVER_BANK_CONNECT_ADDON - bank connect and fraud_3 (statement vs live bank data) are not plan features: they
+  // are the per-licensee bank_connect add-on Keystone operations switches on (src/plans/addons.ts). Never listed here.
   { key: "fraud_1", label: "Document tamper scan", plan: "starter" },
   { key: "fraud_2", label: "Bank statement math check", plan: "starter" },
   { key: "fraud_4", label: "Duplicate document check", plan: "starter" },
@@ -145,6 +147,8 @@ export type PlanState = {
   /** KS_SERVER_v8_SERVICE_STATUS - missing = active */
   service_status?: ServiceStatus;
   cancelled_at?: Date | null;
+  /** KS_SERVER_BANK_CONNECT_ADDON - add-ons operations switched on (missing = none). Not plan features. */
+  addons?: Addons;
 };
 
 export function trialActive(s: PlanState, now: Date = new Date()): boolean {

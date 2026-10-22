@@ -156,9 +156,9 @@ describe("form-response routes require a token", () => {
   const unknownId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
   it.each([
     ["get", `/api/client/applications/${unknownId}/form-responses`],
-    ["get", `/api/client/applications/${unknownId}/form-responses/professional_advisors`],
-    ["put", `/api/client/applications/${unknownId}/form-responses/professional_advisors`],
-    ["post", `/api/client/applications/${unknownId}/form-responses/professional_advisors/submit`],
+    ["get", `/api/client/applications/${unknownId}/form-responses/flinks_banking`],
+    ["put", `/api/client/applications/${unknownId}/form-responses/flinks_banking`],
+    ["post", `/api/client/applications/${unknownId}/form-responses/flinks_banking/submit`],
     ["get", "/api/client/applications/not-a-uuid/form-responses"],
   ] as const)("%s %s without Authorization -> 401", async (method, path) => {
     const app = await clientApp();

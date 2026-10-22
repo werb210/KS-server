@@ -36,9 +36,9 @@ const providers = fraudProviders({ NODE_ENV: "test" } as any);
 const cheque = makeJpeg(900, 400, 88, 2);
 const loadFile = async (d: { id: string }) => docs[d.id] ?? null;
 
-async function setPlan(plan: "starter" | "growth" | "pro") {
+async function setPlan(plan: "starter" | "growth" | "pro", addons: Record<string, boolean> = {}) {
   await pool.query(`DELETE FROM licensee_plan`);
-  await pool.query(`INSERT INTO licensee_plan (id, plan) VALUES (1, $1)`, [plan]);
+  await pool.query(`INSERT INTO licensee_plan (id, plan, addons) VALUES (1, $1, $2::jsonb)`, [plan, JSON.stringify(addons)]); // KS_SERVER_BANK_CONNECT_ADDON
   clearPlanCache();
 }
 
@@ -85,7 +85,7 @@ describe("KS v9 fraud suite (real Postgres)", () => {
   afterAll(async () => {
     const warn = (e: unknown) => console.warn("cleanup", String(e));
     const apps = [A, B, F, C];
-    for (const t of ["fraud_check_results", "fraud_queue", "document_fingerprints", "fraud_device_signals", "fraud_watchlist_shares", "banking_transactions"]) {
+    for (const t of ["fraud_check_results", "fraud_queue", "document_fingerprints", "fraud_device_signals", "fraud_watchlist_shares", "fraud_bank_links", "banking_transactions"]) {
       await pool.query(`DELETE FROM ${t} WHERE application_id = ANY($1::text[])`, [apps]).catch(warn);
     }
     await pool.query(`DELETE FROM banking_analyses WHERE application_id = ANY($1::text[])`, [apps]).catch(warn);
@@ -131,7 +131,7 @@ describe("KS v9 fraud suite (real Postgres)", () => {
     expect(by("fraud_12")!.status).toBe("red"); // shares a phone with a confirmed fraud file
     expect(by("fraud_9")!.status).toBe("amber"); // device used for one other business
     expect(by("fraud_10")!.status).toBe("red"); // 25 seconds for 40 fields
-    expect(by("fraud_3")).toBeUndefined(); // KS_SERVER_NO_BANK_CONNECT - no live bank check
+    expect(by("fraud_3")).toBeUndefined(); // KS_SERVER_BANK_CONNECT_ADDON - add-on off: check 3 does not run, even on pro
     expect(by("fraud_6")!.status).not.toBe("green"); // nothing it could check
     expect(by("fraud_15")!.status).toBe("not_applicable");
     expect(by("fraud_13")!.status).toBe("not_applicable"); // sharing is off
@@ -145,7 +145,10 @@ describe("KS v9 fraud suite (real Postgres)", () => {
   async function overviewAndGates() {
     const pro = await request(app()).get(`/api/fraud/applications/${A}`).set("Authorization", `Bearer ${token("Staff")}`);
     expect(pro.status).toBe(200);
-    expect(pro.body.checks).toHaveLength(15); // KS_SERVER_NO_BANK_CONNECT - fraud_3 retired
+    expect(pro.body.checks).toHaveLength(15); // KS_SERVER_BANK_CONNECT_ADDON - fraud_3 hidden while the add-on is off
+    expect(pro.body.checks.some((c: any) => c.key === "fraud_3")).toBe(false);
+    const link = await request(app()).put(`/api/fraud/applications/${A}/bank-link`).set("Authorization", `Bearer ${token("Staff")}`).send({ login_id: "5e2f6a3b-1111-4c4c-9d9d-000000000001" });
+    expect(link.status).toBe(404);
     expect(pro.body.checks.filter((c: any) => c.locked)).toEqual([]);
     expect(pro.body.score.score).toBeGreaterThanOrEqual(50);
     expect(pro.body.documents).toHaveLength(2);
@@ -160,7 +163,7 @@ describe("KS v9 fraud suite (real Postgres)", () => {
     await setPlan("starter");
     const starter = await request(app()).get(`/api/fraud/applications/${A}`).set("Authorization", `Bearer ${token("Staff")}`);
     const locked = starter.body.checks.filter((c: any) => c.locked).map((c: any) => Number(c.key.slice(6))).sort((a: number, b: number) => a - b);
-    expect(locked).toEqual([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+    expect(locked).toEqual([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]); // never "locked 3": an off add-on is not an upsell
     expect(starter.body.score).toBeNull();
     const refused = await request(app()).get(`/api/fraud/applications/${A}/network`).set("Authorization", `Bearer ${token("Staff")}`);
     expect(refused.status).toBe(402);
@@ -171,7 +174,31 @@ describe("KS v9 fraud suite (real Postgres)", () => {
     expect(staffSettings.status).toBe(403);
     const settings = await request(app()).get(`/api/fraud/settings`).set("Authorization", `Bearer ${token("Admin")}`);
     expect(settings.body.services.find((s: any) => s.key === "voice").configured).toBe(false);
+    expect(settings.body.services.some((s: any) => s.key === "bank")).toBe(false);
+    expect(settings.body.allowed).not.toContain("fraud_3");
   }
+
+  // KS_SERVER_BANK_CONNECT_ADDON - operations switched bank connect on for this licensee (any plan).
+  it("with the bank_connect add-on on, check 3 runs, is listed and the bank link can be saved", async () => {
+    try {
+      await setPlan("starter", { bank_connect: true });
+      await runFraudChecks(db, A, { loadFile, providers, licenseeCountry: async () => "CA" });
+      expect((await listResults(db, A)).find((x) => x.check_key === "fraud_3" && x.subject === "")!.status).toBe("not_configured");
+      const ov = await request(app()).get(`/api/fraud/applications/${A}`).set("Authorization", `Bearer ${token("Staff")}`);
+      const three = ov.body.checks.find((c: any) => c.key === "fraud_3");
+      expect(three).toMatchObject({ label: "Statement vs live bank data", locked: false });
+      const link = await request(app()).put(`/api/fraud/applications/${A}/bank-link`).set("Authorization", `Bearer ${token("Staff")}`).send({ login_id: "5e2f6a3b-1111-4c4c-9d9d-000000000001" });
+      expect(link.status).toBe(200);
+      expect((await pool.query(`SELECT login_id FROM fraud_bank_links WHERE application_id = $1`, [A])).rows[0].login_id).toBe("5e2f6a3b-1111-4c4c-9d9d-000000000001");
+      const settings = await request(app()).get(`/api/fraud/settings`).set("Authorization", `Bearer ${token("Admin")}`);
+      expect(settings.body.services.find((s: any) => s.key === "bank")).toMatchObject({ used_by: ["fraud_3"] });
+      const del = await request(app()).delete(`/api/fraud/applications/${A}/bank-link`).set("Authorization", `Bearer ${token("Staff")}`);
+      expect(del.status).toBe(200);
+    } finally {
+      await pool.query(`DELETE FROM fraud_check_results WHERE application_id = $1 AND check_key = 'fraud_3'`, [A]);
+      await setPlan("pro");
+    }
+  });
 
   it("statement math is stored per document from the banking hook", async () => {
     const docId = (await pool.query(`SELECT id FROM documents WHERE application_id = $1 AND category = 'bank_statements_6_months'`, [A])).rows[0].id;

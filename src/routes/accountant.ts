@@ -6,6 +6,7 @@ import { safeHandler } from "../middleware/safeHandler.js";
 import { persistAndEnqueue } from "./documents.js";
 import { computeOutstandingDocs } from "./clientDocumentsNeeded.js"; // BF_SERVER_ACCOUNTANT_SURFACE_v2
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
+import { bankConnectEnabled } from "../plans/addonGate.js"; // KS_SERVER_BANK_CONNECT_ADDON
 
 const router: Router = Router();
 
@@ -25,6 +26,7 @@ export const ACCOUNTANT_DOC_CATEGORIES: string[] = [
   "Corporate structure / org chart",
   "Business plan / projections",
   "Debt stack",
+  "Banking connection (Flinks view-only)",
   "CRA view-only access",
   "Equipment collateral",
   "Professional advisors (CPA / lawyer / insurance)",
@@ -113,6 +115,7 @@ export const ACCOUNTANT_FORM_DOC_TYPES: string[] = [
   "real_estate_collateral_disclosure",
   "professional_advisors",
   "cra_view_only_authorization",
+  "flinks_banking",
 ];
 
 const FORM_ALLOWED = new Set(ACCOUNTANT_FORM_DOC_TYPES);
@@ -215,6 +218,10 @@ router.get(
     const requestedForms = (outstanding.required ?? [])
       .map((d: any) => String(d?.document_type ?? ""))
       .filter((d: string) => d && isAccountantForm(d));
+    // KS_SERVER_BANK_CONNECT_ADDON - the Flinks banking form only while the bank_connect add-on is on.
+    if (requestedForms.includes("flinks_banking") && !(await bankConnectEnabled())) {
+      requestedForms.splice(requestedForms.indexOf("flinks_banking"), 1);
+    }
 
     // "Received" has to mean a file exists, not "no lender happened to ask for
     // this". Rejected documents do not count - the accountant needs to send

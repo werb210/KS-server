@@ -141,10 +141,10 @@ router.post("/account/delete", safeHandler(async (req: any, res: any) => {
 
 // BF_SERVER_BLOCK_v_CLIENT_FORM_RESPONSES_v1 — client-authenticated form-responses.
 // The CMP previously used the STAFF-gated /api/portal/.../form-responses routes,
-// so the client could never save CRA/advisors/etc. These mirror the portal
+// so the client could never save CRA/flinks/advisors/etc. These mirror the portal
 // routes on the SAME application_form_responses table, but authorize via the client
 // router's phone-based ownership. doc_type is the long key the forms use
-// (cra_view_only_authorization, professional_advisors, ...).
+// (cra_view_only_authorization, flinks_banking, ...).
 {
   // BF_SERVER_v789_FORM_RESPONSE_AUTH - the path id wins, so the id that is
   // authorized is the id that is read and written.
@@ -996,6 +996,7 @@ router.get(
       if (/debt/.test(s)) return "debt";
       if (/equipment/.test(s)) return "equipment";
       if (/real.?estate/.test(s)) return "realestate";
+      if (/flinks|bank/.test(s)) return "flinks";
       return null;
     };
     const v778_completed = new Set<string>();
@@ -1015,7 +1016,7 @@ router.get(
       console.warn("[client/messages] outstanding_docs_failed", { applicationId, message: err?.message });
     }
     if (v561_docsClear) v778_completed.add("upload_docs");
-    const V778_TASK_KEYS = new Set<string>(["cra", "networth", "advisors", "debt", "equipment", "realestate", "upload", "upload_docs"]);
+    const V778_TASK_KEYS = new Set<string>(["cra", "networth", "advisors", "debt", "equipment", "realestate", "flinks", "upload", "upload_docs"]);
     const v778_isTask = (cta: any): boolean => { if (!cta) return false; let k = String(cta); if (k.startsWith("form:")) k = k.slice(5); return V778_TASK_KEYS.has(k) || k.startsWith("upload:"); };
     const v778_isDone = (cta: any): boolean => {
       if (!cta) return false;
@@ -1029,7 +1030,7 @@ router.get(
       return v778_completed.has(k);
     };
     let v778_rows = (rows.rows ?? []).filter((r: any) => !v778_isDone(r.cta_action));
-    // BF_SERVER_BANK_CRA_ON_REQUEST_v691 - hide the old automatic CRA prompts (and any legacy Connect Bank one); staff-requested CRA stays.
+    // BF_SERVER_BANK_CRA_ON_REQUEST_v691 - hide the old automatic Connect Bank / CRA prompts; staff-requested ones stay.
     v778_rows = v778_rows.filter((r: any) => !(r.staff_name == null && ["cra", "flinks", "form:cra", "form:flinks"].includes(String(r.cta_action ?? ""))));
     // BF_SERVER_BLOCK_v563 - no PGI prompt until the client has signed a term sheet.
     if (v778_rows.some((r: any) => r.cta_label === "Complete PGI Application")) {
