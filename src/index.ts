@@ -53,7 +53,8 @@ import { warnIfOtpHashSaltDerived } from "./modules/auth/otpHashSalt.js"; // BF_
 
 const PORT = Number(process.env.PORT) || 8080;
 
-if (process.env.NODE_ENV === "production") {
+// KS_SERVER_v10_DEMO - the demo server (DEMO_MODE=true) has no Twilio and sends no texts.
+if (process.env.NODE_ENV === "production" && String(process.env.DEMO_MODE ?? "").toLowerCase() !== "true") {
   const twilioSid = process.env.TWILIO_VERIFY_SERVICE_SID?.trim();
   const KNOWN_FAKE_SIDS = ["VA_YOUR_REAL_SERVICE_SID_HERE", "your_service_sid", "REPLACE_ME"];
 
@@ -137,7 +138,8 @@ export async function start(): Promise<void> {
     "otp_verifications",
   ]);
 
-  if (process.env.NODE_ENV !== "test") {
+  // KS_SERVER_v10_DEMO - no staff accounts on the demo server (prospects get demo tokens from KS-Ops).
+  if (process.env.NODE_ENV !== "test" && String(process.env.DEMO_MODE ?? "").toLowerCase() !== "true") {
     try {
       const { pool } = await import("./db.js");
       const { rows } = await pool.query<{ count: number }>(
@@ -191,7 +193,7 @@ export async function start(): Promise<void> {
 
   // BF_AZURE_OCR_TERMSHEET_v44 — Azure Blob storage hard-check (production).
   // In development/test the storage factory falls back to LocalBackend.
-  if (process.env.NODE_ENV === "production" && !process.env.AZURE_STORAGE_CONNECTION_STRING) {
+  if (process.env.NODE_ENV === "production" && !process.env.AZURE_STORAGE_CONNECTION_STRING && String(process.env.DEMO_MODE ?? "").toLowerCase() !== "true") { // KS_SERVER_v10_DEMO - demo files live in Postgres
     throw new Error(
       "[FATAL] AZURE_STORAGE_CONNECTION_STRING is required in production. " +
       "Set it on Azure App Service → Configuration → Application settings."
@@ -202,6 +204,12 @@ export async function start(): Promise<void> {
   // Both are no-ops if NODE_ENV=test.
   // BF_SERVER_BLOCK_v479_BF_WORKERS_SWITCH - and off where BF_WORKERS_ENABLED=false (staging slot).
   const { bfWorkersEnabled } = await import("./startup/workersSwitch.js");
+  // KS_SERVER_v10_DEMO - the demo server's own jobs: progress events to KS-Ops and the expired-session wipe.
+  if (process.env.NODE_ENV !== "test" && String(process.env.DEMO_MODE ?? "").toLowerCase() === "true") {
+    const { pool } = await import("./db.js");
+    const { startDemoWorkers } = await import("./demo/index.js");
+    startDemoWorkers(pool);
+  }
   if (process.env.NODE_ENV !== "test" && !bfWorkersEnabled()) {
     console.warn("[startup] BF workers NOT started: BF_WORKERS_ENABLED=false (staging slot) - this instance sends no texts, emails or lender packages");
   }
