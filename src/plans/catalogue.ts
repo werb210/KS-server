@@ -32,6 +32,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "iphone_dialler", label: "iPhone dialler", plan: "starter" },
   { key: "office_sync", label: "Office 365 / Google sync", plan: "starter" },
   { key: "ai_assistant", label: "AI assistant", plan: "starter" },
+  // KS_SERVER_v9_PORTAL_PLANS - lender portal on every plan (Todd, Oct 22): lenders see files and send deals they can't place.
+  { key: "lender_portal", label: "Lender portal (lenders can send you deals they can't place)", plan: "starter" },
   // growth
   { key: "call_recording", label: "Call recording", plan: "growth" },
   { key: "call_summaries", label: "AI call summaries", plan: "growth" },
@@ -39,13 +41,14 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "watch_ipad_apps", label: "Apple Watch and iPad apps", plan: "growth" },
   { key: "templates", label: "Message templates", plan: "growth" },
   { key: "referrer_portal", label: "Referrer portal", plan: "growth" },
+  // KS_SERVER_v9_PORTAL_PLANS - co-broker portal (broker sign-up, files, split agreement) growth and up.
+  { key: "broker_portal", label: "Broker portal", plan: "growth" },
   // KS_SERVER_v7_NO_REPORTS_ON_STARTER - no reports on starter (Todd, Oct 22); starter keeps a basic dashboard.
   { key: "full_reports", label: "Reports", plan: "growth" },
   { key: "visitor_tracking", label: "Website visitor tracking", plan: "growth" },
   { key: "toll_free_number", label: "Toll-free number", plan: "growth" },
   // pro
   { key: "multiple_lines", label: "Multiple business lines", plan: "pro" },
-  { key: "lender_portal", label: "Lender portal", plan: "pro" },
   { key: "bank_connect", label: "Bank connect", plan: "pro" },
   { key: "ad_attribution", label: "Ad attribution", plan: "pro" },
   { key: "api_access", label: "API access", plan: "pro" },

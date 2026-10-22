@@ -104,7 +104,10 @@ describe("GET /api/plan", () => {
     });
     expect(r.body.features.contacts).toBe(true);
     expect(r.body.features.call_recording).toBe(false);
-    expect(r.body.catalogue).toContainEqual({ key: "lender_portal", label: "Lender portal", plan: "pro" });
+    expect(r.body.catalogue).toContainEqual({ key: "lender_portal", label: "Lender portal (lenders can send you deals they can't place)", plan: "starter" }); // KS_SERVER_v9_PORTAL_PLANS
+    expect(r.body.catalogue).toContainEqual({ key: "broker_portal", label: "Broker portal", plan: "growth" });
+    expect(r.body.features.lender_portal).toBe(true);
+    expect(r.body.features.broker_portal).toBe(false);
     expect((await request(app()).get("/api/plan")).status).toBe(401);
   });
 
@@ -121,7 +124,7 @@ describe("POST /api/plan/trial", () => {
     const r = await request(app()).post("/api/plan/trial").set("Authorization", `Bearer ${token("Admin")}`);
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ plan: "starter", effective_plan: "pro", trial: { status: "active", days_left: 14 } });
-    expect(r.body.features.lender_portal).toBe(true);
+    expect(r.body.features.sso).toBe(true);
     expect(r.body.allowances).toMatchObject({ minutes_per_seat: 150, texts_per_seat: 200, assistant_chats: null, storage_gb_per_seat: 50 });
     const ms = new Date(r.body.trial.ends_at).getTime() - new Date(r.body.trial.started_at).getTime();
     expect(ms).toBe(14 * 86_400_000);
@@ -223,11 +226,11 @@ describe("plan notices", () => {
 
   it("warns once with 3 days left and once when the trial ends, naming the features used", async () => {
     row = { plan: "starter", trial_started_at: new Date(now.getTime() - 11 * 86_400_000), trial_ends_at: new Date(now.getTime() + 3 * 86_400_000), extra_storage_blocks: 0 };
-    usage = { call_recording: 3, lender_portal: 1 };
+    usage = { call_recording: 3, broker_portal: 1 };
     let r = await runPlanNotices({ query: queryMock as any }, now);
     expect(r.sent).toEqual(["trial_warning_sent_at"]);
     expect(sendMock.mock.calls[0][0].subject).toContain("ends in 3 days");
-    expect(sendMock.mock.calls[0][0].text).toContain("Call recording, Lender portal");
+    expect(sendMock.mock.calls[0][0].text).toContain("Call recording, Broker portal");
     expect(sendMock.mock.calls[0][0].to).toEqual(["owner@prairie.example"]);
     r = await runPlanNotices({ query: queryMock as any }, now);
     expect(r.sent).toEqual([]);

@@ -11,6 +11,7 @@ import jwt from "jsonwebtoken";
 import { pool } from "../db.js";
 import { ROLES } from "../auth/roles.js";
 import { safeHandler } from "../middleware/safeHandler.js";
+import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v9_PORTAL_PLANS
 import { submitReferral } from "../modules/referrals/referrals.service.js";
 import { normalizeReferralSilos } from "../modules/referrals/referralInvite.js";
 // BF_SERVER_REFERRER_SIGNUP_v1
@@ -37,8 +38,11 @@ const digits10 = (v: unknown): string | null => {
 };
 
 // POST /api/referrer/signup - create pending referrer + agreement session.
+// KS_SERVER_v9_PORTAL_PLANS - the broker link (kind "broker") needs broker_portal; plain referrers pass through.
+const brokerSignupGate = requireFeature("broker_portal");
 router.post(
   "/signup",
+  (req: Request, res: Response, next: NextFunction) => (str((req.body ?? {}).kind) === "broker" ? brokerSignupGate(req, res, next) : next()),
   safeHandler(async (req: Request, res: Response) => {
     const b = (req.body ?? {}) as Record<string, unknown>;
     const fullName = str(b.full_name) ?? str(b.fullName);
