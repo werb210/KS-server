@@ -33,6 +33,7 @@ import { randomUUID } from "node:crypto";
 import { BlobServiceClient } from "@azure/storage-blob";
 import { renderBrandedEmail, type BrandedEmailFields } from "../services/emailTemplateRender.js";
 import { resolveScheduledAt, SendScheduleError } from "../services/sendSchedule.js"; // BF_SERVER_SEND_LATER_v35
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 
 const router = Router();
@@ -1229,7 +1230,7 @@ router.post("/templates", requireAuth, safeHandler(async (req: any, res: any) =>
   if (channel === "email" && b.html) {
     try {
       const priorSlug = slugFromLandingUrl(priorRow?.link_url);
-      const title = String(b.subject || name || "Boreal");
+      const title = String(b.subject || name || brandName());
       // Rewrite the existing page in place so links already sent stay live and
       // show the current copy. Fall through to a new page if the slug is gone.
       if (priorSlug && await updateLandingPageHtml(priorSlug, String(b.html), title)) {
@@ -1525,8 +1526,8 @@ router.delete("/sequences/:id", requireAuth, safeHandler(async (req: any, res: a
 // portal Automations section. Curated from the running workers + event hooks.
 router.get("/automations", requireAuth, safeHandler(async (_req: any, res: any) => {
   const items = [
-    { id: "product-knowledge", name: "Product knowledge sync", type: "scheduled", cadence: "Every 10 min", trigger: "A lender product is added or changed", action: "Ingest it into Maya's knowledge; prune removed products", status: "active" },
-    { id: "marketing-knowledge", name: "Marketing knowledge sync", type: "scheduled", cadence: "Every 10 min", trigger: "A marketing template or collateral file is added", action: "Ingest it into Maya's knowledge", status: "active" },
+    { id: "product-knowledge", name: "Product knowledge sync", type: "scheduled", cadence: "Every 10 min", trigger: "A lender product is added or changed", action: "Ingest it into the assistant's knowledge; prune removed products", status: "active" },
+    { id: "marketing-knowledge", name: "Marketing knowledge sync", type: "scheduled", cadence: "Every 10 min", trigger: "A marketing template or collateral file is added", action: "Ingest it into the assistant's knowledge", status: "active" },
     { id: "sequence-worker", name: "Drip sequences", type: "scheduled", cadence: "Every 30 sec", trigger: "A contact is enrolled in a sequence and a step is due", action: "Send the next email/SMS step", status: "active" },
     { id: "sms-cascade", name: "SMS-to-email fallback", type: "scheduled", cadence: "36h after send", trigger: "A marketing SMS gets no click and no reply within 36h", action: "Send the fallback marketing email", status: "active" },
     { id: "scheduled-email", name: "Scheduled email send", type: "scheduled", cadence: "When due", trigger: "A drafted email reaches its scheduled send time", action: "Send it via Outlook/Graph", status: "active" },

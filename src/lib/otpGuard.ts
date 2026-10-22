@@ -12,6 +12,7 @@
 // cap; Twilio Fraud Guard and Verify Geo Permissions are the other layers.
 
 // NANP area codes that are NOT Canada or the 50 US states (plus 900 premium-rate).
+import { supportPhone } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 const NON_CA_US_NANP_AREA_CODES: ReadonlySet<string> = new Set([
   "242", "246", "264", "268", "284", "340", "345", "441", "473", "649", "658", "664", "670",
   "671", "684", "721", "758", "767", "784", "787", "809", "829", "849", "868", "869", "876",
@@ -29,10 +30,13 @@ export type OtpGuardResult = { ok: true } | { ok: false; reason: OtpGuardRefusal
 
 export const OTP_GUARD_MESSAGES: Record<OtpGuardRefusal, string> = {
   unsupported_country: "Sign-in codes can only be sent to Canadian or US mobile numbers.",
-  otp_phone_daily_limit:
-    "Too many codes have been sent to this number today. Please try again tomorrow or call us at 1-866-631-8939.",
-  otp_busy:
-    "Sign-in codes are paused for a few minutes. Please try again shortly or call us at 1-866-631-8939.",
+  // KS_SERVER_v4_BRANDING - getters: "call us at" the licensee's support phone (was Boreal's 866 line).
+  get otp_phone_daily_limit() {
+    return `Too many codes have been sent to this number today. Please try again tomorrow${supportPhone() ? ` or call us at ${supportPhone()}` : ""}.`;
+  },
+  get otp_busy() {
+    return `Sign-in codes are paused for a few minutes. Please try again shortly${supportPhone() ? ` or call us at ${supportPhone()}` : ""}.`;
+  },
 };
 
 export const OTP_GUARD_STATUS: Record<OtpGuardRefusal, number> = {

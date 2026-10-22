@@ -24,8 +24,9 @@ vi.mock("../modules/automation/automationEngine.js", async () => ({
 }));
 
 import { renderMarketingSms } from "../services/marketingSms.js";
+import { websiteHost } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
-const FOOTER = "Reply STOP to opt out. Info: www.boreal.financial/sms";
+const FOOTER = `Reply STOP to opt out. Info: ${websiteHost()}`; // KS_SERVER_v4_BRANDING - the licensee's site
 
 async function inbound(body: string, from = "+14035550123") {
   const app = mountRouter((await import("../routes/smsInboundWebhook.js")).default, "/api");
@@ -41,7 +42,7 @@ beforeEach(() => {
 describe("SMS CASL compliance", () => {
   it("inbound STOP sets sms_opt_out and confirms", async () => {
     const res = await inbound("Stop");
-    expect(res.text).toContain("<Message>Boreal Financial: You've been unsubscribed");
+    expect(res.text).toContain("<Message>Keystone Demo Brokerage: You've been unsubscribed");
     const [update] = callsMatching(h.query, /UPDATE contacts SET sms_opt_out = \$2/);
     expect(update[1]).toEqual(["4035550123", true]);
     // Nothing else happens for a STOP: it is not stored as a conversation message.

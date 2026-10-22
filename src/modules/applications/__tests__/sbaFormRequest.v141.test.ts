@@ -85,7 +85,7 @@ describe("one prompt, not one per owner", () => {
   it("the label is generic, because the page lists whatever is outstanding", async () => {
     await requestSteps({ forms: ["sba_form_413_owner_2"] });
     const [p] = prompts();
-    expect(p).toEqual([APP_ID, "Please complete the SBA Forms step to continue your application.", "SBA Forms", "sba_forms"]);
+    expect(p).toEqual([APP_ID, "Please complete the SBA Forms step to continue your application.", "SBA Forms", "sba_forms", "Keystone Demo Brokerage"]); // KS_SERVER_v4_BRANDING - the sender name is a parameter now
   });
 
   it("an already-posted SBA prompt is not posted again", async () => {

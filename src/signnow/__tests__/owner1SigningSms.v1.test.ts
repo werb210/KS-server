@@ -19,7 +19,7 @@ describe("owner 1 is notified when a signing envelope is created", () => {
   it("points the applicant at the portal, not a 45-minute embedded link", () => {
     // Embedded links are hard-capped at 45 min (19019003); the portal re-mints one
     // on every load, so the SMS must carry the portal address.
-    expect(session).toContain("client.boreal.financial");
+    expect(session).toContain("Sign in at ${hostOf(clientUrl())}"); // KS_SERVER_v4_BRANDING - this copy's client app
     expect(session).not.toContain("message: `${greeting} sign here: ${link.url}");
   });
 

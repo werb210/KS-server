@@ -22,7 +22,7 @@ const post = async (path: string, body: Record<string, string> = {}) => (await r
 beforeEach(() => { state.people = { todd: person("todd-id"), andrew: person("andrew-id") }; state.others = ["caden-id"]; });
 
 describe("v698 receptionist menu", () => {
-  it("opens with recording notice and both companies", async () => { const xml = await post("/greeting"); expect(xml).toContain("This call may be recorded. Thank you for calling the Boreal Group of Companies."); expect(xml).toContain("press 1 for Financial, 2 for Risk Management"); });
+  it("opens with recording notice and both companies", async () => { const xml = await post("/greeting"); expect(xml).toContain("This call may be recorded. Thank you for calling Keystone Demo Brokerage."); expect(xml).toContain("press 1 for Financial, 2 for Risk Management"); });
   it("plays the Financial menu without old wording", async () => { const xml = await post("/company", { Digits: "1" }); expect(xml).toContain("For client engagement, press 1. For credit, press 2."); expect(xml).not.toMatch(/sales|underwriting/i); });
   it("routes Risk Management to Todd only", async () => { expect(await post("/company", { Digits: "2" })).toContain("/intent?company=BRM"); const xml = await post("/intent?company=BRM"); expect(xml).toContain("<Client>todd-id</Client>"); expect(xml).not.toContain("andrew-id"); expect(xml).not.toContain("caden-id"); });
   it("rings client engagement together without Andrew", async () => { const xml = await post("/intent?company=BF", { Digits: "1" }); expect(xml).toContain("<Client>todd-id</Client>"); expect(xml).toContain("<Client>caden-id</Client>"); expect(xml).not.toContain("andrew-id"); expect(xml).toContain("target=engagement"); });

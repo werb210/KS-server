@@ -3,6 +3,7 @@ import { ALBERTA_TZ } from "../lib/albertaTime.js"; // BF_SERVER_ALBERTA_TIME_v7
 import { randomUUID } from "node:crypto";
 import { pool } from "../db.js";
 import { graphAppFetch, isAppGraphConfigured } from "./teams/graphAppClient.js";
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export const TZ = ALBERTA_TZ;
 export const SLOT_MIN = 30;
@@ -46,6 +47,11 @@ export function overlaps(slot: Date, busy: Array<{ start: Date; end: Date }>): b
   const s = slot.getTime(), e = s + SLOT_MIN * 60_000;
   return busy.some((b) => b.start.getTime() < e && b.end.getTime() > s);
 }
+// KS_SERVER_v4_BRANDING - Boreal limited booking to @boreal.financial staff. A Keystone copy books any active
+// Admin/Staff user, or only those at KS_STAFF_EMAIL_DOMAIN when it is set (e.g. "acme.ca").
+export function staffEmailDomain(env: NodeJS.ProcessEnv = process.env): string {
+  return String(env.KS_STAFF_EMAIL_DOMAIN ?? "").trim().toLowerCase().replace(/^@/, "");
+}
 export async function bookableStaff(): Promise<Staff[]> {
   const only = String(process.env.BOOKING_STAFF_EMAILS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
   // swallow-ok: this query has no catch; the guardrail's scan reaches a later HTTP error-body read
@@ -54,14 +60,16 @@ export async function bookableStaff(): Promise<Staff[]> {
         (last_login_at IS NOT NULL OR o365_refresh_token IS NOT NULL) AS signed_in
       FROM users
       WHERE COALESCE(active, true) AND deleted_at IS NULL AND COALESCE(disabled, false) = false
-        AND role IN ('Admin', 'Staff') AND email ILIKE '%@boreal.financial'
-      ORDER BY first_name NULLS LAST`);
+        AND role IN ('Admin', 'Staff')
+        AND ($1::text = '' OR email ILIKE '%@' || $1::text)
+      ORDER BY first_name NULLS LAST`, [staffEmailDomain()]);
   return only.length ? rows.filter((r) => only.includes(r.email) || only.includes(mailboxOf(r))) : rows;
 }
 // BF_SERVER_INTAKE_ROUND_ROBIN_v749 - the general booking page (/book) and the client portal's
 // "Book a call" go to the Intake team: every staff member signed in to Office 365 except the
 // people in BOOKING_INTAKE_EXCLUDE (default: Andrew). Personal links (/book-todd) are unchanged.
-export const DEFAULT_INTAKE_EXCLUDE = "andrew@boreal.financial,andrew.p@boreal.financial";
+// KS_SERVER_v4_BRANDING - no one is left out by default; each copy sets BOOKING_INTAKE_EXCLUDE if it needs to.
+export const DEFAULT_INTAKE_EXCLUDE = "";
 export function intakeExcludes(): string[] {
   return String(process.env.BOOKING_INTAKE_EXCLUDE ?? DEFAULT_INTAKE_EXCLUDE).split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 }
@@ -128,8 +136,8 @@ export async function createBooking(input: { kind: BookingKind; startsAt: Date; 
   if (!staff) return { ok: false, reason: "staff_unavailable" };
   const phone = input.phone ? bookingPhoneE164(input.phone) : null;
   const end = new Date(input.startsAt.getTime() + SLOT_MIN * 60_000);
-  const subject = (input.kind === "teams" ? "Teams meeting" : "Phone call") + " with " + input.name + " - Boreal Financial";
-  const location = input.kind === "phone" ? "Phone call - Boreal calls " + (phone ?? "") : "Microsoft Teams";
+  const subject = (input.kind === "teams" ? "Teams meeting" : "Phone call") + " with " + input.name + " - " + brandName();
+  const location = input.kind === "phone" ? "Phone call - " + brandName() + " calls " + (phone ?? "") : "Microsoft Teams";
 
   // 1. Contact: find by email or last-10 phone; fill what is missing; tag; owner if none.
   const contact = await pool.query<{ id: string; name: string | null; email: string | null; phone: string | null; owner_id: string | null }>(

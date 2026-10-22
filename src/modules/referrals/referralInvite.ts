@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { sendSms } from "../notifications/sms.service.js";
 import { websiteUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 // KS_SERVER_v1_NO_BI - Keystone referrals go to funding only (no Boreal Insurance).
 const SILO_LANDING_PATHS: Record<string, string> = {
@@ -35,10 +36,10 @@ export function referralLandingUrl(silos: string[], refCode: string): string {
 export const REFERRAL_SMS_VERSIONS = {
   A: (referrerName: string | null): string =>
     referrerName
-      ? `${referrerName} referred you to Boreal Financial. They help businesses like yours get funding fast - mind if they reach out?`
-      : `You have been referred to Boreal Financial. They help businesses like yours get funding fast - mind if they reach out?`,
+      ? `${referrerName} referred you to ${brandName()}. They help businesses like yours get funding fast - mind if they reach out?`
+      : `You have been referred to ${brandName()}. They help businesses like yours get funding fast - mind if they reach out?`,
   B: (): string =>
-    `You have been referred to Boreal Financial for business funding. Start whenever you are ready - link below.`,
+    `You have been referred to ${brandName()} for business funding. Start whenever you are ready - link below.`,
 } as const;
 
 // Resolve what the referral actually receives. `message` is a version key when

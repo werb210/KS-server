@@ -18,6 +18,7 @@ import { retrieveContext } from "../modules/ai/knowledge.service.js";
 import { parseAndResolveMentions } from "../services/notes/mentions.js"; // BF_SERVER_MAYA_CRM_TOOLS_v1
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
 import { clientUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { brandName, assistantName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const router = Router();
 
@@ -1140,9 +1141,9 @@ router.post(
         await audit({ audience: "staff", tool: "docs.request_draft", args: { application_id: appId }, ok: true, summary: "nothing_missing" });
         return res.json({ ok: true, applicationId: appId, missing: [], draft: null, summary: "All required documents are in — nothing to request." });
       }
-      const draft = `Hi ${applicantName.split(" ")[0]}, to keep your Boreal application moving we still need: ${missing.join(", ")}. You can upload them any time in your application — reply here if you have any questions. Thanks!`;
+      const draft = `Hi ${applicantName.split(" ")[0]}, to keep your ${brandName()} application moving we still need: ${missing.join(", ")}. You can upload them any time in your application — reply here if you have any questions. Thanks!`;
       await audit({ audience: "staff", tool: "docs.request_draft", args: { application_id: appId }, ok: true, summary: `missing=${missing.length}` });
-      return res.json({ ok: true, applicationId: appId, missing, draft, summary: `Drafted a request for ${missing.length} document(s). Review and send manually — Maya does not send it.` });
+      return res.json({ ok: true, applicationId: appId, missing, draft, summary: `Drafted a request for ${missing.length} document(s). Review and send manually — ${assistantName()} does not send it.` });
     } catch (e: any) {
       await audit({ audience: "staff", tool: "docs.request_draft", args: { application_id: appId }, ok: false, summary: e?.message ?? "error", errorCode: "docs_request_draft_exception" });
       logError("maya_docs_request_draft_failed", { code: "maya_docs_request_draft_failed", error: e?.message ?? "unknown" });
@@ -1765,7 +1766,7 @@ router.post(
         rate_max: r.rate_max_num === null ? null : Number(r.rate_max_num),
       }));
       const summary =
-        `Boreal currently works with ${lenders} lender(s) offering ${products} financing product(s)` +
+        `${brandName()} currently works with ${lenders} lender(s) offering ${products} financing product(s)` +
         (catStr ? ` across these categories: ${catStr}.` : ".") +
         " These amount, term and rate ranges are the real limits across our lending partners for each category." +
         " Never quote an amount, term or rate that is not in this data - if a category has no range here, say the range depends on the lender and offer to have someone confirm it.";

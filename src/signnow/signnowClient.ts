@@ -1,4 +1,5 @@
 // BF_SERVER_BLOCK_v201_SIGNNOW_REAL_BUILD_v1
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 const BASE_URL = process.env.SIGNNOW_API_BASE_URL || "https://api.signnow.com";
 export class SignNowError extends Error { constructor(message: string, public readonly status?: number, public readonly body?: unknown) { super(message); this.name = "SignNowError"; } }
 export function isApiKeyConfigured(): boolean { return (process.env.SIGNNOW_API_KEY ?? "").trim().length > 0; }
@@ -15,7 +16,7 @@ export async function uploadDocument(pdfBytes: Uint8Array, filename: string): Pr
 }
 export type SendInviteParams = { documentId: string; signerEmail: string; signerName?: string; fromEmail: string; subject?: string; message?: string; };
 export async function sendInvite(p: SendInviteParams): Promise<{ inviteId?: string }> {
-  const payload: Record<string, unknown> = { to: [{ email: p.signerEmail, role_id: "", role: "Signer 1", order: 1, ...(p.signerName ? { name: p.signerName } : {}) }], from: p.fromEmail, subject: p.subject ?? "Please sign your loan application", message: p.message ?? "Please review and sign your Boreal Financial loan application." };
+  const payload: Record<string, unknown> = { to: [{ email: p.signerEmail, role_id: "", role: "Signer 1", order: 1, ...(p.signerName ? { name: p.signerName } : {}) }], from: p.fromEmail, subject: p.subject ?? "Please sign your loan application", message: p.message ?? `Please review and sign your ${brandName()} loan application.` };
   const body = (await signnowFetch(`/document/${encodeURIComponent(p.documentId)}/invite`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })) as { id?: string }; return { inviteId: body?.id };
 }
 

@@ -89,7 +89,7 @@ describe("staff messages try the app before SMS", () => {
     expect(appPush.mock).toHaveBeenCalled();
     await vi.waitFor(() => expect(sendSmsMock).toHaveBeenCalledTimes(1));
     expect(sendSmsMock.mock.calls[0]![0]).toMatchObject({ to: "+15874441234" });
-    expect(sendSmsMock.mock.calls[0]![0].message).toContain("Boreal: Your docs are ready");
+    expect(sendSmsMock.mock.calls[0]![0].message).toContain("Keystone Demo Brokerage: Your docs are ready");
   });
 });
 
@@ -100,11 +100,11 @@ describe("abandoned-application reminders try the app before SMS", () => {
         [/AND a\.abandon_sms_sent_at IS NULL/, { rows: [{ id: "app-1", contact_id: "c-1", phone: "+15874441234", silo: "BF" }] }],
       ])),
     };
-    const { startAbandonedApplicationWorker, ABANDON_SMS_BODY } = await import("../../../workers/abandonedApplicationWorker.js");
+    const { startAbandonedApplicationWorker, abandonSmsBody } = await import("../../../workers/abandonedApplicationWorker.js");
     const w = startAbandonedApplicationWorker(pool as any);
     await vi.waitFor(() => expect(callsMatching(pool.query, /SET abandon_sms_sent_at = now\(\)/).length).toBeGreaterThan(0));
     w.stop();
-    return { pool, ABANDON_SMS_BODY };
+    return { pool, abandonSmsBody };
   }
 
   it("the app takes it: no text, still stamped as sent", async () => {
@@ -115,7 +115,7 @@ describe("abandoned-application reminders try the app before SMS", () => {
   });
 
   it("no app: the reminder is texted", async () => {
-    const { ABANDON_SMS_BODY } = await tick();
-    expect(sendSMSMock).toHaveBeenCalledWith("+15874441234", ABANDON_SMS_BODY);
+    const { abandonSmsBody } = await tick();
+    expect(sendSMSMock).toHaveBeenCalledWith("+15874441234", abandonSmsBody());
   });
 });

@@ -13,22 +13,26 @@ import { rateLimitKeyFromRequest } from "../middleware/clientIp.js";
 import { CONVERSATION_TOKEN_HEADER, verifyConversationToken } from "../services/publicConversationTokens.js"; // BF_SERVER_v789_CONVERSATION_TOKENS
 import { parseExpressCaslConsent, recordExpressCaslConsent } from "../services/smsConsent.js"; // BF_SERVER_v789_CASL_EXPRESS_CONSENT
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_v789_SILENT_QUERIES
+import { brandSettings, brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const router = Router();
 
-// BF_EMAIL_LOGO_ROUTE_v1 - public Boreal email logo (PNG), no auth, immutable cache.
-// BF_EMAIL_LOGO_REAL_v1 - real Boreal Financial landscape logo (white mountain mark +
-// "Boreal Financial" wordmark on brand blue #1E3A8A), 600x150 optimized PNG.
-// Replaces the prior mangled 2-color placeholder.
-const EMAIL_LOGO_PNG_B64 = "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";
+// BF_EMAIL_LOGO_ROUTE_v1 - public email logo, no auth.
+// KS_SERVER_v4_BRANDING - this used to serve Boreal Financial's logo baked in as a PNG. It now sends the
+// licensee's own logo (logo_url in licensee settings); with none set, a 1x1 transparent PNG so old links never break.
+const EMPTY_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 router.get("/email/logo.png", (_req, res) => {
-  const buf = Buffer.from(EMAIL_LOGO_PNG_B64, "base64");
-  res.setHeader("Content-Type", "image/png");
-  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  const logo = brandSettings().logo_url;
   // BF_EMAIL_LOGO_CORP_v1 - override Helmet default CORP (same-origin) so the logo
   // can be embedded cross-origin in the portal email preview iframe.
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-  res.end(buf);
+  if (logo) {
+    res.setHeader("Cache-Control", "public, max-age=300");
+    return res.redirect(302, logo);
+  }
+  res.setHeader("Content-Type", "image/png");
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.end(Buffer.from(EMPTY_PNG_B64, "base64"));
 });
 
 // BF_SERVER_BLOCK_v456_LENDER_PACKAGE_LINK - private, expiring package download.
@@ -42,7 +46,7 @@ router.get("/lender-package/:token", async (req, res) => {
     );
     const row = found.rows[0];
     if (!row) return res.status(404).type("text/plain").send("Package not found.");
-    if (new Date(row.expires_at).getTime() < Date.now()) return res.status(410).type("text/plain").send("This download link has expired. Reply to the email from Boreal Financial and we will resend it.");
+    if (new Date(row.expires_at).getTime() < Date.now()) return res.status(410).type("text/plain").send(`This download link has expired. Reply to the email from ${brandName()} and we will resend it.`);
     const file = await getStorage().get(row.blob_name);
     if (!file) return res.status(404).type("text/plain").send("Package not found.");
     await dbQuery(`UPDATE lender_package_links SET download_count = download_count + 1, last_downloaded_at = now() WHERE token = $1`, [token]).catch((err) => {

@@ -7,10 +7,12 @@ import { buildAccordPdf } from "./accordPdfBuilder.js";
 import { uploadSignedApplicationPdf } from "./blobStorage.js";
 import * as signnow from "./signnowClient.js";
 import { pnwSigningSatisfiedForAppSigning } from "./pnwSigning.js";
+import { brandName, signnowFromEmail } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { clientUrl, hostOf } from "../licensee/urls.js"; // KS_SERVER_v4_BRANDING
 
 const ROLE_OWNER1 = "Owner 1";
 const ROLE_OWNER2 = "Owner 2";
-function fromEmail(): string { return process.env.SIGNNOW_FROM_EMAIL || "no-reply@boreal.financial"; }
+function fromEmail(): string { return signnowFromEmail(); }
 function isStubMode(): boolean { const v = (process.env.SIGNNOW_STUB_MODE ?? "").trim().toLowerCase(); return ["1", "true", "yes", "on"].includes(v); }
 
 export type SigningSessionResult =
@@ -82,7 +84,7 @@ export async function getOrCreateEmbeddedSigningSession(applicationId: string): 
     const inputs = await loadApplicationForPdf(applicationId);
     // BF_SERVER_BLOCK_v_SIGN_DOC_NAMES_v1 — name minted docs/group by business + date
     // so they are findable in the SignNow UI instead of "app-<uuid>".
-    const _bizName = (inputs.business?.legalName || inputs.business?.dba || inputs.applicantName || "Boreal application").toString().slice(0, 60);
+    const _bizName = (inputs.business?.legalName || inputs.business?.dba || inputs.applicantName || `${brandName()} application`).toString().slice(0, 60);
     const _stamp = new Date().toISOString().slice(0, 10);
     const _docLabel = `${_bizName} — ${_stamp}`;
     const email = inputs.applicantEmail;
@@ -246,7 +248,7 @@ export async function getOrCreateEmbeddedSigningSession(applicationId: string): 
         const { notifyClient } = await import("../services/notifications/notifyClient.js");
         const sent = await notifyClient({
           phone: to, applicationId, kind: "owner1_signing", categoryId: "APPLICATION_UPDATE",
-          sms: `${greeting} your Boreal Financial application is ready for your signature. Sign in at client.boreal.financial with this phone number to review and sign. Reply STOP to opt out.`,
+          sms: `${greeting} your ${brandName()} application is ready for your signature. Sign in at ${hostOf(clientUrl())} with this phone number to review and sign. Reply STOP to opt out.`,
           title: "Ready for your signature", body: "Your application is ready to sign.",
           track: { kind: "owner1_signing", applicationId }, // BF_SERVER_BLOCK_v464_SMS_DELIVERY
         });

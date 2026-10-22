@@ -41,9 +41,9 @@ const LENDER_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 beforeEach(() => { queryMock.mockReset(); sendLenderEmail.mockClear(); });
 
 describe("v458 lender email", () => {
-  it("the subject names the applicant and amount", () => { expect(lenderEmailSubject(details)).toBe("Boreal Financial application package: Northern Gateway Films INC ($4,201,020)"); expect(lenderEmailSubject({ ...details, businessName: "", requestedAmount: null })).toBe("Boreal Financial application package: application b0461ec5"); });
+  it("the subject names the applicant and amount", () => { expect(lenderEmailSubject(details)).toBe("Keystone Demo Brokerage application package: Northern Gateway Films INC ($4,201,020)"); expect(lenderEmailSubject({ ...details, businessName: "", requestedAmount: null })).toBe("Keystone Demo Brokerage application package: application b0461ec5"); });
   it("says who is sending and what the package contains", () => { const e = lenderEmail(details, link); for (const s of ["Hello Todd's lending company team", "Northern Gateway Films INC", "$4,201,020", "Media Funding", "6 months business banking statements"]) expect(e.bodyText).toContain(s); expect(e.bodyHtml).toContain("Hello Todd's lending company team"); expect(e.bodyHtml).toContain("<li>Budget</li>"); });
-  it("explains why the link is safe", () => { const e = lenderEmail(details, link); expect(e.bodyText).toContain("It goes to server.boreal.financial, Boreal Financial's own secure server"); expect(e.bodyText).toContain("not a third-party file-sharing site"); expect(e.bodyText).toContain("one standard .zip file of the application documents. There is no login, no software to install"); expect(e.bodyText).toContain("stops working on October 24, 2026"); expect(e.bodyText).toContain("reply to it or call your Boreal Financial contact"); expect(e.bodyHtml).toContain(`href="${link.url}"`); expect(e.bodyHtml).toContain("Download application package (23.2 MB zip)"); });
+  it("explains why the link is safe", () => { const e = lenderEmail(details, link); expect(e.bodyText).toContain("It goes to server.boreal.financial, Keystone Demo Brokerage's own secure server"); expect(e.bodyText).toContain("not a third-party file-sharing site"); expect(e.bodyText).toContain("one standard .zip file of the application documents. There is no login, no software to install"); expect(e.bodyText).toContain("stops working on October 24, 2026"); expect(e.bodyText).toContain("reply to it or call your Keystone Demo Brokerage contact"); expect(e.bodyHtml).toContain(`href="${link.url}"`); expect(e.bodyHtml).toContain("Download application package (23.2 MB zip)"); });
   it("an attached package gets the same email without the link section", () => { const e = lenderEmail(details, { mode: "attached", sizeBytes: 2 * 1024 * 1024 }); expect(e.bodyText).toContain("attached as one .zip file (2.0 MB)"); expect(e.bodyText).not.toContain("About this link"); });
   it("escapes applicant data in the HTML", () => { const e = lenderEmail({ ...details, businessName: "<script>x</script>" }, link); expect(e.bodyHtml).not.toContain("<script>"); expect(e.bodyHtml).toContain("&lt;script&gt;"); });
   it("formats amounts and ignores missing ones", () => { expect(formatAmount(4201020)).toBe("$4,201,020"); expect(formatAmount(null)).toBeNull(); expect(formatAmount(0)).toBeNull(); });
@@ -56,7 +56,7 @@ describe("v458 lender email", () => {
     ]);
     expect(sent).toEqual([LENDER_ID]);
     const arg = (sendLenderEmail.mock.calls[0] as unknown as [any])[0];
-    expect(arg.subject).toBe("Boreal Financial application package: Northern Gateway Films INC ($4,201,020)");
+    expect(arg.subject).toBe("Keystone Demo Brokerage application package: Northern Gateway Films INC ($4,201,020)");
     // The package details reach the email body.
     expect(arg.bodyText).toContain("Hello Todd's lending company team");
     expect(arg.bodyText).toContain("Media Funding");

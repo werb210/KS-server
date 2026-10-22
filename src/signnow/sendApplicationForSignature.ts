@@ -8,6 +8,7 @@ import { logCrmEvent } from "../modules/crm/crmTimeline.service.js";
 import { buildApplicationPdf, type ApplicationPdfInputs, type PdfOwner } from "./pdfBuilder.js";
 import { uploadSignedApplicationPdf } from "./blobStorage.js";
 import * as signnow from "./signnowClient.js";
+import { brandName, signnowFromEmail } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 type OrchestratorContext = { applicationId: string; pool?: unknown };
 type SendResult =
@@ -17,7 +18,7 @@ type SendResult =
 
 function isStubMode(): boolean { const v = (process.env.SIGNNOW_STUB_MODE ?? "").trim().toLowerCase(); return ["1", "true", "yes", "on"].includes(v); }
 function stubDelayMs(): number { const n = Number(process.env.SIGNNOW_STUB_DELAY_MS); return Number.isFinite(n) && n >= 0 ? n : 2000; }
-function fromEmail(): string { return process.env.SIGNNOW_FROM_EMAIL || "no-reply@boreal.financial"; }
+function fromEmail(): string { return signnowFromEmail(); }
 
 function obj(v: unknown): Record<string, any> | null { return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, any>) : null; }
 function num(v: unknown): number | null { if (v === null || v === undefined || v === "") return null; const n = Number(String(v).replace(/[^0-9.\-]/g, "")); return Number.isFinite(n) ? n : null; }
@@ -173,7 +174,7 @@ async function sendReal(applicationId: string, inputs: ApplicationPdfInputs, pdf
   const signerEmail = o1?.email;
   if (!signerEmail) throw new Error(`SignNow: no applicant email on file for app=${applicationId}`);
   const signerName = [o1?.firstName, o1?.lastName].filter(Boolean).join(" ").trim() || undefined;
-  await signnow.sendInvite({ documentId, signerEmail, signerName, fromEmail: fromEmail(), subject: "Please sign your Boreal Financial loan application" });
+  await signnow.sendInvite({ documentId, signerEmail, signerName, fromEmail: fromEmail(), subject: `Please sign your ${brandName()} loan application` });
   await dbQuery(`UPDATE applications SET signnow_document_id = $1, metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('signed_application_blob_name', $2::text,'signed_application_blob_url',  $3::text,'signnow_stub', false,'signnow_envelope_sent_at',to_char(now() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS"Z"')), updated_at = now() WHERE id::text = ($4)::text`, [documentId, blobName, blobUrl, applicationId]);
   return { ok: true, mode: "real", documentId, blobName };
 }

@@ -24,6 +24,7 @@ import {
   slugFromLandingUrl,
   landingUrlForSlug,
 } from "../services/landingPage.service.js";
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 // Mirrors landingBase()'s validity test. A base that is not an absolute http(s)
 // URL is garbage, and so is any link_url built on top of one.
@@ -72,7 +73,7 @@ export async function backfillTemplateLandingPages(pool: Pool): Promise<{ scanne
       }
       if (!html) continue;
 
-      const title = String(row.subject || row.name || "Boreal");
+      const title = String(row.subject || row.name || brandName());
       const silo = String(row.silo || "BF");
 
       // Keep the slug when there is a usable one - links already sent by SMS

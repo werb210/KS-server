@@ -1,4 +1,5 @@
 import { embedAndStore } from "./knowledge.service.js";
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 type Queryable = {
   query: <T = unknown>(text: string, params?: unknown[]) => Promise<{ rows: T[] }>;
@@ -153,7 +154,7 @@ export async function ingestProductCategoryEnvelopes(db: Queryable): Promise<num
       `Interest / rate range: ${rate}`,
       `Term range: ${term}`,
       `Available in: ${r.countries ?? "N/A"}`,
-      `Boreal is a lending marketplace, not the lender; exact amount, rate and term depend on the lender and the business. Never quote a single guaranteed figure.`,
+      `${brandName()} is a lending marketplace, not the lender; exact amount, rate and term depend on the lender and the business. Never quote a single guaranteed figure.`,
     ].join("\n");
     await embedAndStore(db, content, "product:category", r.category, `${display} (category envelope)`);
     count += 1;

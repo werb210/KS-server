@@ -12,6 +12,7 @@ import { pool } from "../db.js"; // BF_SERVER_OFFER_TERMSHEET_SIGNING_v1
 import { createEmbeddedGroupLink } from "../signnow/signnowClient.js";
 import { sendViaGraph } from "../services/email/graphSendService.js";
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_v789_SILENT_QUERIES
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 // BF_SERVER_BLOCK_v141_SIGNNOW_WEBHOOK_REPAIR_v1
 // HMAC-SHA256 verify against SIGNNOW_WEBHOOK_SECRET over the raw body, sent in
@@ -293,7 +294,7 @@ router.post(
           const greeting = p.name ? `Hi ${p.name},` : "Hello,";
           const sent = await sendViaGraph({
             to: String(p.email),
-            subject: "Your Boreal application is ready to sign",
+            subject: `Your ${brandName()} application is ready to sign`,
             bodyHtml: `<p>${greeting}</p><p>An application you are listed on as an owner is ready for your signature. Please review and sign using your secure link below:</p><p><a href="${o2link.url}">Review &amp; sign your application</a></p><p>This link is unique to you. If you weren't expecting this, you can safely ignore this email.</p>`,
             bodyText: `${greeting}
 
@@ -366,7 +367,7 @@ This link is unique to you.`,
             const greeting = nextOwner.name ? `Hi ${nextOwner.name},` : "Hello,";
             const sent = await sendViaGraph({
               to: String(nextOwner.email),
-              subject: "Your Boreal application is ready to sign",
+              subject: `Your ${brandName()} application is ready to sign`,
               bodyHtml: `<p>${greeting}</p><p>An application you are listed on as an owner is ready for your signature. Please review and sign using your secure link below:</p><p><a href="${link.url}">Review &amp; sign your application</a></p><p>This link is unique to you. If you weren't expecting this, you can safely ignore this email.</p>`,
               bodyText: `${greeting}\n\nAn application you are listed on as an owner is ready for your signature. Please review and sign using your secure link:\n${link.url}\n\nThis link is unique to you.`,
             });

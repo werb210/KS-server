@@ -1,7 +1,7 @@
 // BF_SERVER_INTAKE_ROUND_ROBIN_v748 / BF_SERVER_V748_TEST_SYNC_v751
 // Both v749 blocks ran; the second restored v748's helper names (intakeTeam(staff), intakeExcludes,
 // roundRobinPick) on top of the mailbox fix. This checks v748's behaviour against that live code.
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { intakeTeam, intakeExcludes, roundRobinPick, type Staff } from "../services/clientBooking.js";
 
@@ -10,7 +10,13 @@ const andrew: Staff = { id: "a", email: "andrew@boreal.financial", first_name: "
 const caden: Staff = { id: "c", email: "caden.w@boreal.financial", first_name: "Caden", signed_in: false };
 
 describe("intake round robin for the general booking link", () => {
+  // KS_SERVER_v4_BRANDING - no one is excluded by default now; these tests set the exclusion they check.
+  beforeEach(() => { process.env.BOOKING_INTAKE_EXCLUDE = "andrew@boreal.financial,andrew.p@boreal.financial"; });
   afterEach(() => { delete process.env.BOOKING_INTAKE_EXCLUDE; });
+  it("leaves no one out when no exclusion is set", () => {
+    delete process.env.BOOKING_INTAKE_EXCLUDE;
+    expect(intakeExcludes()).toEqual([]);
+  });
   it("is everyone who has signed in except Andrew", () => {
     expect(intakeTeam([todd, andrew, caden]).map((s) => s.id)).toEqual(["t"]);
   });

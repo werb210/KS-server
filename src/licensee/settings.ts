@@ -51,6 +51,19 @@ export function checkField(field: LicenseeField, raw: unknown): { ok: true; valu
 
 let cache: { at: number; value: LicenseeSettings } | null = null;
 const CACHE_MS = 60_000;
+// KS_SERVER_v4_BRANDING - the last settings read from the database, kept after the cache expires so code that
+// cannot await (message constants, templates) still has the licensee's name. See ./brand.ts.
+let lastLoaded: LicenseeSettings | null = null;
+
+/** The settings last loaded by getLicenseeSettings, or null before the first load. */
+export function lastLoadedLicensee(): LicenseeSettings | null {
+  return lastLoaded;
+}
+
+/** Test hook: forget the last loaded settings too. */
+export function resetLastLoadedLicensee(): void {
+  lastLoaded = null;
+}
 
 export function clearLicenseeCache(): void {
   cache = null;
@@ -68,6 +81,7 @@ export async function getLicenseeSettings(db: Q, now = Date.now()): Promise<Lice
     if (v) value[f] = v;
   }
   cache = { at: now, value };
+  lastLoaded = value;
   return value;
 }
 

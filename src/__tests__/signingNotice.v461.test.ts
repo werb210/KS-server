@@ -10,6 +10,7 @@ vi.mock("../db.js", () => ({ dbQuery: (...a: any[]) => dbQuery(...a) }));
 vi.mock("../modules/notifications/sms.service.js", () => ({ sendSms: (...a: any[]) => sendSms(...a) }));
 
 import { remindOwner1ToSign, describeOwner1Notice } from "../signnow/ownerSigningNotice.js";
+import { clientUrl, hostOf } from "../licensee/urls.js"; // KS_SERVER_v4_BRANDING
 
 const APP = "467689d3-2008-42a6-87d3-720919c6e5b9";
 function contact(row: Record<string, unknown>) {
@@ -25,7 +26,7 @@ describe("v461 signing text to Owner 1", () => {
     const n = await remindOwner1ToSign(APP, new Date("2026-09-24T18:10:00Z"));
     expect(n).toMatchObject({ name: "Brandon Voss", phone: "+19173043342", smsSent: true, resent: true, throttled: false });
     expect(sendSms.mock.calls[0][0].to).toBe("+19173043342");
-    expect(sendSms.mock.calls[0][0].message).toContain("client.boreal.financial");
+    expect(sendSms.mock.calls[0][0].message).toContain(hostOf(clientUrl())); // KS_SERVER_v4_BRANDING - this copy's client app, not Boreal's
     expect(sendSms.mock.calls[0][0].message).toContain("Reply STOP to opt out");
     expect(dbQuery.mock.calls.some(([sql]) => String(sql).includes("owner1_signing_sms_at") && String(sql).startsWith("UPDATE"))).toBe(true);
   });

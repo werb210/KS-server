@@ -84,7 +84,7 @@ describe("emit routes through that decision", () => {
     expect(greeting).not.toContain("<Say");
     // intent_prompt is not rendered: Polly, and no Play anywhere.
     const company = await post("/company", { Digits: "1" });
-    expect(company).toContain('<Say voice="Polly.Joanna">Thank you for contacting Boreal Financial.');
+    expect(company).toContain('<Say voice="Polly.Joanna">Thank you for contacting Keystone Demo Brokerage.');
     expect(company).not.toContain("<Play>");
   });
 

@@ -3,6 +3,7 @@
 import { pool } from "../../db.js";
 import { sendSms } from "../notifications/sms.service.js";
 import { referralLandingUrl } from "./referralInvite.js";
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 // DRAFT copy - adjust freely. Start-up funding becomes regular funding once open, so the
 // link is the BF-Website funding landing (/r/f/<code>).
@@ -10,7 +11,7 @@ function startupSms(name: string | null, refCode: string | null): string {
   const first = (name ?? "").trim().split(/\s+/)[0];
   const hi = first ? `${first}, ` : "";
   const link = refCode ? `\n${referralLandingUrl(["BF"], refCode)}` : "";
-  return `${hi}good news - Boreal's start-up funding is now open. You were on our start-up capital list, so we wanted you to hear first. Apply here:${link}`;
+  return `${hi}good news - ${brandName()}'s start-up funding is now open. You were on our start-up capital list, so we wanted you to hear first. Apply here:${link}`;
 }
 
 export async function notifyStartupWaitlistOnce(): Promise<{ notified: number }> {

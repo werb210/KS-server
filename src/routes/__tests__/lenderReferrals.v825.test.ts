@@ -74,14 +74,14 @@ describe("what the lender sees", () => {
     expect(referralProgress({ status: "accepted", pipeline_state: "offer" })).toBe("Approved");
     expect(referralProgress({ status: "accepted", pipeline_state: "funded" })).toBe("Funded");
     expect(referralProgress({ status: "accepted", pipeline_state: "declined" })).toBe("Closed");
-    expect(referralShare({ status: "accepted", complete_package: true })).toBe("50% of Boreal's fee");
+    expect(referralShare({ status: "accepted", complete_package: true })).toBe("50% of Keystone Demo Brokerage's fee");
     expect(referralShare({ status: "accepted", complete_package: false })).toBe("None (incomplete package)");
     expect(referralShare({ status: "pending", complete_package: null })).toBe("-");
   });
 
   it("never names the lender in the client's text", () => {
     const t = clientInviteText("Jane", "https://client.boreal.financial");
-    expect(t).toBe("Hi Jane, Boreal Financial has your business financing application ready. To check it and finish, sign in with this mobile number at https://client.boreal.financial");
+    expect(t).toBe("Hi Jane, Keystone Demo Brokerage has your business financing application ready. To check it and finish, sign in with this mobile number at https://client.boreal.financial");
   });
 });
 
@@ -150,7 +150,7 @@ describe("POST /api/lender-referrals/mine", () => {
     expect(res.status).toBe(200);
     expect(res.body.files).toEqual([{
       id: "r1", business_name: "Northwind", client_name: "Jane", requested_amount: "250000.00", zip_name: "n.zip", sent_at: "2026-10-19T16:00:00Z",
-      progress: "Funded", status: "accepted", stage: "funded", share: "50% of Boreal's fee", payout_amount: "1500.00", payout_paid_on: "2026-11-01",
+      progress: "Funded", status: "accepted", stage: "funded", share: "50% of Keystone Demo Brokerage's fee", payout_amount: "1500.00", payout_paid_on: "2026-11-01",
     }]);
   });
 });
@@ -195,8 +195,8 @@ describe("staff accept or decline", () => {
     expect(callsMatching(db.query, /jsonb_build_object\('readiness_phone'/)[0]![1]).toEqual(["app1", "+17805550100", true]);
     expect(callsMatching(db.query, /broker_imports SET applicant_phone = \$2/)[0]![1]).toEqual(["imp1", "+17805550100"]);
     const split = callsMatching(db.query, /INSERT INTO broker_deal_confirmations/)[0]![1] as unknown[];
-    expect(split.slice(0, 5)).toEqual(["app1", "Prairie Bank", 50, 50, "Lender referral, complete package: 50% of Boreal's fee"]);
-    expect(sendSms).toHaveBeenCalledWith(expect.objectContaining({ to: "+17805550100", message: expect.stringMatching(/^Hi Jane, Boreal Financial/) }));
+    expect(split.slice(0, 5)).toEqual(["app1", "Prairie Bank", 50, 50, "Lender referral, complete package: 50% of Keystone Demo Brokerage's fee"]);
+    expect(sendSms).toHaveBeenCalledWith(expect.objectContaining({ to: "+17805550100", message: expect.stringMatching(/^Hi Jane, Keystone Demo Brokerage/) }));
     expect(sendSms.mock.calls[0]![0].message).not.toContain("Prairie");
   });
 

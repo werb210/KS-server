@@ -6,6 +6,7 @@
 // neither without a logged reason. Never throws.
 import type { ApplicantPushCategory } from "../push/applicantPush.js";
 import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { brandName, supportPhone } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export type ClientNotice = {
   phone: string;
@@ -138,8 +139,8 @@ export function noticeEmailHtml(n: ClientNotice): string {
   const base = String(process.env.CLIENT_URL ?? clientUrl()).replace(/\/$/, "");
   const link = n.applicationId ? base + "/application/" + encodeURIComponent(n.applicationId) : base;
   return "<p>" + esc(n.body) + "</p>"
-    + "<p><a href='" + link + "'>Open your Boreal Financial client portal</a></p>"
-    + "<p>Questions? Call (866) 631-8939.</p>";
+    + "<p><a href='" + link + "'>Open your " + esc(brandName()) + " client portal</a></p>"
+    + (supportPhone() ? "<p>Questions? Call " + esc(supportPhone()) + ".</p>" : "");
 }
 
 async function emailClientNotice(n: ClientNotice, phone10: string): Promise<boolean> {
@@ -157,7 +158,7 @@ async function emailClientNotice(n: ClientNotice, phone10: string): Promise<bool
   );
   const to = rows[0]?.email;
   if (!to) return false;
-  const r = await sendTransactional({ to, subject: "Boreal Financial: " + n.title, html: noticeEmailHtml(n), contactId: rows[0]!.id, customArgs: { kind: n.kind } });
+  const r = await sendTransactional({ to, subject: brandName() + ": " + n.title, html: noticeEmailHtml(n), contactId: rows[0]!.id, customArgs: { kind: n.kind } });
   if (!r.ok) console.warn("[notify-client] email_failed", { kind: n.kind, error: r.error });
   return r.ok;
 }

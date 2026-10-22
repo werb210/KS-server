@@ -66,14 +66,14 @@ describe("booking writes the CRM first", () => {
     expect(log).toEqual(["contact.find", "contact.insert", "booking.insert", "meeting.insert", "graph.event", "booking.graph", "meeting.graph"]);
     expect(paramsOf("INSERT INTO contacts").slice(1, 5)).toEqual(["Pat Lee", "pat@example.com", "+17805551212", "u-todd"]);
     const m = paramsOf("INSERT INTO crm_meetings");
-    expect(m[1]).toBe("Phone call with Pat Lee - Boreal Financial");
+    expect(m[1]).toBe("Phone call with Pat Lee - Keystone Demo Brokerage");
     expect(m[3]).toBe(SLOT.toISOString());
     expect(m[4]).toBe(new Date(SLOT.getTime() + 30 * 60_000).toISOString());
-    expect(m[5]).toBe("Phone call - Boreal calls +17805551212");
+    expect(m[5]).toBe("Phone call - Keystone Demo Brokerage calls +17805551212");
     expect(m.slice(7, 10)).toEqual(["u-todd", "c-new", "phone"]);
     const ev = JSON.parse((graphAppFetch.mock.calls[0]![1] as any).body);
     expect(ev.subject).toBe(m[1]);
-    expect(ev.location.displayName).toBe("Phone call - Boreal calls +17805551212");
+    expect(ev.location.displayName).toBe("Phone call - Keystone Demo Brokerage calls +17805551212");
     expect(emitAutomationEvent).toHaveBeenCalledWith("contact.created", expect.objectContaining({ contactId: "c-new", data: { source: "booking" } }));
     expect(emitAutomationEvent).toHaveBeenCalledWith("booking.created", expect.objectContaining({ contactId: "c-new" }));
   });

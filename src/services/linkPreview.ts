@@ -69,7 +69,7 @@ export async function fetchPreview(rawUrl: string): Promise<LinkPreview> {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 5000);
     try {
-      const resp = await fetch(current, { redirect: "manual", signal: ctrl.signal, headers: { "User-Agent": "BorealLinkPreview/1.0", Accept: "text/html" } });
+      const resp = await fetch(current, { redirect: "manual", signal: ctrl.signal, headers: { "User-Agent": "KeystoneLinkPreview/1.0", Accept: "text/html" } });
       if (resp.status >= 300 && resp.status < 400) {
         const loc = resp.headers.get("location");
         if (!loc) break;

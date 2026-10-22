@@ -36,6 +36,7 @@ beforeEach(() => {
   process.env.GOOGLE_ADS_REFRESH_TOKEN = "rt";
   process.env.GOOGLE_ADS_DEVELOPER_TOKEN = "dev";
   process.env.LEAD_ALERT_SMS_TO = "+15555550100";
+  process.env.KS_SUPPORT_EMAIL = "ops@licensee.example"; // KS_SERVER_v4_BRANDING - the default alert recipient
   delete process.env.GOOGLE_HEALTH_ALERT_PHONES;
   state.pending = 0; state.ga4 = false; state.sms = []; state.emails = [];
   __resetGoogleHealthForTests();
@@ -67,7 +68,7 @@ describe("Google health checks", () => {
     const failing = { checkedAt: "", checks: [{ key: "conversion_test", label: "Conversion upload test", status: "fail" as const, detail: "x" }] };
     expect(await alertIfFailing(failing, 1_000)).toBe(true);
     expect(state.sms).toEqual(["+15555550100"]);
-    expect((state.emails[0] as any).to).toEqual(["todd.w@boreal.financial", "andrew.p@boreal.financial"]);
+    expect((state.emails[0] as any).to).toEqual(["ops@licensee.example"]);
     expect(await alertIfFailing(failing, 2_000)).toBe(false);
     expect(await alertIfFailing(failing, 1_000 + 24 * 60 * 60_000)).toBe(true);
   });

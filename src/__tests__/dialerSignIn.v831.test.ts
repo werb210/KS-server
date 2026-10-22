@@ -48,7 +48,7 @@ describe("v831 dialler sign-in", () => {
     const res = await request(await app()).post("/api/auth/otp/verify").send({ phone: "+15874441234", code: "123456", userType: "staff" });
     expect(res.status).toBe(403);
     expect(res.body.error).toBe("not_staff");
-    expect(res.body.message).toContain("isn't set up as a Boreal staff account");
+    expect(res.body.message).toContain("isn't set up as a Keystone Demo Brokerage staff account");
   });
 
   it("a staff number signs in as before", async () => {

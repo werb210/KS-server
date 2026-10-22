@@ -12,6 +12,7 @@ import { parseExpressCaslConsent, recordExpressCaslConsent } from "../../service
 // campaign; its links must not be rewritten through sendgrid.net on a
 // stranger's first contact with us.
 import { sendTransactional, mergeFields, sendgridConfigured } from "../../services/sendgridService.js";
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export async function submitContactForm(req: Request, res: Response) {
   try {
@@ -118,7 +119,7 @@ export async function submitContactForm(req: Request, res: Response) {
     // the token from the response so the client doesn't redirect.
     await createContinuation(req.body, lead.id);
 
-    const body = `Boreal: New contact form — ${companyName ?? "Unknown company"}. ${fullName} (${phone}). ${email}. Open the staff portal.`;
+    const body = `${brandName()}: New contact form — ${companyName ?? "Unknown company"}. ${fullName} (${phone}). ${email}. Open the staff portal.`;
     await notifyAllStaff({
       pool,
       notificationType: "website_contact",

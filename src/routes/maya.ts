@@ -13,6 +13,7 @@ import { principalFromRequest } from "../auth/principal.js";
 import { checkApplicationAccess } from "../auth/clientApplicationOwnership.js"; // BF_SERVER_v789_MAYA_PROXY_SCOPE
 import type { MayaAudience } from "../services/mayaContext.js";
 import { rateLimitKeyFromRequest } from "../middleware/clientIp.js"; // BF_SERVER_v791_RATE_LIMIT_KEYS
+import { assistantName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const router = express.Router();
 
@@ -33,7 +34,7 @@ export const mayaProxyRateLimit = rateLimit({
   limit: (req: any) => (mayaRateStaffId(req) ? 120 : 20),
   standardHeaders: "draft-8",
   legacyHeaders: false,
-  message: { error: "rate_limited", message: "Too many Maya requests. Try again in a minute." },
+  message: { error: "rate_limited", message: "Too many assistant requests. Try again in a minute." },
   keyGenerator: (req: any) => {
     const staffId = mayaRateStaffId(req);
     return staffId ? `staff:${staffId}` : `ip:${rateLimitKeyFromRequest(req)}`; // BF_SERVER_v791_RATE_LIMIT_KEYS
@@ -263,7 +264,7 @@ router.post(
     // BF_SERVER_MAYA_ESCALATION_NOTIFY_v1 - notify all staff (bell + push, no staff SMS).
     try {
       const { notifyAllStaff } = await import("../services/notifications/notifyAllStaff.js");
-      await notifyAllStaff({ pool, silo: silo ?? "BF", skipSms: true, notificationType: "maya_escalation", title: "Maya escalation", body: `A client asked for a human. Reason: ${reason}`, refTable: "maya_escalations", refId: id, contextUrl: applicationId ? `/applications/${applicationId}` : "/communications" });
+      await notifyAllStaff({ pool, silo: silo ?? "BF", skipSms: true, notificationType: "maya_escalation", title: `${assistantName()} escalation`, body: `A client asked for a human. Reason: ${reason}`, refTable: "maya_escalations", refId: id, contextUrl: applicationId ? `/applications/${applicationId}` : "/communications" });
     } catch (e) { console.error("[notify] maya_escalation failed", String(e).slice(0, 150)); }
 
     // BF_SERVER_BLOCK_53_v1 -- also write the escalation into
@@ -281,7 +282,7 @@ router.post(
            COALESCE($3, (SELECT silo FROM applications WHERE id = $2 LIMIT 1), 'BF'),
            $4, now()
          )`,
-        [msgId, applicationId, silo, `🆘 Client requested human help via Maya. Reason: ${reason}`]
+        [msgId, applicationId, silo, `🆘 Client requested human help via ${assistantName()}. Reason: ${reason}`]
       ).catch((swallowedErr: unknown) => { logWarnSwallowed(swallowedErr, "routes/maya.ts:249");});
     }
 

@@ -7,6 +7,7 @@ import { sendViaGraph } from "./email/graphSendService.js";
 import { logInfo, logError } from "../observability/logger.js";
 // BF_SERVER_CLIENT_EMAIL_RESOLVER_v194
 import { resolveClientEmail } from "./clientEmail.js";
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 function escapeHtml(value: string): string {
   return value
@@ -63,18 +64,18 @@ export async function sendHoldNoticeToClient(
     `<p>Your application has been archived and is no longer being worked on for the following reason(s):</p>` +
     reasonHtml +
     `<p>Your application and documents will be held for 30 days. If you do not address the reasons above within that time, all will be purged as per our privacy policy.</p>` +
-    `<p>Thank you,<br/>Boreal Financial</p>`;
+    `<p>Thank you,<br/>${escapeHtml(brandName())}</p>`;
 
   const bodyText =
     `${firstName},\n\n` +
     `Your application has been archived and is no longer being worked on for the following reason(s):\n\n` +
     `${reasonText}\n\n` +
     `Your application and documents will be held for 30 days. If you do not address the reasons above within that time, all will be purged as per our privacy policy.\n\n` +
-    `Thank you,\nBoreal Financial`;
+    `Thank you,\n${brandName()}`;
 
   const sent = await sendViaGraph({
     to,
-    subject: "Your Boreal Financial application has been placed on hold",
+    subject: `Your ${brandName()} application has been placed on hold`,
     bodyHtml,
     bodyText,
   });

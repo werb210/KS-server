@@ -1,7 +1,8 @@
 import { ALBERTA_TZ } from "../lib/albertaTime.js"; // BF_SERVER_ALBERTA_TIME_v743 - Alberta is UTC-6 all year
 // BF_SERVER_MEETING_NOTIFY_v741
-import { DIAL_IN_DISPLAY, inviteText, joinUrl, oneTapDial, type MeetingRoom } from "./meetingRooms.js";
+import { dialInDisplay, inviteText, joinUrl, oneTapDial, type MeetingRoom } from "./meetingRooms.js";
 import { isAppGraphConfigured } from "./teams/graphAppClient.js";
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export type MeetingDelivery = { calendar: "created" | "updated" | "cancelled" | "skipped" | "failed"; calendarError: string | null; emailed: number; texted: number; errors: string[] };
 type Row = { id: string; name: string; email: string | null; phone: string | null; invited_at: string | null; texted_at: string | null };
@@ -20,13 +21,13 @@ const whenOf = (room: MeetingRoom) => new Date(room.starts_at).toLocaleString("e
 const utc = (d: Date) => d.toISOString().slice(0, 19);
 
 export function meetingSms(room: MeetingRoom): string {
-  return "Boreal Financial meeting: " + room.title + ", " + whenOf(room) + " Alberta time. To join, call " + DIAL_IN_DISPLAY + ", press 3, enter code " + room.code + " then #. One tap: " + oneTapDial(room.code) + " Details: " + joinUrl(room.slug);
+  return brandName() + " meeting: " + room.title + ", " + whenOf(room) + " Alberta time. To join, call " + dialInDisplay() + ", press 3, enter code " + room.code + " then #. One tap: " + oneTapDial(room.code) + " Details: " + joinUrl(room.slug);
 }
 async function hostOf(room: MeetingRoom, deps: MeetingNotifyDeps): Promise<Host | null> {
   if (!room.host_user_id) return null;
   const r = await deps.query("SELECT trim(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS name, email, COALESCE(NULLIF(phone_number,''), NULLIF(phone,'')) AS phone FROM users WHERE id::text = $1 LIMIT 1", [room.host_user_id]);
   const h = r.rows[0];
-  return h ? { name: String(h.name || "Boreal staff"), email: h.email ?? null, phone: h.phone ?? null } : null;
+  return h ? { name: String(h.name || brandName() + " staff"), email: h.email ?? null, phone: h.phone ?? null } : null;
 }
 async function peopleOf(room: MeetingRoom, deps: MeetingNotifyDeps): Promise<Row[]> {
   const r = await deps.query("SELECT id::text AS id, name, email, phone, invited_at, texted_at FROM meeting_participants WHERE room_id::text = $1 ORDER BY created_at", [room.id]);
@@ -34,7 +35,7 @@ async function peopleOf(room: MeetingRoom, deps: MeetingNotifyDeps): Promise<Row
 }
 function eventBody(room: MeetingRoom, attendees: Row[]) {
   const start = new Date(room.starts_at); const end = new Date(start.getTime() + room.duration_min * 60_000);
-  return { subject: room.title, body: { contentType: "Text", content: inviteText(room) + NL + NL + "One tap from a mobile: " + oneTapDial(room.code) }, start: { dateTime: utc(start), timeZone: "UTC" }, end: { dateTime: utc(end), timeZone: "UTC" }, location: { displayName: "Phone " + DIAL_IN_DISPLAY + ", press 3, code " + room.code }, attendees: attendees.map((p) => ({ emailAddress: { address: p.email, name: p.name }, type: "required" })), allowNewTimeProposals: false, reminderMinutesBeforeStart: 15 };
+  return { subject: room.title, body: { contentType: "Text", content: inviteText(room) + NL + NL + "One tap from a mobile: " + oneTapDial(room.code) }, start: { dateTime: utc(start), timeZone: "UTC" }, end: { dateTime: utc(end), timeZone: "UTC" }, location: { displayName: "Phone " + dialInDisplay() + ", press 3, code " + room.code }, attendees: attendees.map((p) => ({ emailAddress: { address: p.email, name: p.name }, type: "required" })), allowNewTimeProposals: false, reminderMinutesBeforeStart: 15 };
 }
 export async function notifyMeeting(room: MeetingRoom, opts: { isNew: boolean }, deps: MeetingNotifyDeps = defaultDeps): Promise<MeetingDelivery> {
   const out: MeetingDelivery = { calendar: "skipped", calendarError: null, emailed: 0, texted: 0, errors: [] };
@@ -92,7 +93,7 @@ export async function cancelMeetingNotices(room: MeetingRoom, deps: MeetingNotif
   const ev = (await deps.query("SELECT graph_event_id, host_email FROM meeting_rooms WHERE id::text = $1", [room.id])).rows[0];
   if (ev?.graph_event_id && !String(ev.graph_event_id).startsWith("pending:") && ev?.host_email && deps.graphReady()) { const r = await deps.graph("/users/" + encodeURIComponent(ev.host_email) + "/events/" + encodeURIComponent(ev.graph_event_id) + "/cancel", "POST", { comment: "This meeting was cancelled." }); if (r.ok) out.calendar = "cancelled"; else { out.calendar = "failed"; out.calendarError = "Outlook refused the cancellation (" + r.status + ")"; out.errors.push("calendar: " + out.calendarError); } }
   const people = await peopleOf(room, deps);
-  for (const p of people) { const n = e164(p.phone); if (!n || !p.texted_at) continue; const r = await deps.sms(n, "Boreal Financial: the meeting " + room.title + " on " + whenOf(room) + " Alberta time has been cancelled."); if (r.ok) out.texted += 1; else out.errors.push("text to " + p.name + ": " + String(r.error ?? "failed")); }
+  for (const p of people) { const n = e164(p.phone); if (!n || !p.texted_at) continue; const r = await deps.sms(n, brandName() + ": the meeting " + room.title + " on " + whenOf(room) + " Alberta time has been cancelled."); if (r.ok) out.texted += 1; else out.errors.push("text to " + p.name + ": " + String(r.error ?? "failed")); }
   return out;
 }
 const defaultDeps: MeetingNotifyDeps = {

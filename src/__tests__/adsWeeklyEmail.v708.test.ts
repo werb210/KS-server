@@ -19,9 +19,10 @@ describe("Monday ads email", () => {
     expect(mondayWindow(new Date("2026-10-05T12:00:00Z"))).toBeNull(); // Mon 06:00
     expect(mondayWindow(new Date("2026-10-06T15:00:00Z"))).toBeNull(); // Tuesday
   });
-  it("goes to Todd and Andrew by default", () => {
+  it("goes to the licensee's support email by default (KS_SERVER_v4_BRANDING - was Boreal's staff)", () => {
     delete process.env.GOOGLE_HEALTH_ALERT_EMAILS;
-    expect(weeklyRecipients()).toHaveLength(2);
+    process.env.KS_SUPPORT_EMAIL = "ops@licensee.example";
+    expect(weeklyRecipients()).toEqual(["ops@licensee.example"]);
   });
   it("tells the story and says nothing was changed", () => {
     const { subject, html } = renderWeeklyEmail({ spend: 1000, clicks: 50, people: 5, started: 4, submitted: 2, funded: 1, fundedAmount: 100000, campaigns: [{ name: "BF Search <CA>", spend: 600, clicks: 30 }], wasted: [], stops: [{ step: 1, stopped: 2 }], suggestions: ["Add negative"] }, 0.03);
@@ -38,7 +39,7 @@ describe("Monday ads email", () => {
     } finally { boot.restore(); }
   });
   it("sends once per week: the week is claimed with ON CONFLICT DO NOTHING and a second claim sends nothing", async () => {
-    delete process.env.GOOGLE_HEALTH_ALERT_EMAILS;
+    process.env.GOOGLE_HEALTH_ALERT_EMAILS = "a@licensee.example,b@licensee.example";
     const claimed = new Set<string>();
     query.mockImplementation(answerBySql([
       [/INSERT INTO ads_weekly_reports/, (_sql: string, params?: unknown[]) => {

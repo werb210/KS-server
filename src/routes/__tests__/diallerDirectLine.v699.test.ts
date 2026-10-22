@@ -36,7 +36,7 @@ async function call(params: Record<string, string>) {
 beforeEach(() => {
   process.env.TWILIO_AUTH_TOKEN = AUTH;
   process.env.TWILIO_CALLER_ID = "+15875550000";
-  delete process.env.TWILIO_MAIN_LINE_NUMBER;
+  process.env.TWILIO_MAIN_LINE_NUMBER = "+18666318939"; // KS_SERVER_v4_BRANDING - each copy sets its main line
 });
 
 describe("v699 dialler calls use each person's direct line", () => {

@@ -50,6 +50,10 @@ jobs:
       - name: No new source-grep tests
         run: node scripts/check-source-grep-tests.mjs
 
+      # KS_SERVER_v4_BRANDING - texts, emails, PDFs and AI prompts name the licensee, never Boreal.
+      - name: No Boreal branding in src string literals
+        run: node scripts/check-brand-strings.mjs
+
       - name: Unit tests
         run: npm run test:ci
 

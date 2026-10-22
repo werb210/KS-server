@@ -33,6 +33,9 @@ beforeEach(() => {
   graph.fetch.mockReset();
 });
 
+// KS_SERVER_v4_BRANDING - no one is excluded by default now; these tests set the exclusion they check.
+process.env.BOOKING_INTAKE_EXCLUDE ??= "andrew@boreal.financial,andrew.p@boreal.financial";
+
 describe("booking mailbox (BF_SERVER_BOOKING_MAILBOX_v749)", () => {
   afterEach(() => { delete process.env.BOOKING_INTAKE_EXCLUDE; });
   it("Andrew is out of the intake team whether he logs in as andrew@ or andrew.p@", () => {

@@ -22,6 +22,8 @@ import {
 import { sendSMS } from "../services/smsService.js";
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
 import { claimedTick } from "./claim.js"; // BF_SERVER_v789_WORKER_CLAIM
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { clientUrl, hostOf } from "../licensee/urls.js"; // KS_SERVER_v4_BRANDING
 
 const TICK_MS = 15 * 60_000;
 
@@ -39,10 +41,11 @@ export function taskSilo(silo: string | null | undefined): "BF" {
   return "BF";
 }
 
-export const ABANDON_SMS_BODY =
-  "Hi! It's Boreal Financial. We noticed you started an application but did not "
+// KS_SERVER_v4_BRANDING - a function: it names the licensee and its client app.
+export const abandonSmsBody = (): string =>
+  `Hi! It's ${brandName()}. We noticed you started an application but did not `
   + "complete it. Are there any questions you have before you complete your "
-  + "application at client.boreal.financial? We are here to assist! "
+  + `application at ${hostOf(clientUrl())}? We are here to assist! `
   // BF_SERVER_ABANDON_STOP_v760 - CASL needs a way to unsubscribe in this message, and the Twilio toll-free
   // registration (US numbers are texted from the 866) promises "Reply STOP to opt out" on every text.
   + "Reply STOP to opt out.";
@@ -120,7 +123,7 @@ export function startAbandonedApplicationWorker(pool: Pool): { stop: () => void 
           // time; this runs at send time against the same shared helper the
           // rest of the codebase uses, so a number that slipped past the LIKE
           // patterns still never reaches Twilio.
-          if (isUndeliverableNumber(row.phone) || !isSendableBody(ABANDON_SMS_BODY)) {
+          if (isUndeliverableNumber(row.phone) || !isSendableBody(abandonSmsBody())) {
             await pool.query(
               `UPDATE applications SET abandon_sms_sent_at = now() WHERE id = $1`,
               [row.id],
@@ -138,12 +141,12 @@ export function startAbandonedApplicationWorker(pool: Pool): { stop: () => void 
           const viaApp = await pushToClientApp({
             phone: String(row.phone), applicationId: row.id, kind: "abandoned_application",
             title: "Finish your application", body: "You're almost done - pick up where you left off.",
-            sms: ABANDON_SMS_BODY, categoryId: "APPLICATION_UPDATE",
+            sms: abandonSmsBody(), categoryId: "APPLICATION_UPDATE",
           });
           // BF_SERVER_v809_SMS_UPDATES_CONSENT - the reminder text goes only to applicants who ticked "Text me updates".
           if (!viaApp) {
             const { smsUpdatesAllowed } = await import("../services/smsUpdatesConsent.js");
-            if (await smsUpdatesAllowed(String(row.phone))) await sendSMS(String(row.phone), ABANDON_SMS_BODY);
+            if (await smsUpdatesAllowed(String(row.phone))) await sendSMS(String(row.phone), abandonSmsBody());
             else console.info("[abandoned-application] reminder text skipped: no sms updates consent", { applicationId: row.id });
           }
           // Stamped only after the send succeeds, so a Twilio outage retries on

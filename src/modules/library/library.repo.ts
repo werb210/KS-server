@@ -3,7 +3,7 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { pool } from "../../db.js";
 
-export const TRASH_FOLDER_NAME = "Recycle Bin (Boreal)";
+export const TRASH_FOLDER_NAME = "Recycle Bin (Library)"; // KS_SERVER_v4_BRANDING - fixed, so a rename of the licensee never loses the folder
 export const TRASH_DAYS = 30;
 
 export type LibraryRow = { drive_id: string | null; item_id: string; share_url: string; created_by: string | null; trash_item_id: string | null };

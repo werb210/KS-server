@@ -5,6 +5,7 @@
 import { pool } from "../../db.js";
 import { notifyAllStaff } from "./notifyAllStaff.js";
 import { STAFF_ALERT_BODY_MAX } from "./staffAlerts.js";
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 type Silo = string | null | undefined;
 
@@ -28,7 +29,7 @@ async function contactLabel(from: string | null): Promise<{ label: string; conta
     if (/^client:/i.test(from)) {
       const { resolveClientIdentityCaller } = await import("../../modules/voice/voicemailEnrich.service.js");
       const r = await resolveClientIdentityCaller(from);
-      return { label: r?.label || "Boreal app caller", contactId: r?.contactId ?? null };
+      return { label: r?.label || `${brandName()} app caller`, contactId: r?.contactId ?? null };
     }
     const { contactForPhone } = await import("../../voice/watchCellFallback.js");
     const c = await contactForPhone(pool, from);

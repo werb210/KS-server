@@ -12,6 +12,7 @@ import { requireAuth, requireCapability } from "../middleware/auth.js";
 import { CAPABILITIES } from "../auth/capabilities.js";
 import { ok } from "../lib/apiResponse.js";
 import { wrap } from "../lib/routeWrap.js";
+import { supportEmail } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const router = Router();
 let bootstrapAdminDisabled = false;
@@ -70,7 +71,7 @@ router.post("/bootstrap-admin", wrap(async (req: any) => {
     }
 
     const user = await createUserAccount({
-      email: "todd.w@boreal.financial",
+      email: String(process.env.BOOTSTRAP_ADMIN_EMAIL ?? "").trim() || supportEmail() || null, // KS_SERVER_v4_BRANDING - was Boreal's director
       phoneNumber,
       role: ROLES.ADMIN,
       actorUserId: null,

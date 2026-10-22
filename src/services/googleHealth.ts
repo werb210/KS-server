@@ -9,6 +9,7 @@ import { ga4Configured, runGa4Report } from "./ga4Service.js";
 import { sendSMS } from "./smsService.js";
 import { sendViaGraph } from "./email/graphSendService.js";
 import { claimedTick } from "../workers/claim.js"; // BF_SERVER_v789_WORKER_CLAIM
+import { brandName, supportEmail } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export type HealthStatus = "ok" | "fail" | "off";
 export type HealthCheck = { key: string; label: string; status: HealthStatus; detail: string };
@@ -43,7 +44,7 @@ export async function runGoogleHealthChecks(fetchImpl: typeof fetch = fetch): Pr
     if (!digits(action)) return { status: "fail", detail: "GOOGLE_ADS_SUBMIT_CONVERSION_ACTION_ID is not set" };
     const r = await ingestConversions(action, [{
       transactionId: `healthcheck-${Date.now()}`, at: new Date().toISOString(), value: 1,
-      userIdentifiers: [{ hashedEmail: sha256("healthcheck@boreal.financial") }],
+      userIdentifiers: [{ hashedEmail: sha256("healthcheck@example.com") }],
     }], true, fetchImpl);
     return r.ok
       ? { status: "ok", detail: "Google accepted a test conversion for Application Submitted" }
@@ -114,9 +115,9 @@ export async function alertIfFailing(report: HealthReport, now = Date.now()): Pr
   lastFailingKeys = keys;
   const summary = failing.map((c) => c.label).join("; ");
   const phones = listFrom(process.env.GOOGLE_HEALTH_ALERT_PHONES, process.env.LEAD_ALERT_SMS_TO ?? "");
-  const emails = listFrom(process.env.GOOGLE_HEALTH_ALERT_EMAILS, "todd.w@boreal.financial,andrew.p@boreal.financial");
+  const emails = listFrom(process.env.GOOGLE_HEALTH_ALERT_EMAILS, supportEmail());
   for (const to of phones) {
-    try { await sendSMS(to, `Boreal: Google check FAILED - ${summary}. Details: portal Settings > Runtime Verification.`); }
+    try { await sendSMS(to, `${brandName()}: Google check FAILED - ${summary}. Details: portal Settings > Runtime Verification.`); }
     catch (err) { console.warn("[google_health] sms alert failed", { message: err instanceof Error ? err.message : String(err) }); }
   }
   try {
@@ -124,7 +125,7 @@ export async function alertIfFailing(report: HealthReport, now = Date.now()): Pr
       to: emails,
       subject: `Google check failed: ${summary}`,
       bodyText: [
-        "A Google Ads / Analytics check failed on the Boreal server.", "",
+        `A Google Ads / Analytics check failed on the ${brandName()} server.`, "",
         ...failing.map((c) => `- ${c.label}: ${c.detail}`), "",
         "See portal Settings > Runtime Verification. You'll get one reminder a day while it stays broken.",
       ].join("\n"),

@@ -9,6 +9,7 @@ import { pushToUser } from "../notifications/pushToUser.js";
 import { memberIdsOf } from "./team.service.js";
 import { threadSummaries } from "./teamChannels.js";
 import { loadStaffIdentity, mayaContextHeaders, type MayaIdentity } from "../mayaContext.js"; // BF_SERVER_v784_MAYA_IDENTITY
+import { brandName, assistantName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export type CardRef = { kind: "contact" | "application"; id: string };
 const REF = /\/(crm\/contacts|contacts|applications)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
@@ -62,7 +63,7 @@ export async function loadCards(refs: CardRef[]) {
 async function ensureChannel(name: string): Promise<string> {
   const found = await runQuery<{ id: string }>(`SELECT id FROM team_channels WHERE kind = 'channel' AND lower(name) = lower($1) LIMIT 1`, [name]);
   if (found.rows[0]) return found.rows[0].id;
-  const made = await runQuery<{ id: string }>(`INSERT INTO team_channels (kind, name, topic) VALUES ('channel', $1, 'Posted automatically by Boreal') RETURNING id`, [name]);
+  const made = await runQuery<{ id: string }>(`INSERT INTO team_channels (kind, name, topic) VALUES ('channel', $1, $2) RETURNING id`, [name, `Posted automatically by ${brandName()}`]);
   return made.rows[0]!.id;
 }
 
@@ -86,7 +87,7 @@ export async function postTeamAlert(channelName: string, body: string): Promise<
   try {
     const name = channelName.trim().replace(/^#/, "").toLowerCase();
     if (!name || !body.trim()) return false;
-    await postBotMessage(await ensureChannel(name), body.trim(), "Boreal");
+    await postBotMessage(await ensureChannel(name), body.trim(), brandName());
     return true;
   } catch (err: any) {
     logError("team_alert_failed", { channel: channelName, message: err?.message });
@@ -134,8 +135,17 @@ export async function runDueReminders(limit = 50): Promise<number> {
   return r.rows.length;
 }
 
+// KS_SERVER_v4_BRANDING - "@maya" still works; so does "@<the licensee's assistant name>".
+function assistantMention(): RegExp | null {
+  const name = assistantName().trim();
+  if (!name || /\s/.test(name) || name.toLowerCase() === "maya") return null;
+  return new RegExp(`(^|[^a-z0-9_])@${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+}
+
 export function mentionsMaya(body: unknown): boolean {
-  return /(^|[^a-z0-9_])@maya\b/i.test(String(body ?? ""));
+  const text = String(body ?? "");
+  if (/(^|[^a-z0-9_])@maya\b/i.test(text)) return true;
+  return assistantMention()?.test(text) ?? false;
 }
 
 /** When a message says @Maya, ask the Maya agent (staff audience, as the person asking) and reply in its thread. */
@@ -143,7 +153,7 @@ export async function askMaya(channelId: string, message: { id: string; body: st
   if (!mentionsMaya(message.body)) return false;
   const rootId = message.thread_root_id || message.id;
   const mayaUrl = (process.env.MAYA_URL || process.env.MAYA_SERVICE_URL || "").replace(/\/+$/, "");
-  let reply = "I'm not connected right now, so I can't answer in chat. Try the Maya panel in the portal.";
+  let reply = `I'm not connected right now, so I can't answer in chat. Try the ${assistantName()} panel in the portal.`;
   if (mayaUrl) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 30_000);
@@ -154,7 +164,8 @@ export async function askMaya(channelId: string, message: { id: string; body: st
       const identity: MayaIdentity = loaded
         ? { audience: "staff", staff: loaded.staff, silo: loaded.silo }
         : { audience: "staff", staff: { id: askerId, name: null, email: null, role: null }, silo: "BF" };
-      const question = String(message.body).replace(/@maya\b/gi, "").trim() || "Hello";
+      const mention = assistantMention();
+      const question = (mention ? String(message.body).replace(new RegExp(mention.source, "gi"), "$1") : String(message.body)).replace(/@maya\b/gi, "").trim() || "Hello";
       const resp = await fetch(mayaUrl + "/api/maya/message", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...mayaContextHeaders(identity), "X-Silo": identity.silo ?? "BF" },
@@ -171,7 +182,7 @@ export async function askMaya(channelId: string, message: { id: string; body: st
     }
   }
   try {
-    await postBotMessage(channelId, reply, "Maya", rootId);
+    await postBotMessage(channelId, reply, assistantName(), rootId);
     return true;
   } catch (err: any) {
     logError("team_maya_post_failed", { channelId, message: err?.message });

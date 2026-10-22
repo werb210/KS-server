@@ -8,6 +8,7 @@ import { logCrmEvent } from "../crm/crmTimeline.service.js";
 import { sendSms } from "../notifications/sms.service.js";
 import { AzureBlobBackend } from "../../lib/storage/azureBlob.js";
 import { sharedOpenAI } from "../../lib/sharedClients.js"; // BF_SERVER_SNAT_REUSE_v784
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const VM_CONTAINER = process.env.VOICEMAIL_BLOB_CONTAINER || "voicemails";
 let blob: AzureBlobBackend | null = null;
@@ -118,10 +119,10 @@ export async function resolveClientIdentityCaller(from: string): Promise<{ label
          FROM users WHERE id::text = $1 LIMIT 1`,
       [ident],
     );
-    return { label: u.rows[0]?.name || "Boreal staff", contactId: null, applicationId: null };
+    return { label: u.rows[0]?.name || `${brandName()} staff`, contactId: null, applicationId: null };
   } catch (err: unknown) {
     console.warn("[voicemail] client identity lookup failed", { from, message: err instanceof Error ? err.message : String(err) });
-    return { label: appId ? "Client app caller" : "Boreal staff", contactId: null, applicationId: null };
+    return { label: appId ? "Client app caller" : `${brandName()} staff`, contactId: null, applicationId: null };
   }
 }
 
@@ -270,7 +271,7 @@ export async function enrichAndDistributeVoicemail(params: {
     if (notify) {
       const who = callerLabel || "an unknown caller"; // BF_SERVER_v817_DIALER_MESSAGING
       const tail = transcript ? `: "${transcript.slice(0, 140)}"` : "";
-      await sendSms({ to: notify, message: `New Boreal voicemail from ${who}${tail}` });
+      await sendSms({ to: notify, message: `New ${brandName()} voicemail from ${who}${tail}` });
     }
   } catch {
     // Voicemail enrichment is best effort; do not fail the Twilio callback.

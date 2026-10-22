@@ -59,6 +59,7 @@ import {
 } from "../processing/processing.service.js";
 import { logCrmEvent } from "../crm/crmTimeline.service.js";
 import { creditReferralConversion, attributeReferralFromRef } from "../referrals/referralConversions.service.js";
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 // BF_APP_ID_CAST_v39 — Block 39-A — applications.id comparisons cast to text
 
 const BANK_STATEMENT_CATEGORY = "bank_statements_6_months";
@@ -1130,8 +1131,8 @@ export async function uploadDocument(params: {
              VALUES (gen_random_uuid(), 'message', 'outbound', 'sent', $1,
                (SELECT contact_id FROM applications WHERE id::text = ($1)::text LIMIT 1),
                COALESCE((SELECT silo FROM applications WHERE id::text = ($1)::text LIMIT 1), 'BF'),
-               $2, 'Boreal Financial', now())`,
-            [params.applicationId, "All required documents received \u2014 thank you. Our team is now reviewing your application."]
+               $2, $3, now())`,
+            [params.applicationId, "All required documents received \u2014 thank you. Our team is now reviewing your application.", brandName()]
           );
         } catch (err) {
           console.warn("docs_received_confirmation_message_failed", {

@@ -3,6 +3,7 @@
 // reachable) meant a staff member out with only a cellular Watch + AirPods never got a Boreal call. Staff who opted
 // in (verified callback number + an enabled standalone Watch) now get: app identity for ~15 s, then their cell -
 // sequentially, never in parallel - with a press-1 screen so the cell's own voicemail can never swallow the call.
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[] }> };
 
 /** How long the Boreal app (iPhone dialler / iPad) rings before the cell is tried. */
@@ -91,10 +92,10 @@ export async function callerLabel(q: Q, from: string | null | undefined): Promis
     try {
       const { resolveClientIdentityCaller } = await import("../modules/voice/voicemailEnrich.service.js");
       const r = await resolveClientIdentityCaller(raw);
-      return r?.label || "the Boreal app";
+      return r?.label || `the ${brandName()} app`;
     } catch (err: any) {
       console.warn("[watch_cell] client identity label failed", { message: err?.message });
-      return "the Boreal app";
+      return `the ${brandName()} app`;
     }
   }
   const contact = await contactForPhone(q, raw);

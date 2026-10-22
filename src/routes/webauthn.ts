@@ -14,10 +14,12 @@ import { fetchCapabilitiesForRole } from "../auth/capabilities.js";
 import { findAuthUserById } from "../modules/auth/auth.repo.js";
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js";
 import { safeHandler } from "../middleware/safeHandler.js"; // BF_SERVER_v789_SAFE_HANDLERS // BF_SERVER_SILENT_QUERIES_v678
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { portalUrl, hostOf } from "../licensee/urls.js"; // KS_SERVER_v4_BRANDING
 
 const router = Router();
-const RP_ID = process.env.WEBAUTHN_RP_ID || "staff.boreal.financial";
-const RP_NAME = process.env.WEBAUTHN_RP_NAME || "Boreal Financial";
+const RP_ID = process.env.WEBAUTHN_RP_ID || hostOf(portalUrl()); // KS_SERVER_v4_BRANDING - this copy's portal, not Boreal's
+const rpName = () => process.env.WEBAUTHN_RP_NAME || brandName();
 const ORIGINS = (process.env.WEBAUTHN_ORIGINS || `https://${RP_ID}`)
   .split(",").map((s) => s.trim()).filter(Boolean);
 
@@ -50,7 +52,7 @@ router.post("/register/options", requireAuth, safeHandler(async (req: any, res) 
       `SELECT credential_id, transports FROM webauthn_credentials WHERE user_id = $1`, [userId])
     .then((r) => r.rows).catch((swallowedErr: unknown) => logWarnSwallowed(swallowedErr, "routes/webauthn.ts:46", []));
   const options = await generateRegistrationOptions({
-    rpName: RP_NAME, rpID: RP_ID,
+    rpName: rpName(), rpID: RP_ID,
     userName: (user as any).email || (user as any).phoneNumber || String(user.id),
     userDisplayName: [(user as any).first_name, (user as any).last_name].filter(Boolean).join(" ") || undefined,
     userID: new TextEncoder().encode(String(user.id)),

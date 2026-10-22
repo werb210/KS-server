@@ -39,7 +39,7 @@ describe("broker sign-up", () => {
     expect(r.status).toBe(201);
     expect(r.body.data).toMatchObject({ agreementConfigured: true, signingUrl: "https://signnow.test/sign/grp-1", groupId: "grp-1" });
     expect(h.uploads).toHaveLength(1);
-    expect(h.uploads[0].name).toMatch(/^Boreal Broker Agreement - Brokerage Inc - /);
+    expect(h.uploads[0].name).toMatch(/^Keystone Demo Brokerage Broker Agreement - Brokerage Inc - /);
     const partner = callsMatching(h.queryMock, /partner_kind = 'broker'/);
     expect(partner).toHaveLength(1);
     expect(partner[0][1]).toEqual([r.body.data.referrerId]);
@@ -55,7 +55,7 @@ describe("broker sign-up", () => {
   it("without kind broker the referral agreement is signed instead", async () => {
     const r = await request(app).post("/api/referrer/signup").send(SIGNUP);
     expect(r.status).toBe(201);
-    expect(h.uploads[0].name).toMatch(/^Boreal Referral Agreement - Bea Broker - /);
+    expect(h.uploads[0].name).toMatch(/^Keystone Demo Brokerage Referral Agreement - Bea Broker - /);
     expect(callsMatching(h.queryMock, /partner_kind/)).toHaveLength(0);
   });
 

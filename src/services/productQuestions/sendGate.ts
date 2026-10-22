@@ -6,6 +6,7 @@
 import { AppError } from "../../middleware/errors.js";
 import { assertBrokerDealConfirmed } from "../brokerImport/dealGate.js"; // BF_SERVER_BLOCK_v521_BROKER_IMPORT
 import { loadGaps } from "./service.js";
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 type Query = (sql: string, params: unknown[]) => Promise<{ rows?: any[]; rowCount?: number | null }>;
 
@@ -89,9 +90,9 @@ export async function requestResignature(query: Query, applicationId: string, by
     `INSERT INTO communications_messages
        (id, type, direction, status, application_id, contact_id, silo, body, staff_name, cta_label, cta_action, created_at)
      SELECT gen_random_uuid(), 'message', 'outbound', 'sent', a.id, a.contact_id, COALESCE(a.silo, 'BF'),
-            $2, 'Boreal Financial', 'Sign now', 'sign', now()
+            $2, $3, 'Sign now', 'sign', now()
        FROM applications a WHERE a.id::text = ($1)::text`,
-    [applicationId, `Your application has been updated to ${summary.setLabel}. Please sign the updated application so we can send it to lenders.`],
+    [applicationId, `Your application has been updated to ${summary.setLabel}. Please sign the updated application so we can send it to lenders.`, brandName()],
   );
   const { notifyApplicant } = await import("../push/applicantPush.js");
   void notifyApplicant({ applicationId, categoryId: "APPLICATION_UPDATE", title: "Please sign your updated application", body: `Your ${summary.setLabel} application is ready to sign.`, dedupeKey: "product_switch_resign" });
@@ -139,7 +140,7 @@ export async function requestProductQuestions(query: Query, applicationId: strin
   const inserted = await query(
     `INSERT INTO communications_messages
        (id, type, direction, status, application_id, contact_id, silo, body, staff_name, cta_label, cta_action, created_at)
-     SELECT gen_random_uuid(), 'message', 'outbound', 'sent', a.id, a.contact_id, COALESCE(a.silo, 'BF'), $2, 'Boreal Financial',
+     SELECT gen_random_uuid(), 'message', 'outbound', 'sent', a.id, a.contact_id, COALESCE(a.silo, 'BF'), $2, $5,
             'Answer questions', $3, now()
        FROM applications a
       WHERE a.id::text = ($1)::text
@@ -149,7 +150,7 @@ export async function requestProductQuestions(query: Query, applicationId: strin
              AND m.created_at > COALESCE((a.metadata->'product_questions'->$4->>'submitted_at')::timestamptz, 'epoch'::timestamptz)
         )
      RETURNING id`,
-    [applicationId, body, `product_questions:${summary.set}`, summary.set],
+    [applicationId, body, `product_questions:${summary.set}`, summary.set, brandName()],
   );
   if ((inserted.rows?.length ?? 0) > 0) {
     const { notifyApplicant } = await import("../push/applicantPush.js");

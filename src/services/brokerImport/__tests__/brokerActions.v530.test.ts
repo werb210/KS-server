@@ -31,7 +31,7 @@ describe("v530 broker file actions", () => {
   it("texts the client the sign-in link", async () => {
     query.mockImplementation(answerBySql([[/FROM broker_imports/, { rows: [open] }]])); // BF_SERVER_v789_SQL_CONTENT_MOCKS
     await expect(textBrokerClient("i1")).resolves.toEqual({ sentTo: "+15145550199" });
-    expect(sendSms).toHaveBeenCalledWith(expect.objectContaining({ to: "+15145550199", message: expect.stringContaining("Hi Jean, Avance has sent Boreal Financial") }));
+    expect(sendSms).toHaveBeenCalledWith(expect.objectContaining({ to: "+15145550199", message: expect.stringContaining("Hi Jean, Avance has sent Keystone Demo Brokerage") }));
     expect(clientInviteText(null, "Avance")).toMatch(/^Hi, Avance .*https:\/\/wonderful-island-0b68ae310\.5\.azurestaticapps\.net$/);
   });
   it("will not text without a mobile", async () => {

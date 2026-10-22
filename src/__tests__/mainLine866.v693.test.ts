@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("public numbers and personal numbers", () => {
-  it("rejection emails give the 866 main line", () => {
+  // KS_SERVER_v4_BRANDING - the licensee's support phone, never Boreal's 866 line or a staff cell.
+  it("rejection emails give the licensee's support phone", () => {
     const s = readFileSync("src/services/rejectionNotice.ts", "utf8");
     expect(s).not.toContain("451-1768");
-    expect(s.split("+1 (866) 631-8939").length - 1).toBe(2);
+    expect(s).not.toContain("631-8939");
+    expect(s.split("supportPhone()").length - 1).toBeGreaterThanOrEqual(2);
   });
 });

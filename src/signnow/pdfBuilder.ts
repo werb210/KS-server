@@ -5,6 +5,7 @@
 // email signing block). pdf-lib only.
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { brandName, supportEmail, websiteHost, winAnsi } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export type PdfOwner = {
   label: string;
@@ -51,10 +52,10 @@ export async function buildApplicationPdf(inputs: ApplicationPdfInputs, out?: { 
   const ensure = (need: number) => { if (y - need < M) { page = doc.addPage([PW, PH]); y = PH - M; } };
 
   // header
-  text("BOREAL FINANCIAL", M, y - 16, 18, FB, DARK);
-  text("boreal.financial", PW - M - 150, y - 4, 8, F, DARK);
-  text("info@boreal.financial", PW - M - 150, y - 14, 8, F, DARK);
-  text("submissions@boreal.financial", PW - M - 150, y - 24, 8, F, DARK);
+  // KS_SERVER_v4_BRANDING - the licensee's name, website and support email (was Boreal's).
+  text(winAnsi(brandName()).toUpperCase(), M, y - 16, 18, FB, DARK);
+  text(winAnsi(websiteHost()), PW - M - 150, y - 4, 8, F, DARK);
+  if (supportEmail()) text(winAnsi(supportEmail()), PW - M - 150, y - 14, 8, F, DARK);
   y -= 30;
   page.drawLine({ start: { x: M, y }, end: { x: PW - M, y }, thickness: 1.2, color: NAVY });
   y -= 6;
@@ -98,7 +99,7 @@ export async function buildApplicationPdf(inputs: ApplicationPdfInputs, out?: { 
 
   // consent
   y -= 8; ensure(140);
-  const consent = "The undersigned certifies the above information is true, correct and complete and authorizes Boreal Financial and its representatives to obtain, verify, use and disclose to third parties (including credit reporting agencies and lenders) any credit, financial and personal information necessary to assess, service or enforce this application, in accordance with applicable privacy law (PIPEDA). Contact info@boreal.financial to review or correct your information.";
+  const consent = "The undersigned certifies the above information is true, correct and complete and authorizes " + winAnsi(brandName()) + " and its representatives to obtain, verify, use and disclose to third parties (including credit reporting agencies and lenders) any credit, financial and personal information necessary to assess, service or enforce this application, in accordance with applicable privacy law (PIPEDA). Contact " + (winAnsi(supportEmail()) || "us") + " to review or correct your information.";
   const words = consent.split(" "); let line = ""; const grey = rgb(0.22, 0.25, 0.3);
   for (const w of words) { const t = line ? line + " " + w : w; if (F.widthOfTextAtSize(t, 7) > CW) { text(line, M, y, 7, F, grey); y -= 9; line = w; } else line = t; }
   if (line) { text(line, M, y, 7, F, grey); y -= 9; }

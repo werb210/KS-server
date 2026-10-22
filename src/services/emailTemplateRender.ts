@@ -1,5 +1,6 @@
 import { serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
-// BF_EMAIL_TWO_COLUMN_v1 - fixed Boreal-branded marketing email frame with an optional second column.
+import { brandName, legalName, supportEmail } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+// BF_EMAIL_TWO_COLUMN_v1 - fixed branded marketing email frame with an optional second column.
 export type BrandedEmailFields = {
   headline: string; heroUrl: string; heroLink: string; body: string;
   ctaLabel: string; ctaUrl: string; image2Url: string; image2Link: string;
@@ -11,7 +12,6 @@ export type BrandedEmailFields = {
 };
 
 const BRAND = "#1E3A8A";
-const ADDRESS = "450 Sparling Crt SW, Edmonton, AB T6X 1G9";
 
 function esc(s: string): string {
   return String(s || "")
@@ -83,8 +83,8 @@ export function renderBrandedEmail(f: BrandedEmailFields): string {
 <body style="margin:0;padding:0;background:#f4f5f7;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;"><tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden;">
-<tr><td style="background:${BRAND};padding:22px;text-align:center;"><img src="${logo}" alt="Boreal Financial" width="300" style="display:inline-block;width:300px;max-width:80%;height:auto;border:0;"></td></tr>
+<tr><td style="background:${BRAND};padding:22px;text-align:center;"><img src="${logo}" alt="${esc(brandName())}" width="300" style="display:inline-block;width:300px;max-width:80%;height:auto;border:0;"></td></tr>
 ${hasSecondColumn ? columns : `${headline}${hero}${body}${cta}`}
-<tr><td style="padding:30px 28px 28px;"><hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 16px;"><p style="margin:0 0 6px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#6b7280;"><strong>Boreal Financial</strong><br>${ADDRESS}</p><p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#9ca3af;">You received this email because you connected with Boreal Financial.</p></td></tr>
+<tr><td style="padding:30px 28px 28px;"><hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 16px;"><p style="margin:0 0 6px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#6b7280;"><strong>${esc(legalName())}</strong>${supportEmail() ? `<br>${esc(supportEmail())}` : ""}</p><p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#9ca3af;">You received this email because you connected with ${esc(brandName())}.</p></td></tr>
 </table></td></tr></table></body></html>`;
 }

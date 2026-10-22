@@ -5,15 +5,21 @@ import { ALBERTA_TZ } from "../lib/albertaTime.js"; // BF_SERVER_ALBERTA_TIME_v7
 import { randomInt, randomUUID } from "node:crypto";
 import { pool } from "../db.js";
 import { serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { mainLineNumber } from "../voice/directLines.js";
 
-export const DIAL_IN_DISPLAY = "(866) 631-8939";
-export const DIAL_IN_E164 = "+18666318939";
+// KS_SERVER_v4_BRANDING - the dial-in is this copy's main line (TWILIO_MAIN_LINE_NUMBER), not a fixed number.
+export function dialInE164(): string { return mainLineNumber(); }
+export function dialInDisplay(): string {
+  const d = dialInE164().replace(/[^0-9]/g, "");
+  return d.length === 11 && d.startsWith("1") ? `(${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7)}` : dialInE164();
+}
 export const OPEN_BEFORE_MIN = 15;
 export const STAY_OPEN_AFTER_MIN = 120;
 
 export type MeetingRoom = { id: string; code: string; slug: string; title: string; host_user_id: string | null; application_id: string | null; contact_id: string | null; starts_at: string; duration_min: number; status: string };
 
-export const conferenceName = (id: string) => "boreal-meet-" + id;
+export const conferenceName = (id: string) => "boreal-meet-" + id; // Twilio conference id, never shown
 const newSlug = () => randomUUID().replace(/-/g, "").slice(0, 12);
 
 export function isOpen(room: Pick<MeetingRoom, "starts_at" | "duration_min" | "status">, now = new Date()): boolean {
@@ -29,7 +35,7 @@ export function isOpen(room: Pick<MeetingRoom, "starts_at" | "duration_min" | "s
 // BF_SERVER_v827_CONFERENCE_DIAL - "3" and the code go in one burst after the call is answered. The greeting takes them
 // together ("3" + code + "#"), so no digit is lost between menus (the old ",,3,,,code#" sent the code while the
 // next menu was still loading, so part of it was dropped and the caller heard "try again").
-export function oneTapDial(code: string): string { return DIAL_IN_E164 + ",,3" + code + "#"; }
+export function oneTapDial(code: string): string { return dialInE164() + ",,3" + code + "#"; }
 
 export function joinUrl(slug: string): string {
   const base = (process.env.PUBLIC_SERVER_URL || serverUrl()).replace(/[/]+$/, "");
@@ -42,7 +48,7 @@ export function inviteText(room: Pick<MeetingRoom, "title" | "code" | "slug" | "
     room.title,
     when + " (Alberta time)",
     "",
-    "Join by phone: call " + DIAL_IN_DISPLAY + ", press 3, then enter access code " + room.code + " and press #.",
+    "Join by phone: call " + dialInDisplay() + ", press 3, then enter access code " + room.code + " and press #.",
     "Meeting page: " + joinUrl(room.slug),
   ].join(String.fromCharCode(10));
 }
@@ -192,7 +198,7 @@ export async function searchPeople(q: string, silo: string = "BF"): Promise<Arra
       WHERE COALESCE(active, true) AND (first_name ILIKE $1 OR last_name ILIKE $1 OR email ILIKE $1)
       ORDER BY first_name LIMIT 5`, [like]);
   return [
-    ...staff.rows.filter((r: any) => r.name).map((r: any) => ({ ...r, kind: "staff" as const, detail: "Boreal staff" })),
+    ...staff.rows.filter((r: any) => r.name).map((r: any) => ({ ...r, kind: "staff" as const, detail: `${brandName()} staff` })),
     ...contacts.rows.filter((r: any) => r.name).map((r: any) => ({ contactId: r.contactId, name: r.name, email: r.email, phone: r.phone, kind: "contact" as const, detail: [r.company_name, r.email || r.phone].filter(Boolean).join(" - ") })),
   ];
 }

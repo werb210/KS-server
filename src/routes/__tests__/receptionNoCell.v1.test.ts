@@ -171,7 +171,7 @@ describe("cell-leg call screening", () => {
   it("names the CRM contact and waits 8 s for a single key, then hangs up", async () => {
     h.query.mockImplementation(answerBySql([[/FROM contacts/, { rows: [{ id: "c-1", name: "Jane Client" }] }]]));
     const xml = await post("/screen?from=%2B15875550142", { From: CALLER, ParentCallSid: "CA-parent" });
-    expect(xml).toMatch(/<Gather input="dtmf" numDigits="1" timeout="8" action="\/api\/webhooks\/twilio\/reception\/screen-result" method="POST"><Say voice="Polly.Joanna">Boreal call from Jane Client\. Press 1 to accept\.<\/Say><\/Gather><Hangup\/>/);
+    expect(xml).toMatch(/<Gather input="dtmf" numDigits="1" timeout="8" action="\/api\/webhooks\/twilio\/reception\/screen-result" method="POST"><Say voice="Polly.Joanna">Keystone Demo Brokerage call from Jane Client\. Press 1 to accept\.<\/Say><\/Gather><Hangup\/>/);
     const [, params] = callsMatching(h.query, /FROM contacts/)[0]!;
     expect(params).toEqual(["5875550142"]);
   });
@@ -179,7 +179,7 @@ describe("cell-leg call screening", () => {
   it("reads an unknown caller's number digit by digit", async () => {
     h.query.mockImplementation(answerBySql([]));
     const xml = await post("/screen?from=%2B15875550142", {});
-    expect(xml).toContain("Boreal call from 5 8 7, 5 5 5, 0 1 4 2. Press 1 to accept.");
+    expect(xml).toContain("Keystone Demo Brokerage call from 5 8 7, 5 5 5, 0 1 4 2. Press 1 to accept.");
   });
 
   it("connects only on 1; any other key or silence hangs up the cell leg", async () => {

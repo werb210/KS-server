@@ -8,8 +8,8 @@ describe("Boreal signs its side of the referrer and broker agreements", () => {
   for (const p of ["src/signnow/referrerAgreementPdfBuilder.ts", "src/signnow/brokerAgreementPdfBuilder.ts"]) {
     it(p + " carries Boreal's electronic signature and no unkept promise", () => {
       const s = readFileSync(p, "utf8");
-      expect(s).toContain('text(ctx, "/s/ Todd Werboweski", 14, SIG, BLACK);');
-      expect(s).toContain('"Signed electronically for Boreal Financial Group on "');
+      expect(s).toContain('text(ctx, "/s/ " + LN, 14, SIG, BLACK);'); // KS_SERVER_v4_BRANDING - the licensee signs, not Boreal
+      expect(s).toContain('"Signed electronically for " + LN + " on "');
       expect(s).not.toContain("Countersigned by Boreal Financial Group upon acceptance.");
     });
   }

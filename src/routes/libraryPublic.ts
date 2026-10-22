@@ -11,6 +11,7 @@ import { pool } from "../db.js";
 import { getGraphForUser } from "../modules/o365/graphClient.js";
 import * as repo from "../modules/library/library.repo.js";
 import * as g from "../modules/library/libraryGraph.js";
+import { brandName, contactLine } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const router = Router();
 export const REQUEST_MAX_FILE_BYTES = 50 * 1024 * 1024;
@@ -27,20 +28,20 @@ function humanSize(n: number): string {
   if (n < 1024 * 1024) return Math.max(1, Math.round(n / 1024)) + " KB";
   return (n / (1024 * 1024)).toFixed(1) + " MB";
 }
-// One plain, readable page: dark text on white, Boreal Financial named as the sender.
+// One plain, readable page: dark text on white, the licensee named as the sender.
 export function page(title: string, body: string): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex"><title>${esc(title)} - Boreal Financial</title>
+<meta name="robots" content="noindex"><title>${esc(title)} - ${esc(brandName())}</title>
 <style>body{margin:0;background:#f1f5f9;color:#0f172a;font:16px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif}
 main{max-width:560px;margin:40px auto;padding:28px;background:#fff;border-radius:14px;box-shadow:0 6px 24px rgba(15,23,42,.08)}
 h1{font-size:22px;margin:0 0 6px}p{margin:8px 0}.muted{color:#475569;font-size:14px}.brand{font-weight:800;color:#1e3a8a;margin-bottom:18px}
 .btn{display:inline-block;background:#1e3a8a;color:#fff;border:0;border-radius:8px;padding:12px 20px;font-size:16px;font-weight:700;text-decoration:none;cursor:pointer}
 input[type=password],input[type=text],input[type=email]{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid #94a3b8;border-radius:8px;font-size:16px;margin:6px 0 12px;color:#0f172a}
 .err{color:#991b1b;font-weight:600}.ok{color:#065f46;font-weight:600}</style></head>
-<body><main><div class="brand">Boreal Financial</div>${body}<p class="muted" style="margin-top:24px">Questions? Call (866) 631-8939 or email info@boreal.financial.</p></main></body></html>`;
+<body><main><div class="brand">${esc(brandName())}</div>${body}${contactLine() ? `<p class="muted" style="margin-top:24px">Questions? ${esc(contactLine().replace(/^./, (c) => c.toUpperCase()))}.</p>` : ""}</main></body></html>`;
 }
 function gone(res: any, what: string): void {
-  res.status(410).type("html").send(page("Link no longer available", `<h1>This ${what} has ended</h1><p>The link has expired or was turned off. Ask the person at Boreal Financial who sent it for a new one.</p>`));
+  res.status(410).type("html").send(page("Link no longer available", `<h1>This ${what} has ended</h1><p>The link has expired or was turned off. Ask the person at ${esc(brandName())} who sent it for a new one.</p>`));
 }
 
 async function shareFor(token: string): Promise<any | null> {
@@ -60,7 +61,7 @@ router.get("/f/:token", safeHandler(async (req: any, res: any) => {
   const buttons = (s.allow_download ? `<button class="btn" type="submit" name="mode" value="download">Download</button> ` : "")
     + `<button class="btn" type="submit" name="mode" value="view" style="background:#0f766e">View</button>`;
   res.type("html").send(page(s.item_name, `<h1>${esc(s.item_name)}</h1>
-<p class="muted">Shared with you by ${esc(s.created_by_name ?? "Boreal Financial")}. Available until ${esc(until)}.</p>
+<p class="muted">Shared with you by ${esc(s.created_by_name ?? brandName())}. Available until ${esc(until)}.</p>
 <form method="post" action="${esc(action)}">${pw}<p>${buttons}</p></form>`));
 }));
 
@@ -105,7 +106,7 @@ router.get("/r/:token", safeHandler(async (req: any, res: any) => {
   const post = "/api/shared/r/" + encodeURIComponent(req.params.token) + "/upload";
   const until = new Date(r.expires_at).toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" });
   res.type("html").send(page(r.title, `<h1>${esc(r.title)}</h1>
-<p class="muted">${esc(r.created_by_name ?? "Boreal Financial")} asked you to upload files. Open until ${esc(until)}. Up to 50 MB per file.</p>
+<p class="muted">${esc(r.created_by_name ?? brandName())} asked you to upload files. Open until ${esc(until)}. Up to 50 MB per file.</p>
 <label for="n">Your name</label><input id="n" type="text" maxlength="100" autocomplete="name">
 <input id="f" type="file" multiple style="margin:6px 0 14px">
 <p><button class="btn" id="go" type="button">Upload</button></p><p id="s" role="status"></p>

@@ -6,6 +6,7 @@ import { loadCollateral } from "./collateral.js";
 import { loadResearch } from "./research.js";
 import { loadCrmTimeline } from "../../routes/crm/timeline.js";
 import { sharedOpenAI } from "../../lib/sharedClients.js"; // BF_SERVER_SNAT_REUSE_v784
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export type DealType = "equipment" | "abl" | "term";
 export function dealTypeFor(productCategory: unknown): DealType {
@@ -99,7 +100,7 @@ export function missingInfo(dealType: DealType, app: any, financials: FinancialT
   if (!research.length) out.push("No company research yet - run Research.");
   return out;
 }
-const STYLE = ["You write commercial credit write-ups for Boreal Financial, a Canadian lending brokerage, to send to lenders.",
+const style = () => [`You write commercial credit write-ups for ${brandName()}, a lending brokerage, to send to lenders.`,
   "House style (from real examples): plain, confident, factual prose; short paragraphs; money as $2.35MM for millions and $621M for thousands;",
   "Transaction = one or two sentences on what the client wants, why, and what it replaces. Overview = founding year and founder, what the business does,",
   "locations, staff, key customers, current lender and why they are moving, market position, and any special situation under its own short heading.",
@@ -114,7 +115,7 @@ export async function writeNarrative(facts: object, dealType: DealType): Promise
   if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not set");
   const openai = sharedOpenAI(process.env.OPENAI_API_KEY);
   const r = await openai.chat.completions.create({ model: process.env.CREDIT_WRITER_MODEL || process.env.CREDIT_LLM_MODEL || "gpt-5.4", response_format: { type: "json_object" },
-    messages: [{ role: "system", content: STYLE }, { role: "user", content: ["Write these sections and return ONLY JSON:",
+    messages: [{ role: "system", content: style() }, { role: "user", content: ["Write these sections and return ONLY JSON:",
       "{\"transaction\":\"...\",\"overview\":\"... (paragraphs separated by blank lines; special situations as '**Heading**' then text)\",",
       `\"deal_section\":\"...\",\"financial_commentary\":\"2-4 sentences on trends, margins, EBITDA, DSCR, forecast if given\",`,
       "\"rationale\":[\"3-5 short approval rationale bullets\"],\"risks\":[{\"risk\":\"...\",\"mitigant\":\"...\"}]}",

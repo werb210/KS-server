@@ -9,6 +9,7 @@
 // push-to-start token (iOS 17.2+): a stage change after the activity has gone starts a new one.
 import { pool } from "../../db.js";
 import { logWarnSwallowed } from "../../lib/logWarnSwallowed.js";
+import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount?: number | null }> };
 
@@ -63,7 +64,7 @@ export function liveActivityStartPayload(applicationId: string, business: string
       "content-state": { stage: content.stage, step: content.step, totalSteps: content.totalSteps, action: content.action },
       "attributes-type": "ApplicationStatusAttributes",
       attributes: { applicationId, business },
-      alert: { title: "Boreal Financial", body: `${content.stage} · ${content.action}` },
+      alert: { title: brandName(), body: `${content.stage} · ${content.action}` },
     },
   };
 }
@@ -81,7 +82,7 @@ export function liveActivityPayload(content: StatusContent, nowSeconds: number):
       event: "update",
       "content-state": contentState,
       // A stage change lights the screen once, like a notification.
-      alert: { title: "Boreal Financial", body: `${content.stage} · ${content.action}` },
+      alert: { title: brandName(), body: `${content.stage} · ${content.action}` },
     },
   };
 }
@@ -224,7 +225,7 @@ export async function runStatusSweep(deps: { db?: Q; senders?: Senders; now?: ()
         delivered = false; // nothing on the lock screen to update (e.g. a final stage after the activity ended)
       } else if (row.platform === "android" && row.user_id) {
         await senders.sendAndroid(String(row.user_id), androidStatusData(String(row.application_id), content),
-          "Boreal Financial", `${content.stage} · ${content.action}`);
+          brandName(), `${content.stage} · ${content.action}`);
       }
       if (delivered) sent += 1;
       await db.query(

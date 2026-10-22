@@ -15,6 +15,7 @@ import { clientUrl, serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICE
 
 const router = Router();
 import { smsFromFor, smsSenderFor } from "../lib/smsFrom.js"; // BF_SERVER_US_SMS_TOLLFREE_v755
+import { brandName, assistantName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 // BF_SERVER_MEDIA_QUERY_AUTH_v1 - <img>/<audio>/EventSource cannot send an
 // Authorization header, so the media proxies and the message stream accept a
@@ -250,7 +251,7 @@ router.post(
       ).catch((err: any) => console.warn("[maya-handoff] messages row insert failed", { contactId: resolvedContactId, message: err?.message ?? String(err) }));
     }
 
-    const smsBody = `Maya handoff (${surface}): ${summary ?? "visitor requested human"}. Session ${sessionId ?? "n/a"}.`;
+    const smsBody = `${assistantName()} handoff (${surface}): ${summary ?? "visitor requested human"}. Session ${sessionId ?? "n/a"}.`;
     const fanout = await sendStaffNotification({ recipients: recipientsRaw, body: smsBody });
     // BF_SERVER_v820_WATCH_CALLS - bell + iPhone dialler + Watch alert for "talk to a person". Detached, never throws.
     void import("../services/notifications/staffAlertEvents.js")
@@ -409,7 +410,7 @@ router.get("/sms", safeHandler(async (req: any, res: any) => {
        SELECT
          -- BF_SERVER_v817_DIALER_MESSAGING - the OTHER party's number: to_number on an outbound
          -- text, from_number on an inbound one. Keying on from_number filed every outbound text
-         -- to an unknown number under Boreal's own Twilio number (one mixed-up thread).
+         -- to an unknown number under our own Twilio number (one mixed-up thread).
          COALESCE(m.contact_id::text,
                   CASE WHEN m.direction = 'outbound' THEN m.to_number ELSE m.from_number END) AS thread_key,
          m.contact_id,
@@ -1746,7 +1747,7 @@ router.post(
       const viaApp = stale && row?.phone
         ? await (await import("../services/notifications/notifyClient.js")).pushToClientApp({
             phone: row.phone, applicationId: applicationId || null, kind: "staff_message",
-            title: `New message from ${staffName ?? "Boreal"}`, body: body.length > 140 ? body.slice(0, 137) + "..." : body,
+            title: `New message from ${staffName ?? brandName()}`, body: body.length > 140 ? body.slice(0, 137) + "..." : body,
             sms: "", categoryId: "APPLICATION_UPDATE",
             url: "borealclient://messages", // BF_SERVER_v802_PUSH_SECTIONS - a staff message opens the chat
           })
@@ -1758,7 +1759,7 @@ router.post(
           ? `${clientBase}/application/${encodeURIComponent(applicationId)}` /* BF_SERVER_LIVE_UPLOAD_PROMPT_v629 - /portal/:id is not a client route */
           : `${clientBase}/portal`;
         const preview = body.length > 120 ? body.slice(0, 117) + "..." : body;
-        const smsBody = `Boreal: ${preview}
+        const smsBody = `${brandName()}: ${preview}
 ${link}`;
         void sendSms({ to: row.phone, message: smsBody }).catch((err: unknown) => {
           const m = err instanceof Error ? err.message : String(err);

@@ -11,6 +11,7 @@ const sw = vi.hoisted(() => ({
 vi.mock("@simplewebauthn/server", () => sw);
 
 import { listPasskeys, loginOptions, loginWithPasskey, passkeyConfig, registerPasskey, registrationOptions, removePasskey } from "../clientPasskeys.js";
+import { clientUrl, hostOf } from "../../licensee/urls.js"; // KS_SERVER_v4_BRANDING
 
 const SECRET = "test-jwt-secret-123";
 const PHONE = "+17805551212";
@@ -42,7 +43,7 @@ beforeEach(() => { vi.clearAllMocks(); });
 
 describe("client passkeys", () => {
   it("uses the client domain, never the staff one", () => {
-    expect(passkeyConfig({} as any)).toEqual({ rpID: "client.boreal.financial", rpName: "Boreal Financial", origins: ["https://client.boreal.financial"] });
+    expect(passkeyConfig({} as any)).toEqual({ rpID: hostOf(clientUrl()), rpName: "Keystone Demo Brokerage", origins: [`https://${hostOf(clientUrl())}`] }); // KS_SERVER_v4_BRANDING
   });
 
   it("registers a passkey against the signed-in phone and consumes the challenge", async () => {

@@ -32,6 +32,7 @@ import { maskPhoneLast4, maskPhonesInText } from "../lib/maskPhone.js"; // BF_SE
 const OTP_TRUSTED_ROLES: ReadonlySet<string> = new Set([ROLES.ADMIN, ROLES.STAFF, ROLES.OPS, ROLES.MARKETING]);
 import { sharedTwilio } from "../lib/sharedClients.js";
 import { safeHandler } from "../middleware/safeHandler.js"; // BF_SERVER_v789_SAFE_HANDLERS // BF_SERVER_SNAT_REUSE_v784
+import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 async function isStaffPhone(phone: string): Promise<boolean> {
   try {
     const user = await findAuthUserByPhone(phone);
@@ -349,7 +350,7 @@ router.post("/otp/verify", otpVerifyLimiter, async (req, res) => {
       // fixed rather than locking the other lenders out invisibly.
       if (lenderResult.rows.length > 1) {
         console.log("[otp_verify] lender_login_ambiguous_phone", { phone: maskPhoneLast4(phone), matches: lenderResult.rows.length });
-        return res.status(409).json({ error: "ambiguous_lender_phone", message: "This phone number is set on more than one lender. Contact CBoreal to give each lender a unique contact phone." });
+        return res.status(409).json({ error: "ambiguous_lender_phone", message: `This phone number is set on more than one lender. Contact ${brandName()} to give each lender a unique contact phone.` });
       }
       const lender = lenderResult.rows[0];
       if (!lender) {
@@ -415,7 +416,7 @@ router.post("/otp/verify", otpVerifyLimiter, async (req, res) => {
       );
       if (referrerResult.rows.length > 1) {
         console.log("[otp_verify] referrer_login_ambiguous_phone", { phone: maskPhoneLast4(phone), matches: referrerResult.rows.length });
-        return res.status(409).json({ error: "ambiguous_referrer_phone", message: "This phone number is set on more than one referrer. Contact CBoreal to give each referrer a unique phone." });
+        return res.status(409).json({ error: "ambiguous_referrer_phone", message: `This phone number is set on more than one referrer. Contact ${brandName()} to give each referrer a unique phone.` });
       }
       const referrer = referrerResult.rows[0];
       if (!referrer) {
@@ -469,7 +470,7 @@ router.post("/otp/verify", otpVerifyLimiter, async (req, res) => {
         console.log("[otp_verify] accountant_login_ambiguous_phone", { phone: maskPhoneLast4(phone), matches: accountantResult.rows.length });
         return res.status(409).json({
           error: "ambiguous_accountant_phone",
-          message: "This phone number is recorded for more than one accountant. Contact Boreal to correct it.",
+          message: `This phone number is recorded for more than one accountant. Contact ${brandName()} to correct it.`,
         });
       }
       const accountant = accountantResult.rows[0];
@@ -528,7 +529,7 @@ router.post("/otp/verify", otpVerifyLimiter, async (req, res) => {
     // member used to get a client token: the sign-in "worked", the app looked normal, and calls never rang.
     if (String((req.body ?? {}).userType ?? "") === "staff" && !isActiveStaff) {
       console.log("[otp_verify] not_staff", { phone: maskPhoneLast4(phone) });
-      return res.status(403).json({ error: "not_staff", message: "This number isn't set up as a Boreal staff account. Ask an admin to add it." });
+      return res.status(403).json({ error: "not_staff", message: `This number isn't set up as a ${brandName()} staff account. Ask an admin to add it.` });
     }
 
     let token: string;
