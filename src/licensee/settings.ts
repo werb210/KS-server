@@ -10,6 +10,7 @@ type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[] }> 
 export const LICENSEE_FIELDS = [
   "company_name", "legal_name", "assistant_name", "support_email", "support_phone",
   "logo_url", "primary_color", "accent_color", "time_zone", "country",
+  "mailing_address", // KS_SERVER_v5_MAILING_ADDRESS
 ] as const;
 export type LicenseeField = (typeof LICENSEE_FIELDS)[number];
 export type LicenseeSettings = Record<LicenseeField, string>;
@@ -18,12 +19,13 @@ const ENV_NAMES: Record<LicenseeField, string> = {
   company_name: "KS_COMPANY_NAME", legal_name: "KS_LEGAL_NAME", assistant_name: "KS_ASSISTANT_NAME",
   support_email: "KS_SUPPORT_EMAIL", support_phone: "KS_SUPPORT_PHONE", logo_url: "KS_LOGO_URL",
   primary_color: "KS_PRIMARY_COLOR", accent_color: "KS_ACCENT_COLOR", time_zone: "KS_TIME_ZONE", country: "KS_COUNTRY",
+  mailing_address: "KS_MAILING_ADDRESS",
 };
 
 const NEUTRAL: LicenseeSettings = {
   company_name: "Keystone Demo Brokerage", legal_name: "", assistant_name: "Assistant", support_email: "",
   support_phone: "", logo_url: "", primary_color: "#0B1F3A", accent_color: "#2563EB",
-  time_zone: "America/Edmonton", country: "CA",
+  time_zone: "America/Edmonton", country: "CA", mailing_address: "",
 };
 
 export function envDefaults(env: NodeJS.ProcessEnv = process.env): LicenseeSettings {

@@ -8,7 +8,7 @@ import { pool } from "../db.js";
 // SendGrid key that a slot swap can silently replace.
 import { sendViaGraph } from "./email/graphSendService.js";
 import { clientUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
-import { brandName, supportPhone } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { brandName, mailingAddress, supportPhone } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 function esc(value: string): string {
   return value
@@ -40,7 +40,7 @@ export function buildAccountantInvite(vars: {
     `<p><a href="${esc(vars.portalLink)}">${esc(vars.portalLink)}</a></p>`,
     "<p>You'll see only the documents we need from you, nothing else on the file.</p>",
     `<p>${contactLine}</p>`,
-    `<p>Thank you,<br/>${esc(brandName())}</p>`,
+    `<p>Thank you,<br/>${esc(brandName())}${mailingAddress() ? `<br/>${esc(mailingAddress())}` : ""}</p>`,
   ].join("\n");
 
   return { subject, html };
@@ -113,6 +113,7 @@ export async function sendAccountantInvite(opts: {
     "",
     "Thank you,",
     brandName(),
+    ...(mailingAddress() ? [mailingAddress()] : []), // KS_SERVER_v5_MAILING_ADDRESS
   ].join("\n");
 
   // BF_SERVER_ACCOUNTANT_INVITE_SCOPE_v1 - lender submissions depend on
