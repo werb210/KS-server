@@ -137,6 +137,27 @@ export function withWorkerLock<T>(name: string, fn: () => Promise<T>): Promise<W
   return shared.withWorkerLock(name, fn);
 }
 
+// KS_SERVER_v8_SERVICE_STATUS - while the licensee is suspended or cancelled, background work stops (nothing contacts
+// clients, lenders or staff). index.ts registers the check; without one (tests) nothing is paused. The plan notices,
+// the usage reports to operations and the cancelled-data purge keep running.
+export const WORKERS_WHILE_STOPPED: ReadonlySet<string> = new Set(["plan_notices", "usage_reports", "licensee_purge"]);
+let serviceStoppedCheck: (() => Promise<boolean>) | null = null;
+
+export function setServiceStoppedCheck(fn: (() => Promise<boolean>) | null): void {
+  serviceStoppedCheck = fn;
+}
+
+/** Should the worker `name` skip this tick because the service is stopped? A failed check never pauses work. */
+export async function workersPaused(name: string): Promise<boolean> {
+  if (!serviceStoppedCheck || WORKERS_WHILE_STOPPED.has(name)) return false;
+  try {
+    return await serviceStoppedCheck();
+  } catch (err) {
+    console.warn("[worker] service status check failed; running", { worker: name, message: errMessage(err) });
+    return false;
+  }
+}
+
 /**
  * Wrap a worker's tick so it runs under withWorkerLock(name). The returned
  * function never rejects (it is called as `void tick()` from timers).
@@ -144,6 +165,7 @@ export function withWorkerLock<T>(name: string, fn: () => Promise<T>): Promise<W
 export function claimedTick(name: string, fn: () => Promise<unknown>, lock: Pick<WorkerLock, "withWorkerLock"> = shared): () => Promise<void> {
   return async () => {
     try {
+      if (await workersPaused(name)) return; // KS_SERVER_v8_SERVICE_STATUS
       await lock.withWorkerLock(name, fn);
     } catch (err) {
       console.error("[worker-lock] tick failed", { worker: name, message: errMessage(err) });

@@ -2,6 +2,7 @@
 // Customer Match lists via Data Manager (the Google Ads API path closed 2026-04-01).
 // Hashed email + phone only, once per person per list. No-op until
 // GOOGLE_ADS_CM_FUNDED_LIST_ID / GOOGLE_ADS_CM_QUALIFIED_LIST_ID are set.
+import { googleAdsCustomerIdSetting } from "../licensee/connections.js"; // KS_SERVER_v8_CONNECTIONS - licensee setting, then env
 import { pool } from "../db.js";
 import { logError } from "../observability/logger.js";
 import { accessToken } from "./googleAdsConversions.js";
@@ -23,7 +24,7 @@ export function audienceLists(): Array<{ kind: AudienceKind; listId: string }> {
 }
 
 export function buildAudienceBody(listId: string, members: UserIdentifier[][], validateOnly = false) {
-  const customerId = digits(process.env.GOOGLE_ADS_CUSTOMER_ID);
+  const customerId = digits(googleAdsCustomerIdSetting());
   const loginId = digits(process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID) || customerId;
   return {
     destinations: [{

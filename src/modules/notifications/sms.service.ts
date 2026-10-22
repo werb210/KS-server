@@ -1,3 +1,4 @@
+import { countOutboundText } from "../../plans/usage.js"; // KS_SERVER_v8_USAGE - monthly text count
 import { fetchTwilioClient } from "../../services/twilio.js";
 import { config } from "../../config/index.js";
 import { withRetry } from "../../lib/retry.js";
@@ -67,6 +68,7 @@ export async function sendSms(
       shouldRetry: (error) => !isPermanentSmsFailure(error),
     });
     await recordSmsSent(sent?.sid, to, track, sent?.status);
+    await countOutboundText(sent); // KS_SERVER_v8_USAGE
     return sent;
   } catch (error) {
     if (enqueueOnFailure) {

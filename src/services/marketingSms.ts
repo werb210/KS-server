@@ -1,6 +1,7 @@
 // BF_SERVER_MARKETING_SMS_v1 - bulk marketing SMS via Twilio, with per-recipient
 // tracked links (signed token) so clicks drive the fallback cascade. Env-gated on
 // a marketing from-number (TWILIO_SMS_FROM, e.g. the toll-free 800 once A2P-verified).
+import { countOutboundText } from "../plans/usage.js"; // KS_SERVER_v8_USAGE - monthly text count
 import jwt from "jsonwebtoken";
 import { fetchTwilioClient } from "./twilio.js";
 import { config } from "../config/index.js";
@@ -101,6 +102,7 @@ export async function sendMarketingSms(to: string, body: string): Promise<{ ok: 
   try {
     const client = fetchTwilioClient();
     const msg = await client.messages.create({ to, from, body, statusCallback: `${PUBLIC_URL}/api/r/status` });
+    await countOutboundText(msg as any); // KS_SERVER_v8_USAGE
     return { ok: true, sid: (msg as any)?.sid };
   } catch (e: any) {
     if (e?.code === 21610) return { ok: false, optedOut: true, error: "opted_out" };

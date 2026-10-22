@@ -5,7 +5,7 @@
 // functions or string templates that cannot await, so this module hands out the values getLicenseeSettings last
 // loaded. startBrandRefresh() loads them at startup and again every cache cycle, and PUT /api/licensee reloads them
 // on save (updateLicenseeSettings reads them back). Before the first load, the KS_* settings / neutral defaults apply.
-import { envDefaults, getLicenseeSettings, lastLoadedLicensee, type LicenseeSettings } from "./settings.js";
+import { envDefaults, getLicenseeConnections, getLicenseeSettings, lastLoadedLicensee, type LicenseeSettings } from "./settings.js";
 import { hostOf, websiteUrl } from "./urls.js";
 
 type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[] }> };
@@ -66,6 +66,12 @@ export async function warmBrand(db: Q): Promise<void> {
     await getLicenseeSettings(db);
   } catch (err) {
     console.warn("[licensee] brand settings not loaded:", err instanceof Error ? err.message : String(err));
+  }
+  // KS_SERVER_v8_CONNECTIONS - the licensee's own main line / Google Ads id (src/licensee/connections.ts).
+  try {
+    await getLicenseeConnections(db);
+  } catch (err) {
+    console.warn("[licensee] connection settings not loaded:", err instanceof Error ? err.message : String(err));
   }
 }
 

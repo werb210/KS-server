@@ -1,6 +1,7 @@
 // BF_SERVER_AD_NEGATIVES_v1
 // Propose negative-keyword candidates from the daily warehouse and write the
 // terms selected by a marketer back to Google Ads.
+import { googleAdsCustomerIdSetting } from "../licensee/connections.js"; // KS_SERVER_v8_CONNECTIONS - licensee setting, then env
 import { pool } from "../db.js";
 import { GOOGLE_ADS_API_VERSION, loginCid } from "./googleAdsService.js";
 import { accessToken } from "./googleAdsConversions.js";
@@ -115,7 +116,7 @@ export async function addCampaignNegatives(
   terms: string[],
   matchType: NegativeMatchType = "PHRASE",
 ): Promise<AddResult> {
-  const customerId = String(process.env.GOOGLE_ADS_CUSTOMER_ID ?? "").replace(/[^0-9]/g, "");
+  const customerId = String(googleAdsCustomerIdSetting() ?? "").replace(/[^0-9]/g, "");
   if (!customerId) throw new Error("GOOGLE_ADS_CUSTOMER_ID is not set");
   const cid = String(campaignId).replace(/[^0-9]/g, "");
   if (!cid) throw new Error("campaignId must be numeric");
@@ -242,7 +243,7 @@ export async function negativeBlastRadius(
 
 // v419 - undo. Google removes a criterion by resourceName.
 export async function removeCampaignNegative(resourceName: string): Promise<void> {
-  const customerId = String(process.env.GOOGLE_ADS_CUSTOMER_ID ?? "").replace(/[^0-9]/g, "");
+  const customerId = String(googleAdsCustomerIdSetting() ?? "").replace(/[^0-9]/g, "");
   if (!customerId) throw new Error("GOOGLE_ADS_CUSTOMER_ID is not set");
   if (!resourceName) throw new Error("resourceName required");
   const token = await accessToken();

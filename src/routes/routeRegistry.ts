@@ -133,6 +133,7 @@ import { createMountTracker } from "./_canonicalMount.js";
 import { siloMiddleware } from "../middleware/silo.js";
 import licenseeRoutes from "./licensee.js"; // KS_SERVER_v1_LICENSEE
 import planRoutes from "./plan.js"; // KS_SERVER_v6_PLANS
+import dataExportRoutes from "./dataExport.js"; // KS_SERVER_v8_DATA_EXPORT
 import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
 import { requireAuth, requireAuthAllowClient } from "../middleware/auth.js";
 import watchAuthRoutes from "../watch/authRoutes.js";
@@ -344,6 +345,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/templates", router: templatesRoutes, feature: "templates" }, // v693 // KS_SERVER_v6_PLANS
   { path: "/licensee", router: licenseeRoutes }, // KS_SERVER_v1_LICENSEE
   { path: "/plan", router: planRoutes }, // KS_SERVER_v6_PLANS
+  { path: "/export", router: dataExportRoutes }, // KS_SERVER_v8_DATA_EXPORT - Admin
 ];
 
 export const PORTAL_ROUTE_REQUIREMENTS: Pick<ApiRoute, "method" | "path">[] = [

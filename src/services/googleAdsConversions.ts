@@ -5,6 +5,7 @@
 // a PII upload (gclid is Google's own click id), so they run under implied
 // consent; the hashed-email path (PII) is deferred until express consent exists.
 // Env-gated and failure-safe: an application is only marked uploaded on success.
+import { googleAdsCustomerIdSetting } from "../licensee/connections.js"; // KS_SERVER_v8_CONNECTIONS - licensee setting, then env
 import { pool } from "../db.js";
 import { logError } from "../observability/logger.js";
 import { userIdentifiersFor, type UserIdentifier } from "./googleAdsEnhanced.js"; // BF_SERVER_ADS_ENHANCED_v403
@@ -20,7 +21,7 @@ export function conversionsConfigured(): boolean {
     process.env.GOOGLE_ADS_CLIENT_ID &&
     process.env.GOOGLE_ADS_CLIENT_SECRET &&
     process.env.GOOGLE_ADS_REFRESH_TOKEN &&
-    process.env.GOOGLE_ADS_CUSTOMER_ID &&
+    googleAdsCustomerIdSetting() &&
     process.env.GOOGLE_ADS_CONVERSION_ACTION_ID,
   );
 }
@@ -80,7 +81,7 @@ export async function accessToken(): Promise<string> {
   return token;
 }
 
-function cid(): string { return String(process.env.GOOGLE_ADS_CUSTOMER_ID).replace(/[^0-9]/g, ""); }
+function cid(): string { return String(googleAdsCustomerIdSetting()).replace(/[^0-9]/g, ""); }
 function fmtDateTime(iso: string): string {
   // Google wants "yyyy-MM-dd HH:mm:ss+00:00"
   const d = new Date(iso);
@@ -131,7 +132,7 @@ export function submitConversionsConfigured(): boolean {
     process.env.GOOGLE_ADS_CLIENT_ID &&
     process.env.GOOGLE_ADS_CLIENT_SECRET &&
     process.env.GOOGLE_ADS_REFRESH_TOKEN &&
-    process.env.GOOGLE_ADS_CUSTOMER_ID &&
+    googleAdsCustomerIdSetting() &&
     process.env.GOOGLE_ADS_SUBMIT_CONVERSION_ACTION_ID,
   );
 }

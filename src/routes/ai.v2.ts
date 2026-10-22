@@ -4,6 +4,8 @@ import { pool, runQuery } from "../db.js";
 import { generateAIResponse } from "../modules/ai/ai.service.js";
 import { auth } from "../middleware/auth.js";
 import { safeHandler } from "../middleware/safeHandler.js"; // BF_SERVER_v789_SAFE_HANDLERS
+import { assistantCap, assistantLimitBody } from "../plans/assistantCap.js"; // KS_SERVER_v8_ASSISTANT_CAP
+import type { Q } from "../plans/state.js";
 
 const router = Router();
 
@@ -13,6 +15,10 @@ const router = Router();
 router.use("/ai", auth);
 
 router.post("/ai/start", safeHandler(async (req: any, res: any, next: any) => {
+  // KS_SERVER_v8_ASSISTANT_CAP - over the month's limit no new conversation starts; the page shows the reply.
+  if ((await assistantCap(pool as unknown as Q)).reached) {
+    return res["json"](assistantLimitBody(null));
+  }
   const id = randomUUID();
 
   await runQuery(

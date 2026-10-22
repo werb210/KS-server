@@ -1,3 +1,4 @@
+import { countOutboundText } from "../plans/usage.js"; // KS_SERVER_v8_USAGE - monthly text count
 import { fetchTwilioClient } from "./twilio.js";
 import { config } from "../config/index.js";
 import { withRetry } from "../lib/retry.js";
@@ -24,7 +25,8 @@ export async function sendSMS(to: string, body: string, opts: { silo?: string | 
 
   const client = fetchTwilioClient();
   try {
-    await withRetry(() => client.messages.create({ to, ...smsSenderFor(to, from, opts), body })); // BF_SERVER_US_SMS_TOLLFREE_v755
+    const sent: any = await withRetry(() => client.messages.create({ to, ...smsSenderFor(to, from, opts), body })); // BF_SERVER_US_SMS_TOLLFREE_v755
+    await countOutboundText(sent); // KS_SERVER_v8_USAGE
   } catch (error) {
     await pushDeadLetter({
       type: "sms",

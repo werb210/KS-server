@@ -1,3 +1,4 @@
+import { countOutboundText } from "../plans/usage.js"; // KS_SERVER_v8_USAGE - monthly text count
 import { safeImport } from "../utils/safeImport.js";
 import { isUndeliverableNumber } from "./smsDeliverability.js"; // BF_SERVER_GUARD_EVERYWHERE_v136
 import { smsFromFor, smsSenderFor } from "./smsFrom.js"; // BF_SERVER_US_SMS_TOLLFREE_v755
@@ -30,9 +31,11 @@ export async function sendSMS(to: string, body: string) {
     throw new Error(`undeliverable_number:${String(to).slice(0, 6)}`);
   }
 
-  return client.messages.create({
+  const sent = await client.messages.create({
     to,
     body,
     ...smsSenderFor(to, process.env.TWILIO_PHONE), // BF_SERVER_US_SMS_TOLLFREE_v755
   });
+  await countOutboundText(sent as any); // KS_SERVER_v8_USAGE
+  return sent;
 }

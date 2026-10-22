@@ -3,6 +3,7 @@
 // finalized lenders for each application. FOR UPDATE SKIP LOCKED makes
 // this safe under multiple replicas.
 
+import { workersPaused } from "./claim.js";
 import type { Pool } from "pg";
 import {
   dispatchToSelected,
@@ -33,6 +34,7 @@ export function startLenderPackageWorker(pool: Pool): { stop: () => void } {
 
   const tick = async () => {
     if (stopped || running) return;
+    if (await workersPaused("lender_package")) return; // KS_SERVER_v8_SERVICE_STATUS - service suspended / cancelled
     running = true;
     try {
       const claimed = await pool.query<JobRow>(

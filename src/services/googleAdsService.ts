@@ -1,6 +1,7 @@
 // BF_SERVER_GOOGLE_ADS_SERVICE_v1 - Google Ads reporting via the Google Ads API
 // (GAQL search). Env-gated like GA4/Clarity: returns { configured:false } until
 // credentials are set, so the portal degrades gracefully. In-memory cached.
+import { googleAdsCustomerIdSetting } from "../licensee/connections.js"; // KS_SERVER_v8_CONNECTIONS - licensee setting, then env
 import { logError } from "../observability/logger.js";
 
 export const GOOGLE_ADS_API_VERSION = "v24";
@@ -26,7 +27,7 @@ export function googleAdsConfigured(): boolean {
     process.env.GOOGLE_ADS_CLIENT_ID &&
     process.env.GOOGLE_ADS_CLIENT_SECRET &&
     process.env.GOOGLE_ADS_REFRESH_TOKEN &&
-    process.env.GOOGLE_ADS_CUSTOMER_ID,
+    googleAdsCustomerIdSetting(),
   );
 }
 
@@ -52,7 +53,7 @@ async function getAccessToken(): Promise<string> {
   return token;
 }
 
-function cid(): string { return String(process.env.GOOGLE_ADS_CUSTOMER_ID).replace(/[^0-9]/g, ""); }
+function cid(): string { return String(googleAdsCustomerIdSetting()).replace(/[^0-9]/g, ""); }
 // BF_SERVER_AD_NEGATIVES_LOGINCID_v1 - shared with googleAdsNegatives.ts
 export function loginCid(): string { return String(process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID ?? "").replace(/[^0-9]/g, ""); }
 const micros = (v: unknown): number => Number(v ?? 0) / 1_000_000;
@@ -138,7 +139,7 @@ export async function googleAdsDiagnostics(): Promise<{
   const clientIdSet = Boolean(process.env.GOOGLE_ADS_CLIENT_ID);
   const clientSecretSet = Boolean(process.env.GOOGLE_ADS_CLIENT_SECRET);
   const refreshTokenSet = Boolean(process.env.GOOGLE_ADS_REFRESH_TOKEN);
-  const customerIdSet = Boolean(process.env.GOOGLE_ADS_CUSTOMER_ID);
+  const customerIdSet = Boolean(googleAdsCustomerIdSetting());
   const loginCustomerIdSet = Boolean(process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID);
   const missing: string[] = [];
   if (!devTokenSet) missing.push("GOOGLE_ADS_DEVELOPER_TOKEN");

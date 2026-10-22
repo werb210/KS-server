@@ -213,6 +213,12 @@ export async function start(): Promise<void> {
     const workerStagger = () => new Promise<void>((resolve) => setTimeout(resolve, staggerMs));
     void (async () => {
     const { pool } = await import("./db.js");
+    // KS_SERVER_v8_SERVICE_STATUS - workers pause while operations has suspended or cancelled this licensee.
+    {
+      const { setServiceStoppedCheck } = await import("./workers/claim.js");
+      const { serviceStoppedNow } = await import("./plans/serviceGate.js");
+      setServiceStoppedCheck(() => serviceStoppedNow(pool as any));
+    }
     const { startOcrWorker } = await import("./modules/ocr/ocr.worker.js");
     const { startBankingAutoWorker } = await import("./workers/bankingAutoWorker.js");
     const workerStops: Array<() => void> = [];
@@ -418,6 +424,16 @@ export async function start(): Promise<void> {
     await workerStagger();
     try { const w = startPlanNoticesWorker(pool); workerStops.push(w.stop); console.log("[startup] plan-notices worker started"); }
     catch (err) { console.error("[startup] plan-notices worker failed to start:", err); }
+    // KS_SERVER_v8_OPS_LINK - daily usage reports to Keystone operations.
+    const { startUsageReportWorker } = await import("./workers/usageReportWorker.js");
+    await workerStagger();
+    try { const w = startUsageReportWorker(pool); workerStops.push(w.stop); if (w.started) console.log("[startup] usage-report worker started"); }
+    catch (err) { console.error("[startup] usage-report worker failed to start:", err); }
+    // KS_SERVER_v8_PURGE - a cancelled licensee's data is deleted 180 days after cancellation (with warnings).
+    const { startLicenseePurgeWorker } = await import("./workers/licenseePurgeWorker.js");
+    await workerStagger();
+    try { const w = startLicenseePurgeWorker(pool); workerStops.push(w.stop); console.log("[startup] licensee-purge worker started"); }
+    catch (err) { console.error("[startup] licensee-purge worker failed to start:", err); }
 
     // BF_SERVER_BLOCK_v665 — graceful shutdown. On container recycle the workers'
     // poll loops must stop BEFORE the pool tears down, otherwise each tick queries

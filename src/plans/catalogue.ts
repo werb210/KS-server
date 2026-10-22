@@ -103,11 +103,27 @@ export function defaultPlan(env: NodeJS.ProcessEnv = process.env): Plan {
   return isPlan(v) ? v : "pro";
 }
 
+/** KS_SERVER_v8_SERVICE_STATUS - set by Keystone operations. suspended / cancelled stop the service. */
+export const SERVICE_STATUSES = ["trial", "active", "past_due", "suspended", "cancelled"] as const;
+export type ServiceStatus = (typeof SERVICE_STATUSES)[number];
+
+export function isServiceStatus(v: unknown): v is ServiceStatus {
+  return typeof v === "string" && (SERVICE_STATUSES as readonly string[]).includes(v);
+}
+
+/** suspended and cancelled: every service is stopped (sign-in, the Plan page and Help stay). */
+export function serviceBlocked(status: ServiceStatus | undefined): boolean {
+  return status === "suspended" || status === "cancelled";
+}
+
 export type PlanState = {
   plan: Plan;
   trial_started_at: Date | null;
   trial_ends_at: Date | null;
   extra_storage_blocks: number;
+  /** KS_SERVER_v8_SERVICE_STATUS - missing = active */
+  service_status?: ServiceStatus;
+  cancelled_at?: Date | null;
 };
 
 export function trialActive(s: PlanState, now: Date = new Date()): boolean {
