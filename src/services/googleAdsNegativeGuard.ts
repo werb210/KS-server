@@ -5,6 +5,7 @@
 // the last 90 days. A negative that would block one of them is refused.
 // If Google will not return the keyword list, adding negatives is refused
 // too (fail closed) - blocking blind is how the ads were damaged.
+import { googleAdsCustomerIdSetting } from "../licensee/connections.js"; // KS_SERVER_v8_CONNECTIONS - licensee setting, then env
 import { pool } from "../db.js";
 import { GOOGLE_ADS_API_VERSION, googleAdsSearch, loginCid } from "./googleAdsService.js";
 import { accessToken } from "./googleAdsConversions.js";
@@ -165,7 +166,7 @@ const SERVICE_BY_KIND: Record<string, string> = {
 
 // Remove one negative by its Google resource name (campaign, ad group or shared list).
 export async function removeNegativeCriterion(resourceName: string): Promise<void> {
-  const customerId = String(process.env.GOOGLE_ADS_CUSTOMER_ID ?? "").replace(/[^0-9]/g, "");
+  const customerId = String(googleAdsCustomerIdSetting() ?? "").replace(/[^0-9]/g, "");
   if (!customerId) throw new Error("GOOGLE_ADS_CUSTOMER_ID is not set");
   const m = /^customers\/(\d+)\/(campaignCriteria|adGroupCriteria|sharedCriteria)\/[0-9~]+$/.exec(String(resourceName ?? ""));
   if (!m || m[1] !== customerId) throw new Error("resource_name_not_a_negative_in_this_account");

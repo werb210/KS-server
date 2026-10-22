@@ -1,3 +1,5 @@
+import { serviceGate } from "./plans/serviceGate.js"; // KS_SERVER_v8_SERVICE_STATUS
+import type { Q as PlanQ } from "./plans/state.js";
 import express from "express";
 import { clientFailureLog } from "./middleware/clientFailureLog.js"; // BF_SERVER_CLIENT_FAILURE_LOG_v749
 import cors from "cors";
@@ -180,6 +182,10 @@ export function createApp() {
    * API ROUTES (LOCKED PREFIX)
    */
   const apiRouter = Router();
+
+  // KS_SERVER_v8_SERVICE_STATUS - a suspended or cancelled licensee gets 423 service_suspended everywhere except
+  // sign-in, the Plan page, branding and Help (src/plans/serviceGate.ts).
+  apiRouter.use(serviceGate(async () => (await import("./db.js")).pool as unknown as PlanQ));
 
   apiRouter.use("/auth", authRoutes);
   apiRouter.use("/call", callRoutes);

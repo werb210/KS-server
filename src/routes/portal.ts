@@ -1,3 +1,4 @@
+import { countOutboundText } from "../plans/usage.js"; // KS_SERVER_v8_USAGE - monthly text count
 import { sharedTwilio } from "../lib/sharedClients.js"; // BF_SERVER_SNAT_REUSE_v784
 import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response } from "express";
@@ -231,6 +232,7 @@ async function sendDocumentRejectionSms(params: {
   const client: any = sharedTwilio(accountSid, authToken);
   const msg = await client.messages.create({ body, ...smsSenderFor(to, from), to }).catch(() => null); // BF_SERVER_US_SMS_TOLLFREE_v755
   if (msg) {
+    await countOutboundText(msg); // KS_SERVER_v8_USAGE
     await pool.query(
       `INSERT INTO communications_messages
          (id, type, direction, status, body, phone_number, from_number, to_number, twilio_sid, application_id, contact_id, silo, created_at)

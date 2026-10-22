@@ -4,6 +4,7 @@
 // of E.164 numbers). All sends route through the BF caller ID
 // (+18254511768) already configured on App Service.
 import { pool } from "../../db.js";
+import { countOutboundText } from "../../plans/usage.js"; // KS_SERVER_v8_USAGE
 import { logError, logInfo } from "../../observability/logger.js";
 
 type Recipients = "available" | "fallback";
@@ -57,6 +58,9 @@ async function twilioSend(to: string, body: string): Promise<void> {
     const text = await res.text().catch(() => "");
     throw new Error(`twilio_send_failed_${res.status}:${text.slice(0, 200)}`);
   }
+  // KS_SERVER_v8_USAGE - count the text for the monthly usage (sid + num_segments from Twilio's reply).
+  const sent: any = await res.json().catch((err: unknown) => { console.warn("[staff-sms] reply not JSON", String(err)); return null; });
+  await countOutboundText({ sid: sent?.sid, numSegments: sent?.num_segments });
 }
 
 export type StaffSmsResult = {

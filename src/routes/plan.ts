@@ -2,7 +2,8 @@
 //   GET  /api/plan                   any signed-in staff: plan, trial, features, allowances, storage, trial usage
 //   POST /api/plan/trial             Admin: start the free 14-day trial (409 { reason } when not available)
 //   POST /api/plan/upgrade-request   Admin: { plan, extra_storage_blocks? } - emails Keystone sales
-//   PUT  /api/plan                   operations only (X-KS-Ops-Key = KS_OPS_KEY): { plan?, extra_storage_blocks? }
+//   PUT  /api/plan                   operations only (X-KS-Ops-Key = KS_OPS_KEY): { plan?, extra_storage_blocks?, status? }
+//   GET  /api/plan/usage-report?period=YYYY-MM   operations only: the UsageReport (KS_SERVER_v8_USAGE)
 // Licensee admins cannot change their own plan; that is set by operations.
 import { createHash, timingSafeEqual } from "node:crypto";
 import { Router } from "express";
@@ -11,10 +12,12 @@ import { auth, requireAuthorization } from "../middleware/auth.js";
 import { ROLES } from "../auth/roles.js";
 import { safeHandler } from "../middleware/safeHandler.js";
 import { brandName } from "../licensee/brand.js";
-import { featureDef, isPlan, trialStatus } from "../plans/catalogue.js";
+import { featureDef, isPlan, isServiceStatus, trialStatus } from "../plans/catalogue.js";
 import { bodies, salesEmail, sendPlanMail } from "../plans/email.js";
 import { planOverview, storageFor } from "../plans/overview.js";
 import { getPlanState, setPlan, startTrial, trialUsage, type Q } from "../plans/state.js";
+import { buildUsageReport, isPeriod, licenseeTimeZone, periodOf } from "../plans/usage.js"; // KS_SERVER_v8_USAGE
+import { postToOps, opsConfig } from "../plans/opsLink.js"; // KS_SERVER_v8_OPS_LINK
 
 const router = Router();
 const db = () => pool as unknown as Q;
@@ -80,24 +83,64 @@ router.post("/upgrade-request", ...adminOnly, safeHandler(async (req: any, res) 
     subject: `Plan request: ${company} - ${state.plan} to ${requested}${blocks.value ? ` + ${blocks.value} x 50 GB` : ""}`,
     ...mail,
   });
-  if (!r.ok) {
+  // KS_SERVER_v8_OPS_LINK - also copy the request to Keystone operations (best effort). When it reached operations the
+  // request is not lost, so a failed sales email no longer fails the request.
+  let relayed = false;
+  if (opsConfig()) {
+    const relay = await postToOps("requests", {
+      kind: blocks.value ? "plan_and_storage" : "plan",
+      current_plan: state.plan,
+      requested_plan: requested,
+      extra_storage_blocks: blocks.value ?? 0,
+      requested_by: who,
+      trial: trialStatus(state, now),
+      trial_usage: usage,
+      storage: { used_bytes: storage.used_bytes, allowance_bytes: storage.allowance_bytes, seats: storage.seats },
+      requested_at: now.toISOString(),
+    });
+    if (!relay.ok) console.warn("[plan] upgrade request copy to operations failed", relay.error);
+    relayed = relay.ok;
+  }
+  if (!r.ok && !relayed) {
     console.warn("[plan] upgrade request email failed", r.error);
     return res.status(502).json({ ok: false, error: "email_failed" });
   }
+  if (!r.ok) console.warn("[plan] upgrade request email failed; operations has the copy", r.error);
   return res.json({ ok: true });
 }));
 
+/** The ops-key gate shared by PUT /api/plan and GET /api/plan/usage-report. Sends the error and returns false. */
+function opsAuthorized(req: any, res: any): boolean {
+  if (!String(process.env.KS_OPS_KEY ?? "")) { res.status(403).json({ ok: false, error: "plan_changes_disabled" }); return false; }
+  if (!opsKeyMatches(req.headers["x-ks-ops-key"])) { res.status(401).json({ ok: false, error: "invalid_ops_key" }); return false; }
+  return true;
+}
+
+// KS_SERVER_v8_USAGE - KS-Ops pulls a month's usage (default: the current month in the licensee's time zone).
+router.get("/usage-report", safeHandler(async (req: any, res) => {
+  if (!opsAuthorized(req, res)) return;
+  const now = new Date();
+  const raw = req.query?.period;
+  const period = raw === undefined || raw === "" ? periodOf(now, licenseeTimeZone()) : String(raw);
+  if (!isPeriod(period)) return res.status(400).json({ ok: false, error: "invalid_period" });
+  res.setHeader("Cache-Control", "no-store");
+  return res.json(await buildUsageReport(db(), period, now));
+}));
+
 router.put("/", safeHandler(async (req: any, res) => {
-  if (!String(process.env.KS_OPS_KEY ?? "")) return res.status(403).json({ ok: false, error: "plan_changes_disabled" });
-  if (!opsKeyMatches(req.headers["x-ks-ops-key"])) return res.status(401).json({ ok: false, error: "invalid_ops_key" });
+  if (!opsAuthorized(req, res)) return;
   const rawPlan = req.body?.plan;
   const plan = rawPlan === undefined ? undefined : String(rawPlan).trim().toLowerCase();
   if (plan !== undefined && !isPlan(plan)) return res.status(400).json({ ok: false, error: "invalid_plan" });
   const blocks = blocksOf(req.body?.extra_storage_blocks);
   if (!blocks.ok) return res.status(400).json({ ok: false, error: "invalid_extra_storage_blocks" });
-  if (plan === undefined && blocks.value === undefined) return res.status(400).json({ ok: false, error: "nothing_to_change" });
+  // KS_SERVER_v8_SERVICE_STATUS - { status: trial | active | past_due | suspended | cancelled }
+  const rawStatus = req.body?.status;
+  const status = rawStatus === undefined || rawStatus === null || rawStatus === "" ? undefined : String(rawStatus).trim().toLowerCase();
+  if (status !== undefined && !isServiceStatus(status)) return res.status(400).json({ ok: false, error: "invalid_status" });
+  if (plan === undefined && blocks.value === undefined && status === undefined) return res.status(400).json({ ok: false, error: "nothing_to_change" });
   const by = String(req.headers["x-ks-ops-user"] ?? "ops").slice(0, 120);
-  await setPlan(db(), { plan: plan as any, extra_storage_blocks: blocks.value }, by);
+  await setPlan(db(), { plan: plan as any, extra_storage_blocks: blocks.value, status: status as any }, by);
   return res.json(await planOverview(db()));
 }));
 

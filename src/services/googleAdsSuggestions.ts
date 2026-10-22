@@ -5,6 +5,7 @@
 // which runs a single Google Ads mutate. Resource names come straight from
 // Google's own GAQL response, so an approved action targets exactly that object.
 // Env-gated; self-contained token fetch.
+import { googleAdsCustomerIdSetting } from "../licensee/connections.js"; // KS_SERVER_v8_CONNECTIONS - licensee setting, then env
 import { createHash } from "crypto";
 import { logError } from "../observability/logger.js";
 
@@ -22,7 +23,7 @@ export function suggestionsConfigured(): boolean {
     process.env.GOOGLE_ADS_CLIENT_ID &&
     process.env.GOOGLE_ADS_CLIENT_SECRET &&
     process.env.GOOGLE_ADS_REFRESH_TOKEN &&
-    process.env.GOOGLE_ADS_CUSTOMER_ID,
+    googleAdsCustomerIdSetting(),
   );
 }
 
@@ -54,7 +55,7 @@ async function accessToken(): Promise<string> {
   return token;
 }
 
-function cid(): string { return String(process.env.GOOGLE_ADS_CUSTOMER_ID).replace(/[^0-9]/g, ""); }
+function cid(): string { return String(googleAdsCustomerIdSetting()).replace(/[^0-9]/g, ""); }
 function headers(token: string): Record<string, string> {
   const h: Record<string, string> = { Authorization: `Bearer ${token}`, "developer-token": String(process.env.GOOGLE_ADS_DEVELOPER_TOKEN), "Content-Type": "application/json" };
   const lc = String(process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID ?? "").replace(/[^0-9]/g, "");

@@ -1,7 +1,7 @@
 // KS_SERVER_v6_PLANS - the licensee_plan row: read (cached), trial start, ops plan changes, trial feature usage.
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js";
 import {
-  TRIAL_DAYS, checkFeature, defaultPlan, isPlan, trialStatus, type Plan, type PlanState,
+  TRIAL_DAYS, checkFeature, defaultPlan, isPlan, isServiceStatus, trialStatus, type Plan, type PlanState, type ServiceStatus,
 } from "./catalogue.js";
 
 export type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount?: number | null }> };
@@ -29,10 +29,12 @@ export function rowToState(row: Record<string, unknown> | null | undefined): Pla
     trial_started_at: asDate(row?.trial_started_at),
     trial_ends_at: asDate(row?.trial_ends_at),
     extra_storage_blocks: Number.isFinite(blocks) && blocks > 0 ? Math.floor(blocks) : 0,
+    service_status: isServiceStatus(row?.service_status) ? row!.service_status as ServiceStatus : "active",
+    cancelled_at: asDate(row?.cancelled_at),
   };
 }
 
-const SELECT_PLAN_SQL = `SELECT plan, trial_started_at, trial_ends_at, extra_storage_blocks FROM licensee_plan WHERE id = 1`;
+const SELECT_PLAN_SQL = `SELECT plan, trial_started_at, trial_ends_at, extra_storage_blocks, service_status, cancelled_at FROM licensee_plan WHERE id = 1`;
 
 /**
  * The stored plan state, cached for 30 s. If the row cannot be read (table missing before the migration ran, database
@@ -56,7 +58,8 @@ export async function getPlanState(db: Q, nowMs = Date.now()): Promise<PlanState
 export async function readPlanRow(db: Q): Promise<Record<string, any> | null> {
   const r = await db.query(
     `SELECT plan, trial_started_at, trial_ends_at, trial_started_by, extra_storage_blocks, updated_at, updated_by,
-            trial_warning_sent_at, trial_ended_sent_at, storage_80_sent_at, storage_100_sent_at
+            trial_warning_sent_at, trial_ended_sent_at, storage_80_sent_at, storage_100_sent_at,
+            service_status, cancelled_at, purge_warning_7_sent_at, purge_warning_1_sent_at, purged_at
        FROM licensee_plan WHERE id = 1`,
   );
   return r.rows[0] ?? null;
@@ -81,7 +84,7 @@ export async function startTrial(db: Q, userId: string, now: Date = new Date()):
     `UPDATE licensee_plan
         SET trial_started_at = $1, trial_ends_at = $2, trial_started_by = $3, updated_at = now(), updated_by = $3
       WHERE id = 1 AND plan = 'starter' AND trial_started_at IS NULL
-      RETURNING plan, trial_started_at, trial_ends_at, extra_storage_blocks`,
+      RETURNING plan, trial_started_at, trial_ends_at, extra_storage_blocks, service_status, cancelled_at`,
     [now.toISOString(), ends.toISOString(), userId || null],
   );
   clearPlanCache();
@@ -91,7 +94,7 @@ export async function startTrial(db: Q, userId: string, now: Date = new Date()):
   return { ok: false, reason: status === "available" ? "used" : status };
 }
 
-export type SetPlanInput = { plan?: Plan; extra_storage_blocks?: number };
+export type SetPlanInput = { plan?: Plan; extra_storage_blocks?: number; status?: ServiceStatus };
 
 /**
  * Boreal operations sets the plan and/or the extra storage blocks. Moving off starter ends any running trial now
@@ -115,6 +118,14 @@ export async function setPlan(db: Q, input: SetPlanInput, by: string, now: Date 
   if (input.extra_storage_blocks !== undefined) {
     params.push(input.extra_storage_blocks);
     sets.push(`extra_storage_blocks = $${params.length}`);
+  }
+  // KS_SERVER_v8_SERVICE_STATUS - cancelling records when (the purge counts 180 days from it); leaving cancelled
+  // clears it and the purge warnings.
+  if (input.status) {
+    params.push(input.status);
+    sets.push(`service_status = $${params.length}`);
+    if (input.status === "cancelled") sets.push("cancelled_at = COALESCE(cancelled_at, now())");
+    else sets.push("cancelled_at = NULL, purge_warning_7_sent_at = NULL, purge_warning_1_sent_at = NULL");
   }
   await db.query(`UPDATE licensee_plan SET ${sets.join(", ")} WHERE id = 1`, params);
   clearPlanCache();

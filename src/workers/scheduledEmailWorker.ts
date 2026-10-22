@@ -1,6 +1,7 @@
 // BF_SERVER_BLOCK_v705_SCHEDULED_SEND — sends scheduled emails when due. Each row
 // points at an Outlook draft (already fully built at schedule time). When send_at
 // passes we call Graph /me/messages/{id}/send, then mark the row sent.
+import { workersPaused } from "./claim.js";
 import type { Pool } from "pg";
 import { getGraphForUser } from "../modules/o365/graphClient.js";
 
@@ -12,6 +13,7 @@ export function startScheduledEmailWorker(pool: Pool): { stop: () => void } {
 
   const tick = async () => {
     if (stopped || running) return;
+    if (await workersPaused("scheduled_email")) return; // KS_SERVER_v8_SERVICE_STATUS - service suspended / cancelled
     running = true;
     try {
       const { rows } = await pool.query<{ id: string; user_id: string; draft_id: string }>(

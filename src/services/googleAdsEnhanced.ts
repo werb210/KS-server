@@ -1,5 +1,6 @@
 // BF_SERVER_ADS_ENHANCED_v403
 // Enhanced conversions for leads + automatic Customer Match upload.
+import { googleAdsCustomerIdSetting } from "../licensee/connections.js"; // KS_SERVER_v8_CONNECTIONS - licensee setting, then env
 import { createHash } from "node:crypto";
 import { pool } from "../db.js";
 import { accessToken } from "./googleAdsConversions.js";
@@ -42,7 +43,7 @@ export function customerMatchEnabled(): boolean {
   return String(process.env.GOOGLE_ADS_CUSTOMER_MATCH_ENABLED ?? "").toLowerCase() === "true"
     && Boolean(process.env.GOOGLE_ADS_DEVELOPER_TOKEN && process.env.GOOGLE_ADS_CLIENT_ID
       && process.env.GOOGLE_ADS_CLIENT_SECRET && process.env.GOOGLE_ADS_REFRESH_TOKEN
-      && process.env.GOOGLE_ADS_CUSTOMER_ID);
+      && googleAdsCustomerIdSetting());
 }
 
 const LIST_KEY = "google_ads_customer_match_list";
@@ -133,7 +134,7 @@ export async function syncCustomerMatch(force = false): Promise<{ enabled: boole
   if (!customerMatchEnabled()) return { enabled: false, ran: false };
   const last = await getSetting(LAST_RUN_KEY);
   if (!force && last && Date.now() - Date.parse(last) < WEEK_MS) return { enabled: true, ran: false };
-  const customerId = digits(process.env.GOOGLE_ADS_CUSTOMER_ID);
+  const customerId = digits(googleAdsCustomerIdSetting());
   try {
     const list = await ensureList(customerId);
     const members = await fundedClientIdentifiers();

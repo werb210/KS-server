@@ -2,6 +2,11 @@ import express from "express";
 import rateLimit from "express-rate-limit";
 import { pool } from "../db.js";
 import { rateLimitKeyFromRequest } from "../middleware/clientIp.js";
+import { auth, requireAuthorization } from "../middleware/auth.js"; // KS_SERVER_v8_SUPPORT_TICKETS
+import { ROLES } from "../auth/roles.js";
+import { safeHandler } from "../middleware/safeHandler.js";
+import { checkTicket, createTicket, listTickets } from "../plans/supportTickets.js";
+import type { Q } from "../plans/state.js";
 
 const router = express.Router();
 
@@ -44,5 +49,25 @@ router.post("/", supportLimiter, async (req, res) => {
     return res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// KS_SERVER_v8_SUPPORT_TICKETS - the licensee's staff ask Keystone operations for help.
+//   POST /api/support/tickets  Admin, Staff: { subject, body, priority?: "normal" | "urgent" } -> 201 { ok, ticket, relayed }
+//   GET  /api/support/tickets  Admin, Staff: the tickets, newest first
+const ticketStaff = [auth, requireAuthorization({ roles: [ROLES.ADMIN, ROLES.STAFF] })];
+
+router.post("/tickets", ...ticketStaff, safeHandler(async (req: any, res) => {
+  const c = checkTicket(req.body);
+  if (!c.ok) return res.status(400).json({ ok: false, error: "invalid_ticket", errors: c.errors });
+  const u = req.user ?? {};
+  const r = await createTicket(pool as unknown as Q, c.value, {
+    id: String(u.userId ?? u.id ?? u.sub ?? ""), email: u.email ?? null, name: u.name ?? null, role: u.role ?? null,
+  });
+  return res.status(201).json({ ok: true, ticket: r.ticket, relayed: r.relayed, relay_error: r.relay_error });
+}));
+
+router.get("/tickets", ...ticketStaff, safeHandler(async (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  return res.json({ ok: true, tickets: await listTickets(pool as unknown as Q) });
+}));
 
 export default router;

@@ -1,4 +1,5 @@
 // BF_SERVER_ADS_LEAD_SIGNALS_v400
+import { googleAdsCustomerIdSetting } from "../licensee/connections.js"; // KS_SERVER_v8_CONNECTIONS - licensee setting, then env
 import { pool } from "../db.js";
 import { commissionRate, ingestConversions } from "./googleDataManager.js"; // BF_SERVER_DATA_MANAGER_v703
 import { logError } from "../observability/logger.js";
@@ -10,13 +11,13 @@ export const QUALIFIED_STATES = ["off to lender", "offer", "accepted", "funded"]
 export const CLOSED_STATES = ["rejected", "declined", "withdrawn", "closed"];
 
 const digits = (value: unknown) => String(value ?? "").replace(/[^0-9]/g, "");
-const customerId = () => digits(process.env.GOOGLE_ADS_CUSTOMER_ID);
+const customerId = () => digits(googleAdsCustomerIdSetting());
 
 function baseConfigured(): boolean {
   return Boolean(
     process.env.GOOGLE_ADS_DEVELOPER_TOKEN && process.env.GOOGLE_ADS_CLIENT_ID &&
     process.env.GOOGLE_ADS_CLIENT_SECRET && process.env.GOOGLE_ADS_REFRESH_TOKEN &&
-    process.env.GOOGLE_ADS_CUSTOMER_ID,
+    googleAdsCustomerIdSetting(),
   );
 }
 

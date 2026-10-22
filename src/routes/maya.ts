@@ -1,4 +1,5 @@
 import express from "express";
+import { createHash } from "node:crypto";
 import { safeHandler } from "../middleware/safeHandler.js";
 import { pool } from "../db.js";
 import rateLimit from "express-rate-limit";
@@ -14,6 +15,8 @@ import { checkApplicationAccess } from "../auth/clientApplicationOwnership.js"; 
 import type { MayaAudience } from "../services/mayaContext.js";
 import { rateLimitKeyFromRequest } from "../middleware/clientIp.js"; // BF_SERVER_v791_RATE_LIMIT_KEYS
 import { assistantName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { assistantCap, assistantLimitBody, conversationExists } from "../plans/assistantCap.js"; // KS_SERVER_v8_ASSISTANT_CAP
+import type { Q } from "../plans/state.js";
 
 const router = express.Router();
 
@@ -73,6 +76,35 @@ export async function scopeApplicationIds(
   return out;
 }
 
+// BF_SERVER_MAYA_LOG_ALL_v1 - the chat_sessions id a widget session id is stored under: a uuid as is, anything else
+// (e.g. "client-...") mapped to a stable uuid v5 so the same conversation stays threaded.
+// KS_SERVER_v8_ASSISTANT_CAP - shared with the monthly-limit check, which needs the same id.
+const MAYA_NS = "6f4d2c8a-1b3e-5a7c-9d0f-2e4b6a8c0d1e";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function toStableUuid(name: string): string {
+  const ns = Buffer.from(MAYA_NS.replace(/-/g, ""), "hex");
+  const h = createHash("sha1").update(Buffer.concat([ns, Buffer.from(name, "utf8")])).digest();
+  const b = Buffer.from(h.subarray(0, 16));
+  b[6] = (b[6] & 0x0f) | 0x50;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const x = b.toString("hex");
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20, 32)}`;
+}
+
+export function widgetSessionIdOf(body: unknown): string | null {
+  const b: any = body ?? {};
+  if (typeof b.sessionId === "string" && b.sessionId) return b.sessionId;
+  if (typeof b.session_id === "string" && b.session_id) return b.session_id;
+  return null;
+}
+
+export function conversationIdOf(sessionId: string | null): string | null {
+  if (!sessionId) return null;
+  return UUID_RE.test(sessionId) ? sessionId : toStableUuid(sessionId);
+}
+
+const isAssistantTurn = (agentPath: string) => agentPath.includes("/api/maya/message") || agentPath.includes("/api/maya/chat");
+
 // BF_SERVER_BLOCK_v638_MULTIFIX_v1 — accept the original req so we can forward
 // X-Maya-Audience (staff|client|visitor) + X-Silo to the agent. Without these
 // the agent defaulted to "visitor" and the staff Maya widget kept asking for
@@ -91,6 +123,15 @@ export async function proxyMayaToAgent(
       message: "Agent service not configured.",
     });
     return;
+  }
+  // KS_SERVER_v8_ASSISTANT_CAP - over the month's limit, a new conversation gets a polite reply instead of the agent.
+  if (isAssistantTurn(agentPath)) {
+    const sid = widgetSessionIdOf(body);
+    const cap = await assistantCap(pool as unknown as Q);
+    if (cap.reached && !(await conversationExists(pool as unknown as Q, conversationIdOf(sid)))) {
+      res.status(200).json(assistantLimitBody(sid));
+      return;
+    }
   }
   try {
     const ctrl = new AbortController();
@@ -123,15 +164,10 @@ export async function proxyMayaToAgent(
     // MAYA_TRANSCRIPT_PERSIST_v1 — record the website/client Maya turn into
     // chat_sessions/chat_messages so it appears under Communications -> Maya in
     // the portal. Best-effort: any failure here must NEVER break the reply.
-    if (agentPath.includes("/api/maya/message") || agentPath.includes("/api/maya/chat")) {
+    if (isAssistantTurn(agentPath)) {
       try {
         const b: any = body ?? {};
-        const sessionId: string | null =
-          typeof b.sessionId === "string" && b.sessionId
-            ? b.sessionId
-            : typeof b.session_id === "string" && b.session_id
-              ? b.session_id
-              : null;
+        const sessionId: string | null = widgetSessionIdOf(b);
         const userMsg: string | null = typeof b.message === "string" ? b.message.trim() : null;
         const reply: string | null =
           data && typeof (data as any).reply === "string" ? (data as any).reply.trim() : null;
@@ -139,27 +175,14 @@ export async function proxyMayaToAgent(
         // client Maya sends non-uuid session ids (e.g. "client-..."), which threw
         // "invalid input syntax for type uuid" on every turn and spammed the logs. Only
         // persist when the session id is a real uuid; otherwise skip quietly.
-        const isUuidSession = typeof sessionId === "string" &&
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId);
         // BF_SERVER_MAYA_LOG_ALL_v1 - persist EVERY Maya conversation (website/client/staff) so
         // staff can review Maya's answers. Non-uuid session ids (e.g. "client-...") are mapped to
         // a stable uuid v5 so the same conversation stays threaded without the uuid cast error.
         if (sessionId && userMsg) {
-          const { createHash } = await import("node:crypto");
-          const MAYA_NS = "6f4d2c8a-1b3e-5a7c-9d0f-2e4b6a8c0d1e";
-          const toStableUuid = (name: string): string => {
-            const ns = Buffer.from(MAYA_NS.replace(/-/g, ""), "hex");
-            const h = createHash("sha1").update(Buffer.concat([ns, Buffer.from(name, "utf8")])).digest();
-            const b = Buffer.from(h.subarray(0, 16));
-            b[6] = (b[6] & 0x0f) | 0x50;
-            b[8] = (b[8] & 0x3f) | 0x80;
-            const x = b.toString("hex");
-            return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20, 32)}`;
-          };
           // BF_SERVER_MAYA_PERSIST_CHANNEL_FIX_v1 - chat_sessions has no "channel"
           // column, so the old insert threw on every turn and the swallowing catch
           // hid it, meaning NO Maya conversation ever persisted (empty Comms->Maya tab).
-          const persistId = isUuidSession ? sessionId : toStableUuid(sessionId);
+          const persistId = conversationIdOf(sessionId) as string;
           await pool.query(
             `insert into chat_sessions (id, source, status)
              values ($1, 'maya', 'ai')

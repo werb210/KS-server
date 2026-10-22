@@ -3,6 +3,7 @@
 // no longer accepts offline conversion imports from new adopters, which is why Google Ads showed
 // "No attempted imports" for Application Submitted. Uses the same Google login (refresh token),
 // which now carries both the adwords and datamanager scopes.
+import { googleAdsCustomerIdSetting } from "../licensee/connections.js"; // KS_SERVER_v8_CONNECTIONS - licensee setting, then env
 import { accessToken } from "./googleAdsConversions.js";
 import type { UserIdentifier } from "./googleAdsEnhanced.js";
 
@@ -28,7 +29,7 @@ export function commissionRate(): number {
 }
 
 export function buildIngestBody(actionId: string, events: DmConversion[], validateOnly = false) {
-  const customerId = digits(process.env.GOOGLE_ADS_CUSTOMER_ID);
+  const customerId = digits(googleAdsCustomerIdSetting());
   const loginId = digits(process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID) || customerId;
   const currency = process.env.GOOGLE_ADS_CURRENCY || "CAD";
   return {

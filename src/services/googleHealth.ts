@@ -1,6 +1,7 @@
 // BF_SERVER_GOOGLE_HEALTH_v705
 // Live checks against Google, shown on portal Settings > Runtime Verification and run hourly.
 // Any failure texts and emails the alert recipients (once, then once a day while it stays broken).
+import { googleAdsCustomerIdSetting } from "../licensee/connections.js"; // KS_SERVER_v8_CONNECTIONS - licensee setting, then env
 import { createHash } from "node:crypto";
 import { pool } from "../db.js";
 import { accessToken } from "./googleAdsConversions.js";
@@ -51,7 +52,7 @@ export async function runGoogleHealthChecks(fetchImpl: typeof fetch = fetch): Pr
       : { status: "fail", detail: `Google rejected the test conversion (${r.status}): ${r.detail}` };
   }));
   checks.push(await check("ads_reporting", "Google Ads reporting", async () => {
-    const cid = digits(process.env.GOOGLE_ADS_CUSTOMER_ID);
+    const cid = digits(googleAdsCustomerIdSetting());
     if (!cid || !process.env.GOOGLE_ADS_DEVELOPER_TOKEN) return { status: "fail", detail: "Google Ads customer id or developer token is not set" };
     const headers: Record<string, string> = {
       Authorization: `Bearer ${await accessToken()}`,

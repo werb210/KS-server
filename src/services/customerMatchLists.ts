@@ -1,4 +1,5 @@
 // BF_SERVER_CUSTOMER_MATCH_LISTS_v711
+import { googleAdsCustomerIdSetting } from "../licensee/connections.js"; // KS_SERVER_v8_CONNECTIONS - licensee setting, then env
 import { pool } from "../db.js";
 import { logError } from "../observability/logger.js";
 import { accessToken } from "./googleAdsConversions.js";
@@ -18,11 +19,11 @@ export const LIST_NAMES: Record<ListKind, string> = {
 type Fetch = typeof fetch;
 
 function accounts() {
-  const customerId = digits(process.env.GOOGLE_ADS_CUSTOMER_ID);
+  const customerId = digits(googleAdsCustomerIdSetting());
   return { customerId, loginId: digits(process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID) || customerId };
 }
 export function customerMatchConfigured(): boolean {
-  return Boolean(digits(process.env.GOOGLE_ADS_CUSTOMER_ID) && process.env.GOOGLE_ADS_CLIENT_ID && process.env.GOOGLE_ADS_REFRESH_TOKEN);
+  return Boolean(digits(googleAdsCustomerIdSetting()) && process.env.GOOGLE_ADS_CLIENT_ID && process.env.GOOGLE_ADS_REFRESH_TOKEN);
 }
 export function createListBody(kind: ListKind) {
   return {

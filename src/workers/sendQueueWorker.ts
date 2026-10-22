@@ -2,6 +2,7 @@
 // block the HTTP request nor get capped. Claims one job at a time with FOR UPDATE
 // SKIP LOCKED (safe across instances) and persists progress as it sends. Email
 // channel here; SMS reuses this worker once its runner lands.
+import { workersPaused } from "./claim.js";
 import type { Pool } from "pg";
 import { runEmailSend, runSmsSend } from "../services/marketingSendRunner.js";
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
@@ -14,6 +15,7 @@ export function startSendQueueWorker(pool: Pool): { stop: () => void } {
   let stopped = false, running = false;
   const tick = async () => {
     if (stopped || running) return;
+    if (await workersPaused("send_queue")) return; // KS_SERVER_v8_SERVICE_STATUS - service suspended / cancelled
     running = true;
     try {
       const claim = await pool.query<ClaimedJob>(

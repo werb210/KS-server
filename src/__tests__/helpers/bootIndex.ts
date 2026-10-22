@@ -53,6 +53,8 @@ export const WORKER_MODULES: Array<[string, string]> = [
   ["workers/fxRateWorker.js", "startFxRateWorker"],
   ["workers/pipelineSnapshotWorker.js", "startPipelineSnapshotWorker"],
   ["workers/lenderBounceWorker.js", "startLenderBounceWorker"],
+  ["workers/usageReportWorker.js", "startUsageReportWorker"], // KS_SERVER_v8_OPS_LINK
+  ["workers/licenseePurgeWorker.js", "startLicenseePurgeWorker"], // KS_SERVER_v8_PURGE
 ];
 
 export type BootOptions = {
@@ -192,7 +194,7 @@ export async function bootIndex(opts: BootOptions = {}): Promise<Boot> {
   doMock("startup/templateLandingBackfill.js", () => ({ backfillTemplateLandingPages: stubs.backfillTemplateLandingPages }));
   doMock("db/seed.js", () => ({ seedAdminUser: async () => undefined, seedSecondAdminUser: async () => undefined }));
   doMock("signnow/ensureWebhookSubscription.js", () => ({ ensureSignnowWebhook: stubs.ensureSignnowWebhook }));
-  doMock("workers/claim.js", () => ({ closeWorkerLocks: stubs.closeWorkerLocks }));
+  doMock("workers/claim.js", () => ({ closeWorkerLocks: stubs.closeWorkerLocks, setServiceStoppedCheck: () => undefined })); // KS_SERVER_v8_SERVICE_STATUS
   doMock("lib/netSockets.js", () => ({ startSocketReport: () => undefined }));
 
   for (const [rel, name] of WORKER_MODULES) {

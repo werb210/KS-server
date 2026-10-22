@@ -13,6 +13,57 @@ export const LICENSEE_FIELDS = [
   "mailing_address", // KS_SERVER_v5_MAILING_ADDRESS
 ] as const;
 export type LicenseeField = (typeof LICENSEE_FIELDS)[number];
+
+// KS_SERVER_v8_CONNECTIONS - the licensee's own accounts. Admin-only: never in the public GET /api/licensee.
+// Where the server needs one it prefers this setting, then the App Service setting (see ./connections.ts).
+export const CONNECTION_FIELDS = ["twilio_main_number", "google_ads_customer_id", "office365_tenant_id"] as const;
+export type ConnectionField = (typeof CONNECTION_FIELDS)[number];
+export type LicenseeConnections = Record<ConnectionField, string>;
+
+const EMPTY_CONNECTIONS: LicenseeConnections = { twilio_main_number: "", google_ads_customer_id: "", office365_tenant_id: "" };
+
+/** Checks one connection field; returns the cleaned value or an error message. */
+export function checkConnectionField(field: ConnectionField, raw: unknown): { ok: true; value: string } | { ok: false; error: string } {
+  const value = String(raw ?? "").trim();
+  if (!value) return { ok: true, value };
+  if (value.length > 200) return { ok: false, error: `${field} is too long (200 characters at most)` };
+  if (field === "twilio_main_number") {
+    const digits = value.replace(/[\s().-]/g, "");
+    if (!/^\+[1-9]\d{7,14}$/.test(digits)) return { ok: false, error: "twilio_main_number must be a phone number like +15875550100" };
+    return { ok: true, value: digits };
+  }
+  if (field === "google_ads_customer_id") {
+    const digits = value.replace(/[\s-]/g, "");
+    if (!/^\d{10}$/.test(digits)) return { ok: false, error: "google_ads_customer_id must be 10 digits like 123-456-7890" };
+    return { ok: true, value: `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}` };
+  }
+  const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const domain = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
+  if (!guid.test(value) && !domain.test(value)) return { ok: false, error: "office365_tenant_id must be a tenant id (GUID) or domain" };
+  return { ok: true, value: value.toLowerCase() };
+}
+
+let lastConnections: LicenseeConnections | null = null;
+
+/** The connection settings last loaded, or null before the first load. */
+export function lastLoadedConnections(): LicenseeConnections | null {
+  return lastConnections;
+}
+
+/** Test hook. */
+export function setLastLoadedConnections(v: LicenseeConnections | null): void {
+  lastConnections = v;
+}
+
+/** The saved connection settings (empty strings when unset). */
+export async function getLicenseeConnections(db: Q): Promise<LicenseeConnections> {
+  const r = await db.query(`SELECT ${CONNECTION_FIELDS.join(", ")} FROM licensee_settings WHERE id = 1`);
+  const row = r.rows[0] ?? {};
+  const value = { ...EMPTY_CONNECTIONS };
+  for (const f of CONNECTION_FIELDS) value[f] = String(row[f] ?? "").trim();
+  lastConnections = value;
+  return value;
+}
 export type LicenseeSettings = Record<LicenseeField, string>;
 
 const ENV_NAMES: Record<LicenseeField, string> = {
@@ -22,10 +73,13 @@ const ENV_NAMES: Record<LicenseeField, string> = {
   mailing_address: "KS_MAILING_ADDRESS",
 };
 
+/** KS_SERVER_v8_USAGE - the time zone a licensee gets when it sets none. */
+export const DEFAULT_LICENSEE_TIME_ZONE = "America/Edmonton";
+
 const NEUTRAL: LicenseeSettings = {
   company_name: "Keystone Demo Brokerage", legal_name: "", assistant_name: "Assistant", support_email: "",
   support_phone: "", logo_url: "", primary_color: "#0B1F3A", accent_color: "#2563EB",
-  time_zone: "America/Edmonton", country: "CA", mailing_address: "",
+  time_zone: DEFAULT_LICENSEE_TIME_ZONE, country: "CA", mailing_address: "",
 };
 
 export function envDefaults(env: NodeJS.ProcessEnv = process.env): LicenseeSettings {
@@ -91,11 +145,18 @@ export async function getLicenseeSettings(db: Q, now = Date.now()): Promise<Lice
 export async function updateLicenseeSettings(db: Q, patch: Record<string, unknown>, userId: string)
   : Promise<{ ok: true; settings: LicenseeSettings } | { ok: false; errors: string[] }> {
   const errors: string[] = [];
-  const fields: LicenseeField[] = [];
   const values: string[] = [];
+  const fields: string[] = [];
   for (const f of LICENSEE_FIELDS) {
     if (!(f in (patch ?? {}))) continue;
     const c = checkField(f, patch[f]);
+    if (!c.ok) { errors.push(c.error); continue; }
+    fields.push(f);
+    values.push(c.value);
+  }
+  for (const f of CONNECTION_FIELDS) { // KS_SERVER_v8_CONNECTIONS
+    if (!(f in (patch ?? {}))) continue;
+    const c = checkConnectionField(f, patch[f]);
     if (!c.ok) { errors.push(c.error); continue; }
     fields.push(f);
     values.push(c.value);
@@ -112,6 +173,7 @@ export async function updateLicenseeSettings(db: Q, patch: Record<string, unknow
     );
   }
   clearLicenseeCache();
+  if (fields.some((f) => (CONNECTION_FIELDS as readonly string[]).includes(f))) await getLicenseeConnections(db);
   return { ok: true, settings: await getLicenseeSettings(db) };
 }
 
@@ -119,4 +181,19 @@ export async function updateLicenseeSettings(db: Q, patch: Record<string, unknow
 export async function publicLicensee(db: Q) {
   const s = await getLicenseeSettings(db);
   return { ...s, urls: { server: serverUrl(), portal: portalUrl(), client: clientUrl(), website: websiteUrl() } };
+}
+
+/** KS_SERVER_v8_CONNECTIONS - everything, for the licensee's admins: the public view plus the connection settings
+ *  as saved, and the values in force (saved, else the App Service setting). */
+export async function adminLicensee(db: Q, env: NodeJS.ProcessEnv = process.env) {
+  const [pub, conn] = await Promise.all([publicLicensee(db), getLicenseeConnections(db)]);
+  return {
+    ...pub,
+    ...conn,
+    connections_in_force: {
+      twilio_main_number: conn.twilio_main_number || String(env.TWILIO_MAIN_LINE_NUMBER ?? "").trim(),
+      google_ads_customer_id: conn.google_ads_customer_id || String(env.GOOGLE_ADS_CUSTOMER_ID ?? "").trim(),
+      office365_tenant_id: conn.office365_tenant_id || String(env.MS_GRAPH_TENANT_ID ?? "").trim(),
+    },
+  };
 }

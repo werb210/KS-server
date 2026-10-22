@@ -1,3 +1,4 @@
+import { countOutboundText } from "../plans/usage.js"; // KS_SERVER_v8_USAGE - monthly text count
 import { sharedTwilio } from "../lib/sharedClients.js"; // BF_SERVER_SNAT_REUSE_v784
 import { Router } from "express";
 import { requireAuth, requireAuthorization, requireCapability } from "../middleware/auth.js";
@@ -1386,6 +1387,7 @@ router.post("/sms", replayKey("sms"), safeHandler(async (req: any, res: any) => 
     const statusCallback = `${(process.env.PUBLIC_BASE_URL || serverUrl()).replace(/\/+$/, "")}/api/r/status`;
     const senderSilo = (await import("../middleware/silo.js")).resolveSiloFromRequest(req); // BF_SERVER_RCS_BRAND_BF_ONLY_v781
     message = await client.messages.create({ body: String(mergedBody), ...smsSenderFor(String(to), from, { silo: senderSilo }), to: String(to), statusCallback, /* BF_SERVER_US_SMS_TOLLFREE_v755 */ ...(mmsMediaUrl ? { mediaUrl: [mmsMediaUrl] } : {}) }); // BF_SERVER_BLOCK_v497
+    await countOutboundText(message); // KS_SERVER_v8_USAGE
   } catch (err: any) {
     // eslint-disable-next-line no-console
     console.error("communications.sms.twilio_failed", {
@@ -2058,6 +2060,7 @@ router.post("/broadcast", safeHandler(async (req: any, res: any) => {
         const to = digits.length === 10 ? `+1${digits}` : String(c.phone);
         if (isUndeliverableNumber(to)) { results.push({ contactId: c.id, ok: false, error: "undeliverable_number" }); continue; }
         const msg = await client.messages.create({ body: String(mergedBody), from, to });
+        await countOutboundText(msg as any); // KS_SERVER_v8_USAGE
         await pool.query(
           `INSERT INTO communications_messages
              (id, type, direction, status, body, phone_number, from_number, to_number, twilio_sid, contact_id, application_id, staff_name, silo, created_at)
