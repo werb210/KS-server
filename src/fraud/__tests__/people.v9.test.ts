@@ -5,7 +5,7 @@ import { addressSub, contactRisk, domainAgeSub, emailMatchesName, lineTypeSub, r
 import { corporationsCanadaProvider, parseCorporation, parseDirectors, registryNumber } from "../providers/registry.js";
 import { classifyAddressByList, ipinfoProvider, parseIpinfo, rdapProvider, rdapRegistered, twilioLineTypeProvider, idvProvider, voiceProvider } from "../providers/lookups.js";
 import { evaluateIdentity, normalizeDob } from "../checks/identity.js";
-import { evaluateBehaviour, evaluateDevice, sameRegion, type DeviceRow } from "../checks/device.js";
+import { evaluateBehaviour, evaluateDevice, isSensitiveField, sameRegion, type DeviceRow } from "../checks/device.js";
 import { isDisposableDomain } from "../checks/disposableDomains.js";
 import { parseSignals } from "../deviceSignals.js";
 import type { FetchLike } from "../providers/http.js";
@@ -152,6 +152,14 @@ describe("checks 9 and 10: device, location, behaviour", () => {
     expect(fast.reasons.map((x) => x.code)).toEqual(["paste_sensitive", "too_fast", "same_answers"]);
     expect(evaluateBehaviour({ row, sameAnswersOtherBusinesses: 0 }).status).toBe("green");
   });
+  it("sensitive field names are matched on whole tokens", () => {
+    expect(isSensitiveField("accountNumber")).toBe(true);
+    expect(isSensitiveField("applicant.sin")).toBe(true);
+    expect(isSensitiveField("business_number")).toBe(true);
+    expect(isSensitiveField("business_name")).toBe(false);
+    expect(isSensitiveField("purposeOfFunds")).toBe(false);
+  });
+
   it("the beacon accepts counts and field NAMES only", () => {
     const s = parseSignals({ application_id: "11111111-2222-4333-8444-555555555555", device_id: "abcd1234-ef", platform: "ios", answers_fingerprint: "a".repeat(64), behaviour: { completion_seconds: "120", fields_completed: 30, pasted_fields: ["sin", "account number <script>", 5], autofill_used: true, typed_value: "secret" } })!;
     expect(s.behaviour).toEqual({ completion_seconds: 120, fields_completed: 30, pasted_fields: ["sin", "accountnumberscript"], autofill_used: true, steps: null });

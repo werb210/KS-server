@@ -49,15 +49,21 @@ export function evaluateDevice(i: {
   return i.ipConfigured ? own : combine([own, notConfigured("IP location and VPN detection is not set up (IPINFO_TOKEN); device sharing is still checked.", "ipinfo")]);
 }
 
-/** Sensitive fields: any paste into one of these is counted (the content is never sent). */
-export const SENSITIVE_FIELDS = ["sin", "ssn", "dob", "account_number", "transit", "institution", "routing", "business_number", "email", "phone", "card"];
+/** Sensitive fields: any paste into one of these is counted (the content is never sent). Matched on name TOKENS
+ *  (split on _ . - and camelCase) so "business_name" is not mistaken for "sin" and "accountNumber" still counts. */
+const SENSITIVE_TOKENS = new Set(["sin", "ssn", "dob", "birth", "birthdate", "bank", "account", "acct", "transit", "institution", "routing", "iban", "bn", "email", "phone", "mobile", "cell", "card", "password"]);
+
+export function isSensitiveField(name: string): boolean {
+  const tokens = name.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  return tokens.some((t) => SENSITIVE_TOKENS.has(t)) || /businessnumber|dateofbirth|socialinsurance|accountnumber/.test(tokens.join(""));
+}
 
 export function evaluateBehaviour(i: { row: DeviceRow | null; sameAnswersOtherBusinesses: number }): CheckResult {
   const b = (i.row?.behaviour ?? null) as Record<string, any> | null;
   if (!i.row || !b || !Object.keys(b).length) return notApplicable("No application behaviour was received from the client app.");
   const reasons: Reason[] = [];
   const pasted: string[] = Array.isArray(b.pasted_fields) ? b.pasted_fields.filter((f: unknown) => typeof f === "string") : [];
-  const sensitivePasted = pasted.filter((f) => SENSITIVE_FIELDS.some((s) => f.toLowerCase().includes(s)));
+  const sensitivePasted = pasted.filter(isSensitiveField);
   const secs = Number(b.completion_seconds);
   const fields = Number(b.fields_completed ?? 0);
   if (sensitivePasted.length >= 3) reasons.push({ code: "paste_sensitive", severity: "amber", text: `Sensitive details were pasted rather than typed (${sensitivePasted.slice(0, 4).join(", ")}) - typical when working from someone else's information.` });
