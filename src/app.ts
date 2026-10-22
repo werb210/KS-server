@@ -1,5 +1,9 @@
 import { serviceGate } from "./plans/serviceGate.js"; // KS_SERVER_v8_SERVICE_STATUS
 import type { Q as PlanQ } from "./plans/state.js";
+import { getPlanState } from "./plans/state.js"; // KS_SERVER_v9_FRAUD
+import { checkFeature } from "./plans/catalogue.js"; // KS_SERVER_v9_FRAUD
+import { staffRiskObserver } from "./fraud/insider.js"; // KS_SERVER_v9_FRAUD
+import { DEFAULT_LICENSEE_TIME_ZONE, lastLoadedLicensee } from "./licensee/settings.js"; // KS_SERVER_v9_FRAUD
 import express from "express";
 import { clientFailureLog } from "./middleware/clientFailureLog.js"; // BF_SERVER_CLIENT_FAILURE_LOG_v749
 import cors from "cors";
@@ -186,6 +190,12 @@ export function createApp() {
   // KS_SERVER_v8_SERVICE_STATUS - a suspended or cancelled licensee gets 423 service_suspended everywhere except
   // sign-in, the Plan page, branding and Help (src/plans/serviceGate.ts).
   apiRouter.use(serviceGate(async () => (await import("./db.js")).pool as unknown as PlanQ));
+  // KS_SERVER_v9_FRAUD - inside-job alerts (fraud_14): watches finished staff requests; never blocks or changes one.
+  apiRouter.use(staffRiskObserver({
+    db: async () => (await import("./db.js")).pool as unknown as PlanQ,
+    enabled: async () => checkFeature(await getPlanState((await import("./db.js")).pool as unknown as PlanQ), "fraud_14").allowed,
+    timeZone: () => lastLoadedLicensee()?.time_zone || DEFAULT_LICENSEE_TIME_ZONE,
+  }));
 
   apiRouter.use("/auth", authRoutes);
   apiRouter.use("/call", callRoutes);
