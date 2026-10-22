@@ -18,6 +18,7 @@ describe("plan-gated mounts", () => {
       "/lender-referrals": "lender_portal",
       "/admin/referrers": "referrer_portal",
       "/templates": "templates",
+      "/reporting": "full_reports", // KS_SERVER_v7_NO_REPORTS_ON_STARTER
     });
     const api = Router();
     registerApiRouteMounts(api);
@@ -32,7 +33,7 @@ describe("plan-gated mounts", () => {
   });
 
   it("answers 402 on a starter copy", async () => {
-    for (const [path, feature] of [["/api/templates", "templates"], ["/api/lender/me", "lender_portal"], ["/api/admin/referrers", "referrer_portal"], ["/api/watch/face", "watch_ipad_apps"]]) {
+    for (const [path, feature] of [["/api/templates", "templates"], ["/api/lender/me", "lender_portal"], ["/api/admin/referrers", "referrer_portal"], ["/api/watch/face", "watch_ipad_apps"], ["/api/reporting", "full_reports"]]) {
       const r = await request(app).get(path);
       expect(r.status, path).toBe(402);
       expect(r.body).toMatchObject({ ok: false, error: "feature_not_in_plan", feature });

@@ -31,7 +31,6 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "client_portal", label: "Branded client portal and application wizard", plan: "starter" },
   { key: "iphone_dialler", label: "iPhone dialler", plan: "starter" },
   { key: "office_sync", label: "Office 365 / Google sync", plan: "starter" },
-  { key: "basic_reports", label: "Basic reports", plan: "starter" },
   { key: "ai_assistant", label: "AI assistant", plan: "starter" },
   // growth
   { key: "call_recording", label: "Call recording", plan: "growth" },
@@ -40,7 +39,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "watch_ipad_apps", label: "Apple Watch and iPad apps", plan: "growth" },
   { key: "templates", label: "Message templates", plan: "growth" },
   { key: "referrer_portal", label: "Referrer portal", plan: "growth" },
-  { key: "full_reports", label: "Full reports", plan: "growth" },
+  // KS_SERVER_v7_NO_REPORTS_ON_STARTER - no reports on starter (Todd, Oct 22); starter keeps a basic dashboard.
+  { key: "full_reports", label: "Reports", plan: "growth" },
   { key: "visitor_tracking", label: "Website visitor tracking", plan: "growth" },
   { key: "toll_free_number", label: "Toll-free number", plan: "growth" },
   // pro
@@ -53,6 +53,12 @@ export const FEATURES: readonly FeatureDef[] = [
 ];
 
 export type FeatureKey = string;
+
+/** KS_SERVER_v7_NO_REPORTS_ON_STARTER - the Dashboard sections every plan keeps. Every other report card, the Reports
+ *  page, goals, commission tracking and the mobile-apps report need full_reports (growth and up). */
+export const STARTER_DASHBOARD_REPORTS: ReadonlySet<string> = new Set([
+  "dash_kpis", "dash_pipeline", "dash_dropoffs", "dash_doc_issues", "dash_team",
+]);
 
 export function featureDef(key: string): FeatureDef | undefined {
   return FEATURES.find((f) => f.key === key);
