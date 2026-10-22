@@ -1,5 +1,5 @@
 import { serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
-import { brandName, legalName, supportEmail } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { brandName, legalName, mailingAddress, supportEmail } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 // BF_EMAIL_TWO_COLUMN_v1 - fixed branded marketing email frame with an optional second column.
 export type BrandedEmailFields = {
   headline: string; heroUrl: string; heroLink: string; body: string;
@@ -85,6 +85,6 @@ export function renderBrandedEmail(f: BrandedEmailFields): string {
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden;">
 <tr><td style="background:${BRAND};padding:22px;text-align:center;"><img src="${logo}" alt="${esc(brandName())}" width="300" style="display:inline-block;width:300px;max-width:80%;height:auto;border:0;"></td></tr>
 ${hasSecondColumn ? columns : `${headline}${hero}${body}${cta}`}
-<tr><td style="padding:30px 28px 28px;"><hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 16px;"><p style="margin:0 0 6px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#6b7280;"><strong>${esc(legalName())}</strong>${supportEmail() ? `<br>${esc(supportEmail())}` : ""}</p><p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#9ca3af;">You received this email because you connected with ${esc(brandName())}.</p></td></tr>
+<tr><td style="padding:30px 28px 28px;"><hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 16px;"><p style="margin:0 0 6px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;color:#6b7280;"><strong>${esc(legalName())}</strong>${mailingAddress() ? `<br>${esc(mailingAddress())}` : ""}${supportEmail() ? `<br>${esc(supportEmail())}` : ""}</p><p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#9ca3af;">You received this email because you connected with ${esc(brandName())}.</p></td></tr>
 </table></td></tr></table></body></html>`;
 }

@@ -40,6 +40,11 @@ export function supportPhone(): string {
   return brandSettings().support_phone;
 }
 
+/** KS_SERVER_v5_MAILING_ADDRESS - the licensee's mailing address on one line, or "" when not set. */
+export function mailingAddress(): string {
+  return String(brandSettings().mailing_address ?? "").replace(/\s*\n\s*/g, ", ").trim();
+}
+
 /** The licensee's website host, e.g. "acme.example" - for "Info: <host>" lines. */
 export function websiteHost(): string {
   return hostOf(websiteUrl());

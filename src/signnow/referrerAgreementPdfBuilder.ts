@@ -13,7 +13,7 @@
 // The date field is t:t with l:"Date" on purpose. A real date field (t:d) breaks this
 // account's fieldextract with error 65656; dates are stamped server-side instead.
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from "pdf-lib";
-import { brandName, legalName, supportEmail, winAnsi } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { brandName, legalName, mailingAddress, supportEmail, winAnsi } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const ROLE = "Referrer";
 const PW = 612;
@@ -118,7 +118,7 @@ export async function buildReferrerAgreementPdf(data?: ReferrerAgreementData): P
   text(ctx, "REFERRAL PARTNER AGREEMENT", 11, B, BLACK);
   ctx.y += 20;
 
-  para(ctx, 'This Referral Partner Agreement (the "Agreement") is entered into as of the date of the last signature below (the "Effective Date") between: ' + LN + ', a commercial lending marketplace ("' + BN + '"); and the individual or entity identified in the signature block below (the "Referral Partner"). ' + BN + ' and the Referral Partner are each a "Party" and together the "Parties."');
+  para(ctx, 'This Referral Partner Agreement (the "Agreement") is entered into as of the date of the last signature below (the "Effective Date") between: ' + LN + ', a commercial lending marketplace' + (mailingAddress() ? ' with its principal office at ' + winAnsi(mailingAddress()) : '') + ' ("' + BN + '"); and the individual or entity identified in the signature block below (the "Referral Partner"). ' + BN + ' and the Referral Partner are each a "Party" and together the "Parties."');
 
   heading(ctx, "1. Purpose and Relationship");
   para(ctx, '1. The Referral Partner wishes to refer prospective borrowers and business clients (each a "Referred Client") to ' + BN + ' so that ' + BN + ' may offer them commercial financing and related services. ' + BN + ' wishes to pay the Referral Partner a commission for qualifying referrals on the terms set out in this Agreement.');
@@ -219,7 +219,7 @@ export async function buildReferrerAgreementPdf(data?: ReferrerAgreementData): P
   ctx.y += 12;
   para(ctx, "Signed electronically for " + LN + " on " + new Intl.DateTimeFormat("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "America/Regina" }).format(new Date()) + ".", 8, 0, GREY);
   ctx.y += 10;
-  text(ctx, [LN, winAnsi(supportEmail())].filter(Boolean).join(" | "), 7.5, F, GREY);
+  text(ctx, [LN, winAnsi(mailingAddress()), winAnsi(supportEmail())].filter(Boolean).join(" | "), 7.5, F, GREY);
 
   return doc.save();
 }
