@@ -85,7 +85,7 @@ describe("KS v9 fraud suite (real Postgres)", () => {
   afterAll(async () => {
     const warn = (e: unknown) => console.warn("cleanup", String(e));
     const apps = [A, B, F, C];
-    for (const t of ["fraud_check_results", "fraud_queue", "document_fingerprints", "fraud_device_signals", "fraud_watchlist_shares", "fraud_bank_links", "banking_transactions"]) {
+    for (const t of ["fraud_check_results", "fraud_queue", "document_fingerprints", "fraud_device_signals", "fraud_watchlist_shares", "banking_transactions"]) {
       await pool.query(`DELETE FROM ${t} WHERE application_id = ANY($1::text[])`, [apps]).catch(warn);
     }
     await pool.query(`DELETE FROM banking_analyses WHERE application_id = ANY($1::text[])`, [apps]).catch(warn);
@@ -131,21 +131,21 @@ describe("KS v9 fraud suite (real Postgres)", () => {
     expect(by("fraud_12")!.status).toBe("red"); // shares a phone with a confirmed fraud file
     expect(by("fraud_9")!.status).toBe("amber"); // device used for one other business
     expect(by("fraud_10")!.status).toBe("red"); // 25 seconds for 40 fields
-    expect(by("fraud_3")!.status).toBe("not_configured");
+    expect(by("fraud_3")).toBeUndefined(); // KS_SERVER_NO_BANK_CONNECT - no live bank check
     expect(by("fraud_6")!.status).not.toBe("green"); // nothing it could check
     expect(by("fraud_15")!.status).toBe("not_applicable");
     expect(by("fraud_13")!.status).toBe("not_applicable"); // sharing is off
     expect(Number(by("fraud_16")!.details.score)).toBeGreaterThanOrEqual(50);
   });
 
-  it("the overview route shows all 16 on pro, marks locked checks on starter, and gated routes answer 402", async () => {
+  it("the overview route shows all 15 on pro, marks locked checks on starter, and gated routes answer 402", async () => {
     try { await overviewAndGates(); } finally { await setPlan("pro"); }
   });
 
   async function overviewAndGates() {
     const pro = await request(app()).get(`/api/fraud/applications/${A}`).set("Authorization", `Bearer ${token("Staff")}`);
     expect(pro.status).toBe(200);
-    expect(pro.body.checks).toHaveLength(16);
+    expect(pro.body.checks).toHaveLength(15); // KS_SERVER_NO_BANK_CONNECT - fraud_3 retired
     expect(pro.body.checks.filter((c: any) => c.locked)).toEqual([]);
     expect(pro.body.score.score).toBeGreaterThanOrEqual(50);
     expect(pro.body.documents).toHaveLength(2);
@@ -160,7 +160,7 @@ describe("KS v9 fraud suite (real Postgres)", () => {
     await setPlan("starter");
     const starter = await request(app()).get(`/api/fraud/applications/${A}`).set("Authorization", `Bearer ${token("Staff")}`);
     const locked = starter.body.checks.filter((c: any) => c.locked).map((c: any) => Number(c.key.slice(6))).sort((a: number, b: number) => a - b);
-    expect(locked).toEqual([3, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+    expect(locked).toEqual([6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
     expect(starter.body.score).toBeNull();
     const refused = await request(app()).get(`/api/fraud/applications/${A}/network`).set("Authorization", `Bearer ${token("Staff")}`);
     expect(refused.status).toBe(402);

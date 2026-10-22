@@ -1,7 +1,6 @@
 // KS_SERVER_v9_FRAUD - every outside service the fraud checks can use, in one place, plus a plain list of which are
 // set up (shown to Admins on the Fraud settings card so nobody mistakes "not set up" for "all clear").
 import type { FetchLike } from "./http.js";
-import { flinksProvider, type BankDataProvider } from "./bankData.js";
 import { corporationsCanadaProvider, type RegistryProvider } from "./registry.js";
 import {
   addressProvider, idvProvider, ipinfoProvider, rdapProvider, twilioLineTypeProvider, voiceProvider,
@@ -9,7 +8,6 @@ import {
 } from "./lookups.js";
 
 export type FraudProviders = {
-  bank: BankDataProvider;
   registry: RegistryProvider;
   domainAge: DomainAgeProvider;
   lineType: LineTypeProvider;
@@ -21,7 +19,6 @@ export type FraudProviders = {
 
 export function fraudProviders(env: NodeJS.ProcessEnv = process.env, fetchImpl?: FetchLike): FraudProviders {
   return {
-    bank: flinksProvider(env, fetchImpl),
     registry: corporationsCanadaProvider(env, fetchImpl),
     domainAge: rdapProvider(env, fetchImpl),
     lineType: twilioLineTypeProvider(env, fetchImpl),
@@ -36,7 +33,6 @@ export type ProviderStatus = { key: keyof FraudProviders; label: string; provide
 
 export function providerStatus(p: FraudProviders): ProviderStatus[] {
   return [
-    { key: "bank", label: "Live bank data", provider: p.bank.name, configured: p.bank.configured(), setting: "FLINKS_BASE_URL, FLINKS_CUSTOMER_ID (FLINKS_AUTH_KEY optional)", used_by: ["fraud_3"] },
     { key: "registry", label: "Corporate registry (Canada federal)", provider: p.registry.name, configured: p.registry.configured(), setting: "CORPORATIONS_CANADA_API_KEY", used_by: ["fraud_6"] },
     { key: "domainAge", label: "Website and email domain age", provider: p.domainAge.name, configured: p.domainAge.configured(), setting: "on by default (FRAUD_RDAP=off turns it off)", used_by: ["fraud_6", "fraud_7"] },
     { key: "lineType", label: "Phone line type", provider: p.lineType.name, configured: p.lineType.configured(), setting: "TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN", used_by: ["fraud_6", "fraud_7"] },

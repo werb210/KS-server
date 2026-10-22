@@ -9,13 +9,13 @@ describe("BF_SERVER_ACCOUNTANT_FORMS_v2", () => {
   it("uses the keys the client's renderer map actually registers", () => {
     expect(ACCOUNTANT_FORM_DOC_TYPES).toContain("cra_view_only_authorization");
     expect(ACCOUNTANT_FORM_DOC_TYPES).toContain("real_estate_collateral_disclosure");
-    expect(ACCOUNTANT_FORM_DOC_TYPES).toContain("flinks_banking");
   });
 
   it("no longer carries the keys that were inferred from labels", () => {
     expect(ACCOUNTANT_FORM_DOC_TYPES).not.toContain("cra_authorization");
     expect(ACCOUNTANT_FORM_DOC_TYPES).not.toContain("real_estate_collateral");
     expect(ACCOUNTANT_FORM_DOC_TYPES).not.toContain("flinks_connect");
+    expect(ACCOUNTANT_FORM_DOC_TYPES).not.toContain("flinks_banking"); // KS_SERVER_NO_BANK_CONNECT
   });
 
   it("keeps the personal net worth statement with the applicant", () => {

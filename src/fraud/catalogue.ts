@@ -1,6 +1,7 @@
-// KS_SERVER_v9_FRAUD - the 16 fraud checks. The plan each one needs lives in src/plans/catalogue.ts (fraud_<n>).
+// KS_SERVER_v9_FRAUD - the fraud checks (15). fraud_3 "statement vs live bank data" was retired with bank connect
+// (KS_SERVER_NO_BANK_CONNECT); the other keys keep their numbers. The plan each one needs lives in src/plans/catalogue.ts (fraud_<n>).
 export type FraudCheckKey =
-  | "fraud_1" | "fraud_2" | "fraud_3" | "fraud_4" | "fraud_5" | "fraud_6" | "fraud_7" | "fraud_8"
+  | "fraud_1" | "fraud_2" | "fraud_4" | "fraud_5" | "fraud_6" | "fraud_7" | "fraud_8"
   | "fraud_9" | "fraud_10" | "fraud_11" | "fraud_12" | "fraud_13" | "fraud_14" | "fraud_15" | "fraud_16";
 
 export type FraudCheckDef = {
@@ -19,8 +20,6 @@ export const FRAUD_CHECKS: readonly FraudCheckDef[] = [
     description: "Looks inside each upload for signs of editing: editing software, re-saves, mixed fonts, text pasted over a scan, re-compressed pages." },
   { key: "fraud_2", label: "Bank statement math check", scope: "document", weight: { red: 35, amber: 12 },
     description: "Re-adds every transaction on each bank statement and checks the running and closing balances." },
-  { key: "fraud_3", label: "Statement vs live bank data", scope: "application", weight: { red: 40, amber: 15 },
-    description: "Compares the uploaded statements with the bank's own data from the client's connected account." },
   { key: "fraud_4", label: "Duplicate document check", scope: "application", weight: { red: 35, amber: 12 },
     description: "Spots the same file, ID or void cheque (exact copy or near-identical image) on another application." },
   { key: "fraud_5", label: "Revenue vs bank deposits", scope: "application", weight: { red: 25, amber: 10 },

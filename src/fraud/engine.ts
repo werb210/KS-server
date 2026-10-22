@@ -17,13 +17,12 @@ import { emailDomain, normDomain, toE164, normName } from "./hash.js";
 import { evaluateIdentity, type IdDoc } from "./checks/identity.js";
 import { evaluateBehaviour, evaluateDevice, type DeviceRow } from "./checks/device.js";
 import { detectStacking } from "./checks/stacking.js";
-import { compareStatementToLive } from "./checks/liveBank.js";
 import { evaluateInsider, evaluateNetwork, evaluateVoice, type VoiceOutcome } from "./checks/misc.js";
 import { buildNetwork, accountNumbersFor } from "./network.js";
 import { checkWatchlist, evaluateWatchlist, watchlistEntries, watchlistReady } from "./watchlist.js";
 import { getFraudSettings } from "./store.js";
 import { computeScore } from "./score.js";
-import { notApplicable, notConfigured, type CheckResult } from "./types.js";
+import { notApplicable, type CheckResult } from "./types.js";
 import type { OpsFetch } from "../plans/opsLink.js";
 
 export type EngineDeps = {
@@ -218,17 +217,6 @@ export async function runFraudChecks(db: Q, applicationId: string, deps: EngineD
     }
     ran.push("fraud_1");
   }
-
-  // Check 3: statements vs live bank data.
-  await step("fraud_3", async () => {
-    const link = (await db.query(`SELECT provider, login_id FROM fraud_bank_links WHERE application_id = $1`, [applicationId])).rows[0];
-    if (!providers.bank.configured()) return notConfigured("Live bank data (Flinks) is not set up on this server.", "flinks");
-    if (!link) return notApplicable("The client has not connected their bank account for this application.");
-    const live = await providers.bank.fetchTransactions(String(link.login_id));
-    if (!live.ok) return { status: "error", reasons: [{ code: "bank_fetch_failed", severity: "info", text: "The bank data could not be fetched from Flinks; it will be tried again." }], provider: "flinks" };
-    const st = await db.query(`SELECT transaction_date::text AS date, description, amount::float AS amount, balance_after::float AS balance FROM banking_transactions WHERE application_id::text = $1 ORDER BY transaction_date`, [applicationId]);
-    return { ...compareStatementToLive(st.rows, live.transactions), provider: "flinks" };
-  });
 
   await step("fraud_4", async () => { const g = await gatherDuplicates(db, p); return g.documents ? evaluateDuplicates(g.hits, g.documents) : notApplicable("No documents have been scanned yet."); });
   await step("fraud_5", async () => { const g = await gatherRevenue(db, p); return evaluateRevenue(g.claims, g.deposits); });

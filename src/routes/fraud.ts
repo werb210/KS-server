@@ -4,7 +4,6 @@
 //   GET  /api/fraud/applications/:id/network      pro (fraud_12): the network graph (masked labels)
 //   GET  /api/fraud/applications/:id/prescreen    pro (fraud_16): the pre-screen summary text
 //   PUT  /api/fraud/applications/:id/prescreen    pro (fraud_16): { include_in_package: boolean }
-//   PUT  /api/fraud/applications/:id/bank-link    pro (fraud_3): { login_id } from Flinks Connect; DELETE removes it
 //   GET  /api/fraud/settings                      Admin: watchlist opt-in, pre-screen default, which services are set up
 //   PUT  /api/fraud/settings                      Admin: { watchlist_opt_in?, include_prescreen_in_package? }
 //   GET  /api/fraud/staff-alerts                  Admin, pro (fraud_14): recent inside-job events
@@ -110,25 +109,6 @@ router.put("/applications/:id/prescreen", ...staff, requireFeature("fraud_16"), 
   const r = await db().query(`UPDATE applications SET fraud_prescreen_in_package = $2 WHERE id::text = $1 RETURNING id`, [String(req.params.id), req.body.include_in_package]);
   if (!r.rows.length) return res.status(404).json({ ok: false, error: "not_found" });
   return res.json({ ok: true, include_in_package: req.body.include_in_package });
-}));
-
-router.put("/applications/:id/bank-link", ...staff, requireFeature("fraud_3"), safeHandler(async (req: any, res) => {
-  const loginId = String(req.body?.login_id ?? "").trim();
-  if (!/^[A-Za-z0-9-]{8,80}$/.test(loginId)) return res.status(400).json({ ok: false, error: "login_id must be the Flinks LoginId" });
-  const app = await appExists(String(req.params.id));
-  if (!app) return res.status(404).json({ ok: false, error: "not_found" });
-  await db().query(
-    `INSERT INTO fraud_bank_links (application_id, provider, login_id, created_by) VALUES ($1, 'flinks', $2, $3)
-     ON CONFLICT (application_id) DO UPDATE SET login_id = EXCLUDED.login_id, created_by = EXCLUDED.created_by, created_at = now()`,
-    [app.id, loginId, userIdOf(req)],
-  );
-  await enqueueFraudRun(db(), app.id, "bank_link");
-  return res.json({ ok: true });
-}));
-
-router.delete("/applications/:id/bank-link", ...staff, requireFeature("fraud_3"), safeHandler(async (req: any, res) => {
-  await db().query(`DELETE FROM fraud_bank_links WHERE application_id = $1`, [String(req.params.id)]);
-  return res.json({ ok: true });
 }));
 
 router.get("/settings", ...admin, safeHandler(async (_req, res) => {

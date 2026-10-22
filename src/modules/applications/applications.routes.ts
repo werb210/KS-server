@@ -211,7 +211,7 @@ export function isDocUploadTaskComplete(
 // Gated by the requireAuth + APPLICATION_READ capability set above. No writes.
 router.get('/:id/task-status', safeHandler(async (req: any, res: any) => {
   // BF_SERVER_BLOCK_v782_TASK_STATUS — read-only staff view of whether the
-  // applicant has finished the tasks we asked of them (Connect Bank/Flinks, CRA,
+  // applicant has finished the tasks we asked of them (CRA,
   // Net Worth, Advisors, Debt, collateral, Gov ID, document upload). The required
   // set is exactly the task-prompt messages already posted to the client; each is
   // checked against the same completion signals v778 uses (submitted form
@@ -225,7 +225,7 @@ router.get('/:id/task-status', safeHandler(async (req: any, res: any) => {
        FROM communications_messages
       WHERE application_id::text = ($1)::text
         AND (cta_action LIKE 'form:%' OR cta_action LIKE 'upload:%'
-             OR cta_action IN ('networth','flinks','cra','debt','realestate','equipment','advisors','upload','upload_docs'))
+             OR cta_action IN ('networth','cra','debt','realestate','equipment','advisors','upload','upload_docs'))
       GROUP BY cta_action`, [id]).catch((err: any) => { console.warn("[silent-query] modules/applications/applications.routes.ts", { message: err?.message }); return { rows: [] as any[] }; });
   const forms = await pool.query(
     `SELECT doc_type FROM application_form_responses WHERE application_id::text = ($1)::text AND submitted_at IS NOT NULL`, [id]).catch((err: any) => { console.warn("[silent-query] modules/applications/applications.routes.ts", { message: err?.message }); return { rows: [] as any[] }; });
@@ -254,7 +254,6 @@ router.get('/:id/task-status', safeHandler(async (req: any, res: any) => {
     // /debt/ branch would otherwise claim debt_schedule.
     if (/^sba_form_1919/.test(x)) return "sba1919";
     if (/^sba_form_413/.test(x)) return "sba413";
-    if (/flinks|bank/.test(x)) return "flinks";
     return null;
   };
   const completed = new Set<string>();
@@ -272,7 +271,7 @@ router.get('/:id/task-status', safeHandler(async (req: any, res: any) => {
   if (outstandingDocsClear) completed.add("upload_docs");
 
   const LABELS: Record<string, string> = {
-    networth: "Personal Net Worth", flinks: "Connect Bank (View-Only)", cra: "CRA Authorization",
+    networth: "Personal Net Worth", cra: "CRA Authorization",
     debt: "Debt Stack", realestate: "Real Estate Collateral", equipment: "Equipment Collateral",
     advisors: "Professional Advisors", upload: "Upload Government ID", upload_docs: "Upload Documents",
     // BF_SERVER_SBA_CHECKLIST_v104
@@ -314,7 +313,7 @@ router.post('/:id/request-steps', requireCapability([CAPABILITIES.CRM_WRITE]), s
   if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ error: 'invalid id' });
 
   const FORM_LABELS: Record<string, string> = {
-    networth: 'Personal Net Worth', flinks: 'Connect Bank (View-Only)', cra: 'CRA Authorization',
+    networth: 'Personal Net Worth', cra: 'CRA Authorization', // KS_SERVER_NO_BANK_CONNECT - no Connect Bank (Flinks) step
     debt: 'Debt Stack', realestate: 'Real Estate Collateral', equipment: 'Equipment Collateral',
     advisors: 'Professional Advisors', upload: 'Upload Government ID',
     // BF_SERVER_SBA_CHECKLIST_v104 - staff can now request the SBA forms from

@@ -15,7 +15,6 @@ export const REQUIRED_DOCUMENT_KEYS = [
   "lease_agreement",
   "real_estate_schedule",
   // BF_SERVER_BLOCK_v303_COLLATERAL_DOCTYPES_v1 — Accord LOC doc types
-  "flinks_banking",
   "cra_view_only_authorization",
   "real_estate_collateral_disclosure",
   "org_chart_beneficial_ownership",
@@ -74,7 +73,6 @@ const LEGACY_DOCUMENT_KEY_MAP: Record<string, RequiredDocumentKey> = {
   lease_agreement: "lease_agreement",
   real_estate_schedule: "real_estate_schedule",
   // BF_SERVER_BLOCK_v303_COLLATERAL_DOCTYPES_v1 — Accord LOC doc types (self-map)
-  flinks_banking: "flinks_banking",
   cra_view_only_authorization: "cra_view_only_authorization",
   real_estate_collateral_disclosure: "real_estate_collateral_disclosure",
   org_chart_beneficial_ownership: "org_chart_beneficial_ownership",
@@ -111,7 +109,6 @@ const DOCUMENT_TYPE_ALIASES: Record<RequiredDocumentKey, string[]> = {
   lease_agreement: ["lease_agreement"],
   real_estate_schedule: ["real_estate_schedule"],
   // BF_SERVER_BLOCK_v303_COLLATERAL_DOCTYPES_v1 — Accord LOC doc types
-  flinks_banking: ["flinks_banking"],
   cra_view_only_authorization: ["cra_view_only_authorization"],
   real_estate_collateral_disclosure: ["real_estate_collateral_disclosure"],
   org_chart_beneficial_ownership: ["org_chart_beneficial_ownership"],
