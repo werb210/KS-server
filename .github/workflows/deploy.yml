@@ -93,8 +93,8 @@ jobs:
       # KS_SERVER_v10_DEMO - the shared sales-demo server (runs with DEMO_MODE=true): the same build, deployed only when
       # the repository variable DEMO_WEBAPP_NAME is set (e.g. ks-demo-server in ks-dev). See KS-Ops docs/DEMO_SETUP.md.
       - name: Deploy to the demo server
-        if: vars.DEMO_WEBAPP_NAME != ''
+        if: vars.DEMO_WEBAPP_NAME != 'off'
         uses: azure/webapps-deploy@v3
         with:
-          app-name: ${{ vars.DEMO_WEBAPP_NAME }}
+          app-name: ${{ vars.DEMO_WEBAPP_NAME || 'ks-demo-server' }}
           package: release.zip
