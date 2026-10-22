@@ -34,12 +34,17 @@ import { BlobServiceClient } from "@azure/storage-blob";
 import { renderBrandedEmail, type BrandedEmailFields } from "../services/emailTemplateRender.js";
 import { resolveScheduledAt, SendScheduleError } from "../services/sendSchedule.js"; // BF_SERVER_SEND_LATER_v35
 import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
 
 
 const router = Router();
 
 router.use(requireAuth);
 router.use(requireCapability([CAPABILITIES.MARKETING_VIEW]));
+// KS_SERVER_v6_PLANS - path-scoped plan gates (a bare router.use(gate) here would gate every marketing route).
+router.use(["/ad-waste", "/ad-keywords", "/ads-story", "/ads-dropoff", "/ad-clicks", "/attribution-health", "/google-ads", "/customer-match"], requireFeature("ad_attribution"));
+router.use("/ads-visitors", requireFeature("visitor_tracking"));
+router.use(["/templates", "/email/template", "/email/send-template"], requireFeature("templates"));
 router.use(adSpendAnalysisRoutes);
 router.use(adsStoryRoutes); // BF_SERVER_ADS_STORY_v707
 router.use(customerMatchRoutes); // BF_SERVER_CUSTOMER_MATCH_LISTS_v711

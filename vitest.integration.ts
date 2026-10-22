@@ -22,6 +22,7 @@ export const INTEGRATION_TEST_FILES: string[] = [
   "src/__tests__/auth.otp.client-fallthrough.test.ts",
   "src/__tests__/bi-workflows.smoke.test.ts",
   "src/__tests__/ksLicensee.v1.integration.test.ts", // KS_SERVER_v1_LICENSEE - needs Postgres
+  "src/__tests__/ksPlans.v6.integration.test.ts", // KS_SERVER_v6_PLANS - needs Postgres
   "src/__tests__/chatIsChat.v629.integration.test.ts", // BF_SERVER_CHAT_IS_CHAT_v629 - needs Postgres
   "src/watch/__tests__/watchPushLookup.v819.integration.test.ts", // BF_SERVER_v819_PUSH - needs Postgres
   "src/__tests__/dialerV821.integration.test.ts", // BF_SERVER_v821_DIALER - needs Postgres

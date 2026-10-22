@@ -16,6 +16,7 @@ import { clientUrl, serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICE
 const router = Router();
 import { smsFromFor, smsSenderFor } from "../lib/smsFrom.js"; // BF_SERVER_US_SMS_TOLLFREE_v755
 import { brandName, assistantName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
 
 // BF_SERVER_MEDIA_QUERY_AUTH_v1 - <img>/<audio>/EventSource cannot send an
 // Authorization header, so the media proxies and the message stream accept a
@@ -745,7 +746,7 @@ router.get("/messages/:id/media", safeHandler(async (req: any, res: any) => {
 // <audio> player. Twilio Recording URLs require Basic auth (browser stalls at
 // 0:00), so proxy by conference id and self-heal raw Twilio URLs into public
 // blob so playback survives Twilio media purge.
-router.get("/recordings/by-conference/:conferenceId/media", safeHandler(async (req: any, res: any) => {
+router.get("/recordings/by-conference/:conferenceId/media", requireFeature("call_recording"), safeHandler(async (req: any, res: any) => {
   if (!req.user) return res.status(401).end(); // BF_SERVER_v789_URL_TICKETS - URL ticket or Authorization header, checked above
   const cid = String(req.params?.conferenceId ?? "");
   if (!/^[0-9a-fA-F-]{8,40}$/.test(cid)) return res.status(400).end();
