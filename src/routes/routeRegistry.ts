@@ -132,6 +132,8 @@ import diagnosticsRoutes from "./diagnostics.js";
 import { createMountTracker } from "./_canonicalMount.js";
 import { siloMiddleware } from "../middleware/silo.js";
 import licenseeRoutes from "./licensee.js"; // KS_SERVER_v1_LICENSEE
+import planRoutes from "./plan.js"; // KS_SERVER_v6_PLANS
+import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
 import { requireAuth, requireAuthAllowClient } from "../middleware/auth.js";
 import watchAuthRoutes from "../watch/authRoutes.js";
 import watchDeviceRoutes from "../watch/deviceRoutes.js";
@@ -147,6 +149,8 @@ export type ApiRoute = {
 export type ApiRouteMount = {
   path: string;
   router: Router;
+  /** KS_SERVER_v6_PLANS - the plan feature the whole mount needs (402 feature_not_in_plan without it). */
+  feature?: string;
 };
 
 const ALL_ROLES: Role[] = [
@@ -238,17 +242,17 @@ export function applySiloMiddleware(app: import("express").Application): void {
 }
 
 export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
-  { path: "/watch", router: watchRoutes },
+  { path: "/watch", router: watchRoutes, feature: "watch_ipad_apps" }, // KS_SERVER_v6_PLANS
   { path: "/_int", router: internalRoutes },
   { path: "/internal/processing", router: internalProcessingRoutes },
   { path: "/calendar", router: calendarRoutes },
   { path: "/calls", router: callsRoutes },
-  { path: "/lender", router: lenderSelfRoutes }, // BF_SERVER_LENDER_SELF_v1
+  { path: "/lender", router: lenderSelfRoutes, feature: "lender_portal" }, // BF_SERVER_LENDER_SELF_v1 // KS_SERVER_v6_PLANS
   { path: "/referrer", router: referrerSelfRoutes }, // BF_SERVER_REFERRER_SELF_v1
   { path: "/broker", router: brokerSelfRoutes }, // BF_SERVER_BROKER_PORTAL_v717
-  { path: "/lender-referrals", router: lenderReferralRoutes }, // BF_SERVER_v825_LENDER_REFERRALS
+  { path: "/lender-referrals", router: lenderReferralRoutes, feature: "lender_portal" }, // BF_SERVER_v825_LENDER_REFERRALS // KS_SERVER_v6_PLANS
   { path: "/application-origin", router: applicationOriginRoutes }, // BF_SERVER_v828_APPLICATION_ORIGIN
-  { path: "/admin/referrers", router: adminReferrersRoutes }, // BF_SERVER_ADMIN_REFERRERS_v1
+  { path: "/admin/referrers", router: adminReferrersRoutes, feature: "referrer_portal" }, // BF_SERVER_ADMIN_REFERRERS_v1 // KS_SERVER_v6_PLANS
   { path: "/telephony", router: telephonyRoutes },
   { path: "/realtime", router: realtimeRoutes },
   { path: "/banking", router: bankingRoutes },
@@ -337,8 +341,9 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/credit-collateral", router: creditCollateralRoutes }, // BF_SERVER_BLOCK_v536
   { path: "/credit-financials", router: creditFinancialsRoutes }, // BF_SERVER_BLOCK_v535
   { path: "/broker-imports", router: brokerImportRoutes }, // BF_SERVER_BLOCK_v521_BROKER_IMPORT
-  { path: "/templates", router: templatesRoutes }, // v693
+  { path: "/templates", router: templatesRoutes, feature: "templates" }, // v693 // KS_SERVER_v6_PLANS
   { path: "/licensee", router: licenseeRoutes }, // KS_SERVER_v1_LICENSEE
+  { path: "/plan", router: planRoutes }, // KS_SERVER_v6_PLANS
 ];
 
 export const PORTAL_ROUTE_REQUIREMENTS: Pick<ApiRoute, "method" | "path">[] = [
@@ -528,6 +533,7 @@ export function registerApiRouteMounts(app: Router): void {
 
   API_ROUTE_MOUNTS.forEach((entry) => {
     if (entry.path === "/ocr/admin") return;
-    mount(app, entry.path, entry.router);
+    // KS_SERVER_v6_PLANS - plan-gated mounts get the feature gate in front of their router.
+    mount(app, entry.path, entry.feature ? Router().use(requireFeature(entry.feature), entry.router) : entry.router);
   });
 }

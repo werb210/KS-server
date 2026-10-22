@@ -413,6 +413,11 @@ export async function start(): Promise<void> {
     await workerStagger();
     try { const w = startClientStatusWorker(pool); workerStops.push(w.stop); console.log("[startup] client-status worker started"); }
     catch (err) { console.error("[startup] client-status worker failed to start:", err); }
+    // KS_SERVER_v6_PLANS - trial and storage notices to the licensee's admins.
+    const { startPlanNoticesWorker } = await import("./workers/planNoticesWorker.js");
+    await workerStagger();
+    try { const w = startPlanNoticesWorker(pool); workerStops.push(w.stop); console.log("[startup] plan-notices worker started"); }
+    catch (err) { console.error("[startup] plan-notices worker failed to start:", err); }
 
     // BF_SERVER_BLOCK_v665 — graceful shutdown. On container recycle the workers'
     // poll loops must stop BEFORE the pool tears down, otherwise each tick queries

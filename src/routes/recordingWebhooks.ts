@@ -107,7 +107,14 @@ async function triggerVoiceIntelligence(conferenceId: string, recordingSid: stri
         const { notifyConferenceState } = await import("../voice/conferenceService.js");
         await notifyConferenceState(conferenceId, "transcript.completed", { viSid: transcript.sid });
         // BF_SERVER_AUTO_CALL_SUMMARY_v245 - summarize as soon as the transcript lands.
-        void import("../services/calls/autoCallSummary.js").then((m) => m.summarizeCompletedTranscript(conferenceId));
+        // KS_SERVER_v6_PLANS - automatic AI call summaries are a growth feature.
+        void import("../plans/state.js")
+          .then(async ({ planAllows }) => {
+            if (!(await planAllows(pool as any, "call_summaries"))) return;
+            const m = await import("../services/calls/autoCallSummary.js");
+            await m.summarizeCompletedTranscript(conferenceId);
+          })
+          .catch((err: unknown) => console.warn("[auto-call-summary] skipped:", err instanceof Error ? err.message : String(err)));
         return;
       }
       if (t.status === "failed") {

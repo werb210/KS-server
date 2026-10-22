@@ -26,6 +26,7 @@ import voicemailsRoutes from "./crm/voicemails.js"; // BF_SERVER_BLOCK_v830_VOIC
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
 import { logWarn } from "../observability/logger.js"; // BF_SERVER_v789_WAITLIST_NO_TAKEOVER
 import { emitAutomationEvent } from "../modules/automation/automationEngine.js"; // BF_SERVER_v786_WORKFLOW_GRAPH
+import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
 
 const router = Router();
 
@@ -132,7 +133,7 @@ router.delete("/segments/:id", requireCrmWrite, safeHandler(async (req: any, res
 
 
 
-router.get("/contacts/:id/ad-attribution", safeHandler(async (req: any, res: any) => {
+router.get("/contacts/:id/ad-attribution", requireFeature("ad_attribution"), safeHandler(async (req: any, res: any) => {
   const contactId = String(req.params.id ?? "");
   const resolved = await pool.query(
     `SELECT campaign_name, ad_group_name, keyword AS keyword_text, keyword_match_type,
@@ -181,7 +182,7 @@ router.get("/contacts/:id/ad-attribution", safeHandler(async (req: any, res: any
 // recording for the CRM "Clarity" button. Returns the most recent application's
 // stored player URL, scoped to the caller's silo; null when none has been
 // captured yet (older contacts, cookieless/ad-blocked sessions).
-router.get("/contacts/:id/clarity-recording", safeHandler(async (req: any, res: any) => {
+router.get("/contacts/:id/clarity-recording", requireFeature("visitor_tracking"), safeHandler(async (req: any, res: any) => {
   const contactId = String(req.params.id ?? "");
   const silo = resolveSiloFromRequest(req);
   const { rows } = await pool.query(
@@ -1378,7 +1379,7 @@ router.get("/contacts/:id/emails", safeHandler(async (req: any, res: any) => {
 }));
 
 // BF_SERVER_CALL_AI_SUMMARY_v1 - AI post-call summary from the transcript, saved to the timeline.
-router.post("/calls/:conferenceId/ai-summary", safeHandler(async (req: any, res: any) => {
+router.post("/calls/:conferenceId/ai-summary", requireFeature("call_summaries"), safeHandler(async (req: any, res: any) => {
   const id = req.params.conferenceId;
   const silo = resolveSiloFromRequest(req);
   const { rows } = await pool.query(
@@ -1726,7 +1727,7 @@ router.get("/contacts/:id/documents/:docId/download", safeHandler(async (req: an
 
 // BF_SERVER_VISITOR_JOURNEY_v1 - full pre-application journey for a contact: which ad
 // brought them, every page + dwell time, the drop-off page, and their wizard path.
-router.get("/contacts/:id/journey", requireAuth, safeHandler(async (req: any, res: any) => {
+router.get("/contacts/:id/journey", requireAuth, requireFeature("visitor_tracking"), safeHandler(async (req: any, res: any) => {
   const contactId = String(req.params.id);
   const sess = await pool.query(
     `SELECT session_id, first_seen_at, last_seen_at, landing_page, referrer, gclid,

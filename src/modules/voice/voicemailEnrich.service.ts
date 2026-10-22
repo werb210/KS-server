@@ -167,7 +167,9 @@ export async function enrichAndDistributeVoicemail(params: {
       }
     }
   }
-  const transcript = buf ? await transcribe(buf) : "";
+  // KS_SERVER_v6_PLANS - transcription is a growth feature; without it the voicemail audio is still delivered.
+  const { planAllows } = await import("../../plans/state.js");
+  const transcript = buf && (await planAllows(pool as any, "voicemail_transcription")) ? await transcribe(buf) : "";
 
   let contactId: string | null = callLog?.crm_contact_id ?? initialClientId ?? clientCaller?.contactId ?? null;
   // BF_SERVER_v817_DIALER_MESSAGING - a client identity is not a phone number: never create an
