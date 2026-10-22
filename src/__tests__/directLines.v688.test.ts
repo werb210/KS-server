@@ -79,15 +79,23 @@ describe("v688 staff direct lines", () => {
 });
 
 describe("v688b: caller ID and receptionist reach", () => {
-  it("staff without a direct number call out as the 866 main line", async () => {
+  it("staff without a direct number call out as the main line", async () => {
     const prev = process.env.TWILIO_MAIN_LINE_NUMBER; delete process.env.TWILIO_MAIN_LINE_NUMBER;
+    // KS_SERVER_v4_BRANDING - no main line set: the licensee's support phone, never Boreal's 866 line.
+    const prevSupport = process.env.KS_SUPPORT_PHONE; delete process.env.KS_SUPPORT_PHONE;
+    expect(mainLineNumber()).toBe("");
+    process.env.KS_SUPPORT_PHONE = "(587) 804-2761";
+    expect(mainLineNumber()).toBe("+15878042761");
+    process.env.TWILIO_MAIN_LINE_NUMBER = "+18666318939";
     expect(mainLineNumber()).toBe("+18666318939");
     expect(await callerIdForUser({ query: async () => ({ rows: [{ direct_number: null }] }) }, "u3")).toBe("+18666318939");
+    delete process.env.TWILIO_MAIN_LINE_NUMBER;
+    if (prevSupport === undefined) delete process.env.KS_SUPPORT_PHONE; else process.env.KS_SUPPORT_PHONE = prevSupport;
     expect(await callerIdForUser({ query: async () => ({ rows: [{ direct_number: "5874165992" }] }) }, "u1")).toBe("+15874165992");
     if (prev !== undefined) process.env.TWILIO_MAIN_LINE_NUMBER = prev;
   });
-  it("an outbound call shows the caller's direct number, else the 866 main line", async () => {
-    delete process.env.TWILIO_MAIN_LINE_NUMBER;
+  it("an outbound call shows the caller's direct number, else the main line", async () => {
+    process.env.TWILIO_MAIN_LINE_NUMBER = "+18666318939"; // KS_SERVER_v4_BRANDING - each copy sets its own main line
     let app = await voiceApp("(825) 555-0199");
     const res = await request(app).post("/api/voice/calls").set("Authorization", bearer("Staff")).send({ to: "+15875550100" });
     expect(res.status).toBe(200);

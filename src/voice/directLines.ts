@@ -2,6 +2,7 @@
 // (users.direct_number). A call to a direct number rings only that person, then their voicemail;
 // calls to any other Boreal number (the 866 main line) go to the receptionist. Staff outbound
 // calls show their own direct number when they have one.
+import { supportPhone } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[] }> };
 
 /** "+1 (825) 451-1768", "8254511768" -> "+18254511768"; anything unusable -> null. */
@@ -37,9 +38,10 @@ export async function directNumberFor(q: Q, userId: unknown): Promise<string | n
   return e164(rows[0]?.direct_number) ?? null;
 }
 
-/** The 866 main line: the caller ID for staff who have no direct number of their own. */
+/** The main line: the caller ID for staff who have no direct number of their own.
+ *  KS_SERVER_v4_BRANDING - TWILIO_MAIN_LINE_NUMBER, else the licensee's support phone; never Boreal's 866 line. */
 export function mainLineNumber(): string {
-  return e164(process.env.TWILIO_MAIN_LINE_NUMBER) ?? "+18666318939";
+  return e164(process.env.TWILIO_MAIN_LINE_NUMBER) ?? e164(supportPhone()) ?? "";
 }
 
 /** Caller ID for a staff member's outbound call: their direct number, else the 866 main line. */

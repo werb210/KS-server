@@ -6,4 +6,6 @@ export function applyTestEnvDefaults() {
   process.env.OPENAI_API_KEY ??= "test-key";
   process.env.TWILIO_VOICE_APP_SID ??= "test-sid";
   process.env.PORT ??= "3000";
+  // KS_SERVER_v4_BRANDING - the main line has no built-in number any more; tests use a fixed one.
+  process.env.TWILIO_MAIN_LINE_NUMBER ??= "+18666318939";
 }
