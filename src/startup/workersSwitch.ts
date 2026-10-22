@@ -6,5 +6,7 @@
 // BF_WORKERS_ENABLED=false on staging. Unset or anything else = on, so
 // production never stops by accident.
 export function bfWorkersEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  // KS_SERVER_v10_DEMO - the shared demo server never runs the real workers (it starts its own two demo jobs).
+  if (String(env.DEMO_MODE ?? "").trim().toLowerCase() === "true") return false;
   return String(env.BF_WORKERS_ENABLED ?? "true").trim().toLowerCase() !== "false";
 }

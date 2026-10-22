@@ -20,6 +20,9 @@ import { requireAuth } from "./middleware/auth.js";
 import { errorHandler } from "./middleware/errors.js";
 import { listRoutes } from "./debug/printRoutes.js";
 import { clientUrl, portalUrl, serverUrl, websiteUrl } from "./licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { pool as demoPool } from "./db.js"; // KS_SERVER_v10_DEMO
+import { demoMode } from "./demo/config.js"; // KS_SERVER_v10_DEMO
+import { demoGate, mountDemo } from "./demo/index.js"; // KS_SERVER_v10_DEMO
 
 export function createApp() {
   const app = express();
@@ -181,6 +184,13 @@ export function createApp() {
   app.get("/api/_int/health", (_req, res) => {
     res.status(200).json({ status: "ok" });
   });
+
+  // KS_SERVER_v10_DEMO - the shared sales-demo server (DEMO_MODE=true) answers only /api/demo/* and health; every
+  // other route is closed before it can run, so nothing real (texts, calls, email, sync, ads) can happen here.
+  if (demoMode()) {
+    app.use(demoGate);
+    mountDemo(app, () => demoPool as unknown as PlanQ);
+  }
 
   /**
    * API ROUTES (LOCKED PREFIX)
