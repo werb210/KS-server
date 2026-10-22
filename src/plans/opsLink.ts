@@ -23,7 +23,8 @@ export function opsConfig(env: NodeJS.ProcessEnv = process.env): OpsConfig | nul
 
 /** POST {KS_OPS_URL}/api/licensees/{KS_LICENSEE_ID}/{path} with the ops key. */
 export async function postToOps(
-  path: "usage-reports" | "requests" | "tickets",
+  // KS_SERVER_v9_FRAUD - the shared watchlist paths (see src/fraud/watchlist.ts).
+  path: "usage-reports" | "requests" | "tickets" | "watchlist/report" | "watchlist/withdraw" | "watchlist/check" | "watchlist/opt-in",
   body: unknown,
   opts: { env?: NodeJS.ProcessEnv; fetchImpl?: OpsFetch } = {},
 ): Promise<OpsResult> {

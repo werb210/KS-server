@@ -53,6 +53,24 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "ad_attribution", label: "Ad attribution", plan: "pro" },
   { key: "api_access", label: "API access", plan: "pro" },
   { key: "sso", label: "Single sign-on", plan: "pro" },
+  // KS_SERVER_v9_FRAUD - the fraud-protection suite (Todd, Oct 23): starter = 1, 2, 4, 5; growth adds 6, 7, 8;
+  // pro has all 16. The key number matches the feature list in src/fraud/catalogue.ts.
+  { key: "fraud_1", label: "Document tamper scan", plan: "starter" },
+  { key: "fraud_2", label: "Bank statement math check", plan: "starter" },
+  { key: "fraud_4", label: "Duplicate document check", plan: "starter" },
+  { key: "fraud_5", label: "Revenue vs bank deposits", plan: "starter" },
+  { key: "fraud_6", label: "Business reality check", plan: "growth" },
+  { key: "fraud_7", label: "Phone and email risk", plan: "growth" },
+  { key: "fraud_8", label: "ID checks", plan: "growth" },
+  { key: "fraud_3", label: "Statement vs live bank data", plan: "pro" },
+  { key: "fraud_9", label: "Device and location check", plan: "pro" },
+  { key: "fraud_10", label: "Application behaviour signals", plan: "pro" },
+  { key: "fraud_11", label: "Loan stacking detector", plan: "pro" },
+  { key: "fraud_12", label: "Fraud network map", plan: "pro" },
+  { key: "fraud_13", label: "Shared fraud watchlist", plan: "pro" },
+  { key: "fraud_14", label: "Inside-job alerts", plan: "pro" },
+  { key: "fraud_15", label: "Call voice check", plan: "pro" },
+  { key: "fraud_16", label: "Fraud score and lender pre-screen", plan: "pro" },
 ];
 
 export type FeatureKey = string;

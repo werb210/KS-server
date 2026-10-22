@@ -430,6 +430,15 @@ export async function start(): Promise<void> {
     try { const w = startUsageReportWorker(pool); workerStops.push(w.stop); if (w.started) console.log("[startup] usage-report worker started"); }
     catch (err) { console.error("[startup] usage-report worker failed to start:", err); }
     // KS_SERVER_v8_PURGE - a cancelled licensee's data is deleted 180 days after cancellation (with warnings).
+    // KS_SERVER_v9_FRAUD - the fraud checks queue, the watchlist sync and the inside-job alerts.
+    const { startFraudWorker } = await import("./workers/fraudWorker.js");
+    await workerStagger();
+    try {
+      const { getLicenseeSettings } = await import("./licensee/settings.js");
+      const w = startFraudWorker(pool, { licenseeCountry: async () => (await getLicenseeSettings(pool as any)).country || null });
+      workerStops.push(w.stop); console.log("[startup] fraud worker started");
+    }
+    catch (err) { console.error("[startup] fraud worker failed to start:", err); }
     const { startLicenseePurgeWorker } = await import("./workers/licenseePurgeWorker.js");
     await workerStagger();
     try { const w = startLicenseePurgeWorker(pool); workerStops.push(w.stop); console.log("[startup] licensee-purge worker started"); }

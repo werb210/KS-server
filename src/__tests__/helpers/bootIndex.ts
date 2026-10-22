@@ -55,6 +55,7 @@ export const WORKER_MODULES: Array<[string, string]> = [
   ["workers/lenderBounceWorker.js", "startLenderBounceWorker"],
   ["workers/usageReportWorker.js", "startUsageReportWorker"], // KS_SERVER_v8_OPS_LINK
   ["workers/licenseePurgeWorker.js", "startLicenseePurgeWorker"], // KS_SERVER_v8_PURGE
+  ["workers/fraudWorker.js", "startFraudWorker"], // KS_SERVER_v9_FRAUD
 ];
 
 export type BootOptions = {

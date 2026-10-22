@@ -182,6 +182,36 @@ Disable OCR by setting `OCR_ENABLED=false` or by enabling the OCR kill switch
 - `OPENAI_API_KEY`
 - `OPENAI_OCR_MODEL`
 
+## Fraud protection (KS_SERVER_v9_FRAUD)
+
+Sixteen checks (`src/fraud/`, plan keys `fraud_1`..`fraud_16`): starter 1, 2, 4, 5; growth adds 6, 7, 8; pro has all.
+The fraud worker (`src/workers/fraudWorker.ts`, every minute, one instance) queues applications with new documents,
+fresh banking results or a submission, runs the checks the plan includes, stores them in `fraud_check_results`, shares
+confirmed fraud with the watchlist (opt-in) and alerts Admins about inside-job events. Staff API: `/api/fraud/...`
+(see `src/routes/fraud.ts`); client beacon: `POST /api/client/fraud-signals`.
+
+Every outside service is optional. A check whose service is not set reports `not_configured` - never a pass.
+
+| Variable | Used by | Without it |
+| --- | --- | --- |
+| `KS_WATCHLIST_PEPPER` (16+ chars, the SAME on every Keystone copy) | 13 shared watchlist | watchlist reports "not set up" |
+| `KS_OPS_URL`, `KS_LICENSEE_ID`, `KS_OPS_KEY` | 13 (already set for usage reports) | watchlist reports "not set up" |
+| `CORPORATIONS_CANADA_API_KEY` (ISED API store, `user-key`) | 6 registry, directors | registry part "not set up" |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` (already set) | 6, 7 line type (Lookup v2, about 1 cent each, cached 30 days) | phone part "not set up" |
+| `IPINFO_TOKEN` (ipinfo.io; VPN flags need its privacy data) | 9 IP country, region, network, VPN | device sharing still checked |
+| `FLINKS_BASE_URL`, `FLINKS_CUSTOMER_ID`, `FLINKS_AUTH_KEY` (optional) | 3 statement vs live bank | "not set up" |
+| `FRAUD_RDAP=off` | 6, 7 domain age via rdap.org (public, on by default) | - |
+| `FRAUD_STAFF_HOURLY_FILE_LIMIT` (default 150) | 14 high-volume alert | - |
+| `FRAUD_EXTRA_DISPOSABLE_DOMAINS` (comma separated) | 7 | built-in list only |
+| `FRAUD_IDV_PROVIDER`, `FRAUD_VOICE_PROVIDER`, `FRAUD_ADDRESS_PROVIDER` | 8, 15, 6 | no vendor is wired in yet: "not set up" |
+
+What is stored (privacy): check results with plain-English reasons; per file its SHA-256 and 64-bit picture hashes,
+image size and editor/camera flags (never a copy of an ID); from the client app a keyed hash of a random device id
+the app generated, a keyed hash of the IP address plus its country/region/network, a keyed hash of a few answers,
+and counts (seconds taken, fields completed, NAMES of sensitive fields that were pasted into) - never keystrokes or
+typed values; staff-risk events with request key names, never values. Watchlist sharing sends only
+HMAC(KS_WATCHLIST_PEPPER) hashes for files confirmed as fraud, and opting out deletes them at Keystone operations.
+
 ## Ops Control Plane
 
 Admin-only ops control plane endpoints live under `/api/admin/ops`:
