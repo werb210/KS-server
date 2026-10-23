@@ -331,7 +331,7 @@ export function demoRouter(deps: DemoDeps): Router {
       applicationId: app.id, app, summary,
       broker: { name: s.prospect_name, company: s.company || s.prospect_name, email: s.prospect_email },
       lenderName: matches[0]?.name ?? "Lender",
-      accepted: await repo.acceptedDocumentFiles(db(), s.id), submittedAt,
+      accepted: await repo.acceptedDocumentFiles(db(), s.id), submittedAt, documents: docs, call: app.call,
     });
     await repo.updateApplication(db(), s.id, {
       credit_summary: summary, submitted_at: submittedAt, status: "submitted_to_lenders",
