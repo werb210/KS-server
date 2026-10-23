@@ -398,6 +398,22 @@ export async function start(): Promise<void> {
     try { const w = startTodoReconcileWorker(pool); workerStops.push(w.stop); console.log("[startup] todo-reconcile worker started"); }
     catch (err) { console.error("[startup] todo-reconcile worker failed to start:", err); }
 
+    // KS_SERVER_v12_GOOGLE_WORKSPACE - every task to and from Google Tasks for staff on Google (no Microsoft sign-in).
+    const { startGoogleTasksWorker } = await import("./workers/googleTasksWorker.js");
+    await workerStagger();
+    try { const w = startGoogleTasksWorker(pool); workerStops.push(w.stop); console.log("[startup] google-tasks worker started"); }
+    catch (err) { console.error("[startup] google-tasks worker failed to start:", err); }
+
+    // KS_SERVER_v12_GOOGLE_WORKSPACE - Gmail inbox sync is built but OFF: it starts only with
+    // GOOGLE_GMAIL_READ_ENABLED=true (after Google's CASA assessment for the restricted gmail.readonly scope).
+    const { gmailReadEnabled } = await import("./services/workspace/googleConfig.js");
+    if (gmailReadEnabled()) {
+      const { startGmailSyncWorker } = await import("./workers/gmailSyncWorker.js");
+      await workerStagger();
+      try { const w = startGmailSyncWorker(pool); workerStops.push(w.stop); console.log("[startup] gmail-sync worker started"); }
+      catch (err) { console.error("[startup] gmail-sync worker failed to start:", err); }
+    }
+
     // BF_SERVER_TASKS_M6_v1 - task reminders + recurrence catch-up + daily digest.
     const { startTaskRemindersWorker } = await import("./workers/taskRemindersWorker.js");
     await workerStagger();

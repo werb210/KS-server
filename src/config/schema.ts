@@ -231,6 +231,14 @@ export const EnvSchema = z
     MS_GRAPH_SEND_AS: z.string().optional(), // email address(es); read in routes/portal.ts
     MS_GRAPH_TENANT_ID: z.string().optional(), // identifier; read in routes/portal.ts
     O365_OAUTH_REDIRECT_URI: z.string().optional(), // URL; read in routes/o365OAuth.ts
+    // KS_SERVER_v12_GOOGLE_WORKSPACE - Google Workspace connect (docs/GOOGLE_WORKSPACE.md)
+    GOOGLE_OAUTH_CLIENT_ID: z.string().optional(), // identifier; read in services/workspace/googleConfig.ts
+    GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(), // credential (secret); read in services/workspace/googleConfig.ts
+    GOOGLE_OAUTH_REDIRECT_URI: z.string().optional(), // URL (default {KS_SERVER_URL}/api/google/oauth/callback); read in services/workspace/googleConfig.ts
+    GOOGLE_OAUTH_RETURN_URL: z.string().optional(), // URL (default {KS_PORTAL_URL}/settings/profile); read in services/workspace/googleConfig.ts
+    GOOGLE_TOKEN_ENCRYPTION_KEY: z.string().optional(), // credential (secret), 32 bytes base64; read in services/workspace/tokenCrypto.ts
+    GOOGLE_GMAIL_READ_ENABLED: z.string().optional(), // true/false switch, default false (restricted scope, needs CASA); read in services/workspace/googleConfig.ts
+    KS_WORKSPACE_PROVIDER: z.string().optional(), // setting m365|google|both (default m365); read in licensee/settings.ts
     O365_OAUTH_RETURN_URL: z.string().optional(), // URL; read in routes/o365OAuth.ts
     O365_SHARED_INBOX_EMAIL: z.string().optional(), // email address(es); read in routes/email.ts
     PUBLIC_SERVER_URL: z.string().optional(), // URL; read in routes/crm/emails.ts

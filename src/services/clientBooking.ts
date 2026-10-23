@@ -4,6 +4,9 @@ import { randomUUID } from "node:crypto";
 import { pool } from "../db.js";
 import { graphAppFetch, isAppGraphConfigured } from "./teams/graphAppClient.js";
 import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { googleConfigProblem } from "./workspace/googleConfig.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
+import { getGoogleForUser, type GoogleClient } from "./workspace/googleAuth.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
+import { createGoogleEvent, googleBusyTimes } from "./workspace/google.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
 
 export const TZ = ALBERTA_TZ;
 export const SLOT_MIN = 30;
@@ -83,8 +86,41 @@ export function roundRobinPick(freeIds: string[], lastBooked: Map<string, number
   if (!freeIds.length) return null;
   return [...freeIds].sort((a, b) => (lastBooked.get(a) ?? -1) - (lastBooked.get(b) ?? -1))[0]!;
 }
-export async function busyTimes(emails: string[], from: Date, to: Date): Promise<Map<string, Array<{ start: Date; end: Date }>>> {
+// KS_SERVER_v12_GOOGLE_WORKSPACE - staff on Google Calendar only (connected to Google, no Microsoft sign-in),
+// keyed by lower-case login / Google address. Empty when Google is not configured on this copy.
+export async function googleOnlyStaff(emails: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!emails.length || googleConfigProblem()) return out;
+  const lower = emails.map((e) => e.toLowerCase());
+  const r = await pool.query<{ user_id: string; email: string; google_email: string }>(
+    `SELECT g.user_id::text AS user_id, lower(COALESCE(u.email, '')) AS email, lower(COALESCE(g.google_email, '')) AS google_email
+       FROM google_workspace_accounts g JOIN users u ON u.id = g.user_id
+      WHERE g.status = 'connected' AND u.o365_refresh_token IS NULL
+        AND (lower(u.email) = ANY($1::text[]) OR lower(g.google_email) = ANY($1::text[]))`,
+    [lower],
+  );
+  for (const row of r.rows) for (const e of [row.email, row.google_email]) if (e && lower.includes(e)) out.set(e, row.user_id);
+  return out;
+}
+
+async function googleBusy(out: Map<string, Array<{ start: Date; end: Date }>>, google: Map<string, string>, from: Date, to: Date): Promise<void> {
+  for (const [email, userId] of google) {
+    try {
+      const g = await getGoogleForUser(pool, userId);
+      // No usable connection: treat the whole window as busy rather than double-book someone.
+      out.set(email, g ? await googleBusyTimes(g, from, to) : [{ start: from, end: to }]);
+    } catch (err) {
+      console.warn("[booking] Google busy lookup failed; treating as busy", { email, message: (err as Error)?.message });
+      out.set(email, [{ start: from, end: to }]);
+    }
+  }
+}
+
+export async function busyTimes(emailsIn: string[], from: Date, to: Date): Promise<Map<string, Array<{ start: Date; end: Date }>>> {
   const out = new Map<string, Array<{ start: Date; end: Date }>>();
+  const google = await googleOnlyStaff(emailsIn); // KS_SERVER_v12_GOOGLE_WORKSPACE
+  await googleBusy(out, google, from, to);
+  const emails = emailsIn.filter((e) => !google.has(e.toLowerCase()));
   if (!emails.length || !isAppGraphConfigured()) return out;
   const resp = await graphAppFetch(`/users/${encodeURIComponent(emails[0]!)}/calendar/getSchedule`, {
     method: "POST", headers: { "Content-Type": "application/json", Prefer: 'outlook.timezone="UTC"' },
@@ -136,8 +172,11 @@ export async function createBooking(input: { kind: BookingKind; startsAt: Date; 
   if (!staff) return { ok: false, reason: "staff_unavailable" };
   const phone = input.phone ? bookingPhoneE164(input.phone) : null;
   const end = new Date(input.startsAt.getTime() + SLOT_MIN * 60_000);
-  const subject = (input.kind === "teams" ? "Teams meeting" : "Phone call") + " with " + input.name + " - " + brandName();
-  const location = input.kind === "phone" ? "Phone call - " + brandName() + " calls " + (phone ?? "") : "Microsoft Teams";
+  // KS_SERVER_v12_GOOGLE_WORKSPACE - a staff member on Google Calendar gets the event there, with Google Meet.
+  const googleStaffId = (await googleOnlyStaff([mailboxOf(staff), staff.email])).values().next().value ?? null;
+  const google: GoogleClient | null = googleStaffId ? await getGoogleForUser(pool, googleStaffId) : null;
+  const subject = (input.kind === "teams" ? (google ? "Video meeting" : "Teams meeting") : "Phone call") + " with " + input.name + " - " + brandName();
+  const location = input.kind === "phone" ? "Phone call - " + brandName() + " calls " + (phone ?? "") : (google ? "Google Meet" : "Microsoft Teams");
 
   // 1. Contact: find by email or last-10 phone; fill what is missing; tag; owner if none.
   const contact = await pool.query<{ id: string; name: string | null; email: string | null; phone: string | null; owner_id: string | null }>(
@@ -175,7 +214,23 @@ export async function createBooking(input: { kind: BookingKind; startsAt: Date; 
   void emitAutomationEvent("booking.created", { silo: "BF", contactId, data: { booking_id: id, kind: input.kind, starts_at: input.startsAt.toISOString(), staff_user_id: staff.id } });
 
   // 3. Outlook.
-  const bodyLines = [input.kind === "phone" ? "We will call you at " + (phone ?? "the number you gave") + "." : "Join with the Teams link in this invitation.", input.notes ? "Notes: " + input.notes : ""].filter(Boolean);
+  const bodyLines = [input.kind === "phone" ? "We will call you at " + (phone ?? "the number you gave") + "." : (google ? "Join with the Google Meet link in this invitation." : "Join with the Teams link in this invitation."), input.notes ? "Notes: " + input.notes : ""].filter(Boolean);
+  if (google) {
+    // KS_SERVER_v12_GOOGLE_WORKSPACE - Google Calendar (+ Meet for a video booking); same failure handling.
+    let created: { id: string | null; joinUrl: string | null };
+    try {
+      created = await createGoogleEvent(google, { title: subject, start: input.startsAt.toISOString(), end: end.toISOString(), notes: bodyLines.join(String.fromCharCode(10)), location, attendees: [{ email: input.email, name: input.name }], meet: input.kind === "teams", requestId: "booking-" + id });
+    } catch (err) {
+      const reason = (err instanceof Error ? err.message : String(err)).slice(0, 300);
+      console.error("[booking] Google Calendar event failed; CRM records kept and marked failed", { bookingId: id, meetingId, contactId, reason });
+      await pool.query(`UPDATE client_bookings SET status = 'failed', failure_reason = $2 WHERE id = $1`, [id, reason]);
+      await pool.query(`UPDATE crm_meetings SET status = 'failed', updated_at = now() WHERE id = $1`, [meetingId]);
+      throw new BookingCalendarError(reason, id);
+    }
+    await pool.query(`UPDATE client_bookings SET google_event_id = $2, join_url = $3 WHERE id = $1`, [id, created.id, created.joinUrl]);
+    await pool.query(`UPDATE crm_meetings SET google_event_id = $2, location = COALESCE($3, location), updated_at = now() WHERE id = $1`, [meetingId, created.id, created.joinUrl]);
+    return { ok: true, booking: { id, startsAt: input.startsAt.toISOString(), staffFirstName: staff.first_name, kind: input.kind, joinUrl: created.joinUrl } };
+  }
   let ev: { id?: string; onlineMeeting?: { joinUrl?: string } };
   try {
     const resp = await graphAppFetch(`/users/${encodeURIComponent(mailboxOf(staff))}/events`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({

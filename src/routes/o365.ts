@@ -12,6 +12,9 @@ import { randomUUID } from "node:crypto";
 import staffLibraryPlus from "./staffLibraryPlus.js"; // BF_SERVER_v810_LIBRARY_PLUS
 import { serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { getGoogleForUser } from "../services/workspace/googleAuth.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
+import { sendGmail } from "../services/workspace/google.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
+import { scheduleGoogleMeeting, googleContactFolder, googleContactFolderFiles } from "../services/workspace/googleFeatures.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
 
 // BF_SERVER_BLOCK_v513_LARGE_EMAIL_ATTACHMENTS - Graph sendMail takes at most ~3 MB
 // of inline attachments per request. Bigger files go on a draft: small ones by
@@ -91,7 +94,12 @@ router.post("/meetings/schedule", safeHandler(async (req: any, res: any) => {
   const userId = req.user?.id ?? req.user?.userId;
   if (!userId) return res.status(401).json({ error: "unauthenticated" });
   const graph = await getGraphForUser(pool, userId);
-  if (!graph) return res.status(412).json({ error: "o365_not_connected" });
+  if (!graph) {
+    // KS_SERVER_v12_GOOGLE_WORKSPACE - Google Calendar event with a Google Meet link instead of Teams.
+    const google = await getGoogleForUser(pool, userId);
+    if (google) return scheduleGoogleMeeting(req, res, google, String(userId));
+    return res.status(412).json({ error: "o365_not_connected" });
+  }
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const contactId = typeof body.contact_id === "string" ? body.contact_id : null;
@@ -186,7 +194,10 @@ router.post("/mail/send", safeHandler(async (req: any, res: any) => {
   const userId = req.user?.id ?? req.user?.userId;
   if (!userId) return res.status(401).json({ error: "unauthenticated" });
   const graph = await getGraphForUser(pool, userId);
-  if (!graph) return res.status(412).json({ error: "o365_not_connected" });
+  // KS_SERVER_v12_GOOGLE_WORKSPACE - no Microsoft 365 connection: send through the user's Google account (gmail.send).
+  // Everything else on this route (merge tokens, signature, collateral, open pixel, timeline logging) is shared.
+  const gmail = graph ? null : await getGoogleForUser(pool, userId);
+  if (!graph && !gmail) return res.status(412).json({ error: "o365_not_connected" });
 
   // v634: accept BOTH shapes — flat {to[], cc[], bcc[], subject, body_html}
   // AND Microsoft Graph {message:{subject, body:{contentType,content}, toRecipients:[{emailAddress:{address}}]}}
@@ -271,7 +282,10 @@ router.post("/mail/send", safeHandler(async (req: any, res: any) => {
   let sharedSig: string | null = null; // BF_SERVER_BLOCK_v731 — per-mailbox team signature
 
   let endpoint = "/me/sendMail";
-  if (from) {
+  if (from && gmail) {
+    // KS_SERVER_v12_GOOGLE_WORKSPACE - gmail.send sends as the connected account only (no shared mailboxes).
+    if (String(from).toLowerCase() !== gmail.email.toLowerCase()) return res.status(403).json({ error: "from_not_allowed", detail: "With Google Workspace, email is sent from your own Gmail address." });
+  } else if (from && graph) {
     const me = await graph.fetch("/me?$select=mail,userPrincipalName");
     const meJson = await me.json();
     const userEmail = (meJson.mail ?? meJson.userPrincipalName ?? "").toLowerCase();
@@ -395,8 +409,30 @@ router.post("/mail/send", safeHandler(async (req: any, res: any) => {
     ...(from ? { from: { emailAddress: { address: from } } } : {}),
   };
 
+  // KS_SERVER_v12_GOOGLE_WORKSPACE - the Gmail send. Scheduling needs a server-side draft (Gmail compose scope),
+  // which gmail.send does not grant, so it is refused rather than sent early.
+  if (gmail) {
+    if (scheduleAt) return res.status(400).json({ error: "schedule_not_supported", detail: "Scheduled send is not available with Google Workspace yet. Send now, or connect Microsoft 365." });
+    try {
+      await sendGmail(gmail, {
+        from: gmail.email || null,
+        to, cc, bcc,
+        subject: mergedSubject,
+        html: bodyWithSig,
+        attachments: (allAttachments as any[]).map((a) => ({ name: a.name, contentType: a.contentType, contentBytes: a.contentBytes, contentId: a.contentId ?? null, isInline: a.isInline === true })),
+        importance: importance as "low" | "normal" | "high",
+        readReceiptTo: isReadReceiptRequested ? gmail.email || null : null,
+        inReplyTo: typeof raw?.in_reply_to === "string" ? raw.in_reply_to : null,
+        references: typeof raw?.references === "string" ? raw.references : null,
+        extraHeaders: { [SENT_LOGGED_HEADER]: "1" },
+      }, { threadId: typeof raw?.thread_id === "string" ? raw.thread_id : null });
+    } catch (err: any) {
+      return res.status(502).json({ error: "gmail_send_failed", detail: String(err?.bodyText || err?.message || "Gmail send failed").slice(0, 500) });
+    }
+  }
+
   // BF_SERVER_BLOCK_v705_SCHEDULED_SEND — park the fully-built message as a draft.
-  if (scheduleAt) {
+  if (scheduleAt && graph) {
     if (!sendingAsSelf) return res.status(400).json({ error: "schedule_self_only", detail: "Scheduled send is only available from your own mailbox." });
     const when = new Date(scheduleAt);
     if (isNaN(when.getTime()) || when.getTime() <= Date.now()) return res.status(400).json({ error: "schedule_time_invalid" });
@@ -446,7 +482,7 @@ router.post("/mail/send", safeHandler(async (req: any, res: any) => {
   // Retry once without the Sent Items copy so the mail still goes out.
   // BF_SERVER_BLOCK_v513 - large attachments: draft in the sending mailbox, attach,
   // then send the draft (Graph files it in Sent Items).
-  if (useUploadPath) {
+  if (useUploadPath && graph) {
     const base = endpoint.replace(/\/sendMail$/, "");
     const draftRes = await graph.fetch(`${base}/messages`, { method: "POST", body: JSON.stringify(message) });
     if (!draftRes.ok) {
@@ -467,7 +503,7 @@ router.post("/mail/send", safeHandler(async (req: any, res: any) => {
     if (!sendRes.ok) return res.status(502).json({ error: "graph_send_failed", detail: (await sendRes.text()).slice(0, 500) });
   }
 
-  let send: Response | null = useUploadPath ? null : await graph.fetch(endpoint, {
+  let send: Response | null = (useUploadPath || !graph) ? null : await graph.fetch(endpoint, {
     method: "POST",
     body: JSON.stringify({ message, saveToSentItems: true }),
   });
@@ -475,7 +511,7 @@ router.post("/mail/send", safeHandler(async (req: any, res: any) => {
   if (send && !send.ok) {
     const firstDetail = (await send.text()).slice(0, 500);
     if (firstDetail.includes("ErrorItemNotFound")) {
-      send = await graph.fetch(endpoint, {
+      send = await graph!.fetch(endpoint, {
         method: "POST",
         body: JSON.stringify({ message, saveToSentItems: false }),
       });
@@ -920,7 +956,12 @@ router.post("/contacts/:id/folder", safeHandler(async (req: any, res: any) => {
   const contact: any = cr.rows[0];
   if (contact.onedrive_folder_url) return res.json({ ok: true, url: contact.onedrive_folder_url, created: false });
   const graph = await getGraphForUser(pool, userId);
-  if (!graph) return res.status(412).json({ error: "o365_not_connected" });
+  if (!graph) {
+    // KS_SERVER_v12_GOOGLE_WORKSPACE - a Google Drive folder (drive.file) instead of OneDrive.
+    const google = await getGoogleForUser(pool, userId);
+    if (google) return googleContactFolder(res, google, contactId, String(contact.name || "Contact"));
+    return res.status(412).json({ error: "o365_not_connected" });
+  }
   const safeName = String(contact.name || "Contact").replace(/[<>:"/\\|?*]/g, "-").slice(0, 80);
   const folderName = `${safeName} (${contactId.slice(0, 8)})`;
   const crmFolder = `${brandName()} CRM`.replace(/[<>:"/\\|?*]/g, "-"); // KS_SERVER_v4_BRANDING
@@ -956,7 +997,12 @@ router.get("/contacts/:id/folder/files", safeHandler(async (req: any, res: any) 
     [contactId],
   );
   const shareUrl: string | null = cr.rows[0]?.onedrive_folder_url ?? null;
-  if (!shareUrl) return res.json({ hasFolder: false, files: [] });
+  if (!shareUrl) {
+    // KS_SERVER_v12_GOOGLE_WORKSPACE - a contact can have a Google Drive folder instead.
+    const google = await getGoogleForUser(pool, userId);
+    if (google) return googleContactFolderFiles(res, google, contactId);
+    return res.json({ hasFolder: false, files: [] });
+  }
   const graph = await getGraphForUser(pool, userId);
   if (!graph) return res.status(412).json({ error: "o365_not_connected" });
   const b64 = Buffer.from(shareUrl).toString("base64").replace(/=+$/, "").replace(/\//g, "_").replace(/\+/g, "-");
