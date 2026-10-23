@@ -414,6 +414,12 @@ export async function start(): Promise<void> {
       catch (err) { console.error("[startup] gmail-sync worker failed to start:", err); }
     }
 
+    // KS_SERVER_v13_QUICKBOOKS - fee invoices to the licensee's QuickBooks (idle while QBO_* is unset or not connected).
+    const { startQuickBooksInvoiceWorker } = await import("./workers/quickbooksInvoiceWorker.js");
+    await workerStagger();
+    try { const w = startQuickBooksInvoiceWorker(pool); workerStops.push(w.stop); console.log("[startup] quickbooks-invoice worker started"); }
+    catch (err) { console.error("[startup] quickbooks-invoice worker failed to start:", err); }
+
     // BF_SERVER_TASKS_M6_v1 - task reminders + recurrence catch-up + daily digest.
     const { startTaskRemindersWorker } = await import("./workers/taskRemindersWorker.js");
     await workerStagger();

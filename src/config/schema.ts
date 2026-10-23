@@ -238,6 +238,12 @@ export const EnvSchema = z
     GOOGLE_OAUTH_RETURN_URL: z.string().optional(), // URL (default {KS_PORTAL_URL}/settings/profile); read in services/workspace/googleConfig.ts
     GOOGLE_TOKEN_ENCRYPTION_KEY: z.string().optional(), // credential (secret), 32 bytes base64; read in services/workspace/tokenCrypto.ts
     GOOGLE_GMAIL_READ_ENABLED: z.string().optional(), // true/false switch, default false (restricted scope, needs CASA); read in services/workspace/googleConfig.ts
+    // KS_SERVER_v13_QUICKBOOKS - QuickBooks Online fee invoices (docs/QUICKBOOKS.md); unset = feature off
+    QBO_CLIENT_ID: z.string().optional(), // identifier; read in services/quickbooks/qboConfig.ts
+    QBO_CLIENT_SECRET: z.string().optional(), // credential (secret); read in services/quickbooks/qboConfig.ts
+    QBO_REDIRECT_URI: z.string().optional(), // URL (default {KS_SERVER_URL}/api/quickbooks/oauth/callback); read in services/quickbooks/qboConfig.ts
+    QBO_ENVIRONMENT: z.string().optional(), // sandbox|production (default sandbox); read in services/quickbooks/qboConfig.ts
+    QBO_TOKEN_ENCRYPTION_KEY: z.string().optional(), // credential (secret), 32 bytes base64; read in services/workspace/tokenCrypto.ts
     KS_WORKSPACE_PROVIDER: z.string().optional(), // setting m365|google|both (default m365); read in licensee/settings.ts
     O365_OAUTH_RETURN_URL: z.string().optional(), // URL; read in routes/o365OAuth.ts
     O365_SHARED_INBOX_EMAIL: z.string().optional(), // email address(es); read in routes/email.ts

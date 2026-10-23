@@ -176,6 +176,7 @@ router.post(
       [id, signer, v.signedAt.toISOString(), userId, v.note, v.feePercent, v.feeAmount],
     );
     console.info({ event: "fee_agreement_marked_signed", applicationId: id, userId, feePercent: v.feePercent, feeAmount: v.feeAmount });
+    { const { queueFeeInvoice } = await import("../services/feeAgreement/mediaFeeAgreement.js"); await queueFeeInvoice(id, "fee_agreement_marked_signed"); } // KS_SERVER_v13_QUICKBOOKS
     res.status(200).json({ ok: true });
   })
 );

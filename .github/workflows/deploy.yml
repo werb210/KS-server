@@ -126,6 +126,7 @@ jobs:
       count: ${{ steps.plan.outputs.count }}
       repo_credentials: ${{ steps.repo.outputs.credentials }}
       repo_webapp_name: ${{ steps.repo.outputs.webapp_name }}
+      repo_qbo_client_id: ${{ steps.repo.outputs.qbo_client_id }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -144,10 +145,12 @@ jobs:
         env:
           REPO_AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
           REPO_AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+          REPO_QBO_CLIENT_ID: ${{ secrets.QBO_CLIENT_ID }}
         run: |
           {
             echo "credentials=$(printf '%s' "$REPO_AZURE_CREDENTIALS" | sha256sum | cut -d' ' -f1)"
             echo "webapp_name=$REPO_AZURE_WEBAPP_NAME"
+            echo "qbo_client_id=$(printf '%s' "$REPO_QBO_CLIENT_ID" | sha256sum | cut -d' ' -f1)"
           } >> "$GITHUB_OUTPUT"
 
   licensee-package:
@@ -241,6 +244,42 @@ jobs:
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # KS_SERVER_v13_QUICKBOOKS - the licensee's own QuickBooks Online (Intuit) app, when its GitHub environment has
+      # one: secrets QBO_CLIENT_ID, QBO_CLIENT_SECRET (and optionally QBO_TOKEN_ENCRYPTION_KEY), variables
+      # QBO_ENVIRONMENT (sandbox|production, default sandbox) and QBO_REDIRECT_URI (optional). Written to the App
+      # Service settings. Without QBO_CLIENT_ID nothing is changed (QuickBooks stays off, or keeps the values
+      # provision-licensee.sh wrote). A value inherited from the repository (the development copy's) is never used.
+      - name: QuickBooks settings
+        env:
+          CODE: ${{ matrix.code }}
+          RG: ks-${{ matrix.code }}
+          WEBAPP: ${{ steps.settings.outputs.webapp }}
+          QBO_CLIENT_ID: ${{ secrets.QBO_CLIENT_ID }}
+          QBO_CLIENT_SECRET: ${{ secrets.QBO_CLIENT_SECRET }}
+          QBO_TOKEN_ENCRYPTION_KEY: ${{ secrets.QBO_TOKEN_ENCRYPTION_KEY }}
+          QBO_ENVIRONMENT: ${{ vars.QBO_ENVIRONMENT }}
+          QBO_REDIRECT_URI: ${{ vars.QBO_REDIRECT_URI }}
+          REPO_QBO_CLIENT_ID: ${{ needs.licensee-plan.outputs.repo_qbo_client_id }}
+        run: |
+          if [ -z "$QBO_CLIENT_ID" ]; then echo "No QBO_CLIENT_ID in this environment; QuickBooks settings left as they are."; exit 0; fi
+          if [ "$(printf '%s' "$QBO_CLIENT_ID" | sha256sum | cut -d' ' -f1)" = "$REPO_QBO_CLIENT_ID" ]; then
+            echo "::warning title=$CODE::QBO_CLIENT_ID comes from the repository, not the environment; QuickBooks settings left as they are."
+            exit 0
+          fi
+          if [ -z "$QBO_CLIENT_SECRET" ]; then echo "::error title=$CODE::QBO_CLIENT_ID is set but QBO_CLIENT_SECRET is missing."; exit 1; fi
+          case "${QBO_ENVIRONMENT:-sandbox}" in sandbox|production) ;; *) echo "::error title=$CODE::QBO_ENVIRONMENT must be sandbox or production."; exit 1;; esac
+          rg="$(az webapp list --query "[?name=='$WEBAPP'].resourceGroup | [0]" -o tsv)"
+          [ -n "$rg" ] || rg="$RG"
+          settings=("QBO_CLIENT_ID=$QBO_CLIENT_ID" "QBO_CLIENT_SECRET=$QBO_CLIENT_SECRET" "QBO_ENVIRONMENT=${QBO_ENVIRONMENT:-sandbox}")
+          [ -n "$QBO_REDIRECT_URI" ] && settings+=("QBO_REDIRECT_URI=$QBO_REDIRECT_URI")
+          [ -n "$QBO_TOKEN_ENCRYPTION_KEY" ] && settings+=("QBO_TOKEN_ENCRYPTION_KEY=$QBO_TOKEN_ENCRYPTION_KEY")
+          if [ -z "$QBO_TOKEN_ENCRYPTION_KEY" ] && [ -z "$(az webapp config appsettings list -g "$rg" -n "$WEBAPP" --query "[?name=='QBO_TOKEN_ENCRYPTION_KEY'].value | [0]" -o tsv)" ]; then
+            settings+=("QBO_TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32)")
+            echo "Generated QBO_TOKEN_ENCRYPTION_KEY on $WEBAPP (kept from now on)."
+          fi
+          az webapp config appsettings set -g "$rg" -n "$WEBAPP" --settings "${settings[@]}" --only-show-errors -o none
+          echo "QuickBooks settings written to $WEBAPP (${QBO_ENVIRONMENT:-sandbox})."
 
       - name: Deploy to Azure
         uses: azure/webapps-deploy@v3
