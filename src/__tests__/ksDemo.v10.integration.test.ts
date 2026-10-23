@@ -90,6 +90,21 @@ describe("KS v10 demo (real Postgres)", () => {
     expect(Object.keys(bad.body.errors)).toEqual(expect.arrayContaining(["ops_session_id", "name", "email", "company"]));
   });
 
+  it("the same ops id with new details (a repeat sign-up) updates the session: greeting, broker and company are the new ones", async () => {
+    const D = await makeSession("Claude");
+    const again = await request(app()).post("/api/demo/ops/sessions").set("X-KS-Ops-Key", OPS_KEY)
+      .send({ ops_session_id: D.opsId, name: "Demo Check", email: "demo.check@prospect.example", company: "Big Broker" });
+    expect(again.status).toBe(200);
+    expect(again.body.session_id).toBe(D.sessionId);
+    const state = await request(app()).get("/api/demo/staff/state").set(auth(again.body.staff_token));
+    expect(state.body.session).toMatchObject({ name: "Demo Check", company: "Big Broker", email: "demo.check@prospect.example" });
+    const client = await request(app()).get("/api/demo/client/state").set(auth(await clientToken(D.code)));
+    expect(client.body.broker).toEqual({ company: "Big Broker", name: "Demo Check" });
+    const row = (await pool.query(`SELECT prospect_name, company FROM demo_sessions WHERE id = $1`, [D.sessionId])).rows[0];
+    expect(row).toEqual({ prospect_name: "Demo Check", company: "Big Broker" });
+    expect((await request(app()).delete(`/api/demo/ops/sessions/${D.opsId}`).set("X-KS-Ops-Key", OPS_KEY)).status).toBe(204);
+  });
+
   it("each session starts with its own fresh sample file, and the portal greets the prospect by name", async () => {
     const a = await request(app()).get("/api/demo/staff/state").set(auth(A.staff));
     const b = await request(app()).get("/api/demo/staff/state").set(auth(B.staff));

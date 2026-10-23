@@ -81,6 +81,20 @@ export async function createSession(
   return (await liveSession(db, id))!;
 }
 
+/**
+ * KS-Ops sends the prospect's details on every open. A repeat sign-up can change them (a new name or brokerage for the
+ * same email), so an existing session takes the latest: the portal greeting, the broker shown to the borrower and the
+ * lender package signature all read these columns.
+ */
+export async function refreshProspect(db: Q, sessionId: string, input: { name: string; email: string; company: string }): Promise<SessionRow | null> {
+  const r = await db.query(
+    `UPDATE demo_sessions SET prospect_name = $2, prospect_email = $3, company = $4
+      WHERE id = $1 AND expires_at > now() RETURNING ${SESSION_COLS}`,
+    [sessionId, input.name, input.email, input.company],
+  );
+  return (r.rows[0] as SessionRow) ?? null;
+}
+
 /** Deletes a session and (by cascade) everything it made. */
 export async function deleteSessionByOpsId(db: Q, opsSessionId: string): Promise<boolean> {
   const r = await db.query(`DELETE FROM demo_sessions WHERE ops_session_id = $1 RETURNING id`, [opsSessionId]);
