@@ -1256,7 +1256,16 @@ router.post(
         });
       } catch { /* never block submit on mirror */ }
 
-      // KS_SERVER_v1_NO_BI - Keystone has no Boreal Insurance: no PGI handoff after submit.
+      // KS_SERVER_v11_PGI - the client ticked PGI: refer it to the insurance partner. Never blocks the submit; the
+      // pgi-referral worker retries anything that did not go through.
+      try {
+        if (String((legacyApp as any)?.pgi_opt_in ?? "").toLowerCase() === "yes") {
+          const { recordPgiOptIn } = await import("../../pgi/service.js");
+          await recordPgiOptIn(pool as any, { applicationId: String(application.id), legacyApp, normalized, businessSource: bizSrc, applicantSource: appSrc });
+        }
+      } catch (pgiErr) {
+        console.warn("[pgi] referral on submit failed", { applicationId: application.id, message: pgiErr instanceof Error ? pgiErr.message : String(pgiErr) });
+      }
     }
 
     if (!normalized) {

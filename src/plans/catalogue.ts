@@ -36,6 +36,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "ai_assistant", label: "AI assistant", plan: "starter" },
   // KS_SERVER_v9_PORTAL_PLANS - lender portal on every plan (Todd, Oct 22): lenders see files and send deals they can't place.
   { key: "lender_portal", label: "Lender portal (lenders can send you deals they can't place)", plan: "starter" },
+  // KS_SERVER_v11_PGI - every plan: PGI referrals to the insurance partner, 20% referral fee on bound policies.
+  { key: "pgi_referrals", label: "Personal Guarantee Insurance referrals (20% referral fee)", plan: "starter" },
   // growth
   { key: "call_recording", label: "Call recording", plan: "growth" },
   { key: "call_summaries", label: "AI call summaries", plan: "growth" },

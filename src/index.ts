@@ -404,7 +404,11 @@ export async function start(): Promise<void> {
     try { const w = startTaskRemindersWorker(pool); workerStops.push(w.stop); console.log("[startup] task-reminders worker started"); }
     catch (err) { console.error("[startup] task-reminders worker failed to start:", err); }
 
-    // KS_SERVER_v1_NO_BI - no PGI handoff retries or document mirror in Keystone.
+    // KS_SERVER_v11_PGI - PGI referrals to the insurance partner: send, forward documents, sync, resend replies.
+    const { startPgiReferralWorker } = await import("./workers/pgiReferralWorker.js");
+    await workerStagger();
+    try { const w = startPgiReferralWorker(pool); workerStops.push(w.stop); console.log("[startup] pgi-referral worker started"); }
+    catch (err) { console.error("[startup] pgi-referral worker failed to start:", err); }
 
     // BF_SERVER_FX_RATE_WORKER_v355 - daily Bank of Canada USD->CAD rate.
     const { startFxRateWorker } = await import("./workers/fxRateWorker.js");

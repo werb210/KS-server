@@ -220,6 +220,13 @@ router.post(
         try {
           await notifyAllStaff({ pool, notificationType: "offer_term_sheet_signed", title: "Term sheet signed", body: `A client signed their term sheet (application ${applicationId}).`, refTable: "applications", refId: applicationId, contextUrl: `/applications/${applicationId}` });
         } catch (e) { console.warn("[signnow-webhook] offer notify failed", e instanceof Error ? e.message : String(e)); }
+        // KS_SERVER_v11_PGI - the signed term sheet goes to the insurance partner, and the client gets the PGI link.
+        try {
+          const { sendPgiLinkAfterTermSheet } = await import("../services/termSheetSigned.js");
+          await sendPgiLinkAfterTermSheet(applicationId);
+          const { syncReferral } = await import("../pgi/service.js");
+          void syncReferral(pool as any, applicationId); // background: never holds up the webhook
+        } catch (e) { console.warn("[signnow-webhook] pgi follow-up failed", e instanceof Error ? e.message : String(e)); }
         console.log("[signnow-webhook] offer_term_sheet_signed", { applicationId, ...attach });
         res.status(200).json({ received: true, match: "offer_term_sheet", attached: attach.attached });
         return;

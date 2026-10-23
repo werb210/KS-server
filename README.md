@@ -218,6 +218,21 @@ and counts (seconds taken, fields completed, NAMES of sensitive fields that were
 typed values; staff-risk events with request key names, never values. Watchlist sharing sends only
 HMAC(KS_WATCHLIST_PEPPER) hashes for files confirmed as fraud, and opting out deletes them at Keystone operations.
 
+## PGI referrals to the insurance partner (KS_SERVER_v11_PGI)
+
+Every licensee is a referral source of Keystone's insurance partner, Boreal Insurance, on every plan (`pgi_referrals`),
+paid 20% of the partner's commission on each bound policy. When a client ticks PGI on Step 6 (or staff press "Refer for
+PGI" on the application's PGI insurance tab) the file is referred; documents in the PGI categories are sent when they
+are accepted (the system's signed term sheet goes as it is); the partner's messages, document requests, reminders and
+status updates arrive signed at `POST /api/pgi/bi-events` and notify the referring seat, the Admins and the support
+inbox. Code: `src/pgi/`, `src/routes/pgi.ts`, worker `src/workers/pgiReferralWorker.ts` (every 10 minutes).
+
+| Variable | Without it |
+| --- | --- |
+| (none to set by hand) the partner link arrives from Keystone operations: `PUT /api/pgi/link` with `KS_OPS_KEY` | referrals wait as "Waiting for setup" and are sent once linked |
+| `KS_SECRETS_KEY` (optional, 32+ chars) | the stored partner API key and callback secret are encrypted with a key derived from `JWT_SECRET` |
+| `KS_PGI_ALLOWED_HOSTS` (optional, comma separated) | the partner server must be an `https://*.azurewebsites.net` address |
+
 ## Ops Control Plane
 
 Admin-only ops control plane endpoints live under `/api/admin/ops`:

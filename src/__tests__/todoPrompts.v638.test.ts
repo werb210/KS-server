@@ -55,14 +55,20 @@ describe("SBA forms outstanding", () => {
 });
 
 describe("PGI and SBA prompts leave the chat for the to-do list", () => {
-  it("action center adds the SBA forms item and never a PGI item (KS_SERVER_v1_NO_BI)", async () => {
+  // KS_SERVER_v11_PGI - PGI is back (insurance partner referrals): the item appears once the term sheet is signed and
+  // stays outstanding until the insurer has the client's answers.
+  it("action center adds the SBA forms item, and the PGI item once the term sheet is signed", async () => {
     const before = await buildActionCenter(APP);
     expect(before.outstanding.find((i) => i.key === "pgi")).toBeUndefined();
     expect(before.outstanding).toContainEqual({ key: "form:sba_forms", kind: "form", label: "SBA forms", action: "sba_forms", urgent: false });
 
     h.signed = true;
     const after = await buildActionCenter(APP);
-    expect(after.outstanding.find((i) => i.key === "pgi")).toBeUndefined();
+    expect(after.outstanding.find((i) => i.key === "pgi")).toEqual({ key: "pgi", kind: "action", label: "Complete your Personal Guarantee Insurance application", action: PGI_URL, urgent: true });
+
+    h.query.mockImplementation(answerBySql([[/FROM pgi_referrals/, { rows: [{ status: "in_review" }] }]], h.query.getMockImplementation()));
+    const done = await buildActionCenter(APP);
+    expect(done.outstanding.find((i) => i.key === "pgi")).toBeUndefined();
   });
 
   it("the client thread leaves them out", async () => {
