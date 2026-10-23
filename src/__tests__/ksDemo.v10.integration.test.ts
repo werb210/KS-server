@@ -8,6 +8,7 @@ import jwt from "jsonwebtoken";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { PDFDocument } from "pdf-lib";
+import JSZip from "jszip";
 import { pool } from "../db.js";
 import type { Q } from "../plans/state.js";
 import { demoRouter } from "../demo/routes.js";
@@ -18,6 +19,7 @@ import { signDemoToken } from "../demo/tokens.js";
 import { SAMPLE_DOCS } from "../demo/fixture.js";
 
 const MIGRATION = "migrations/2026_10_24_ks_v10_demo.sql";
+const MIGRATION_V12 = "migrations/2026_10_26_ks_v12_demo_real_package.sql"; // KS_SERVER_v12_DEMO_REAL_PACKAGE
 const OPS_KEY = "demo-int-ops-key-123";
 const opsIds: string[] = [];
 
@@ -59,6 +61,8 @@ describe("KS v10 demo (real Postgres)", () => {
   beforeAll(async () => {
     await pool.query(readFileSync(MIGRATION, "utf8"));
     await pool.query(readFileSync(MIGRATION, "utf8")); // safe to run again
+    await pool.query(readFileSync(MIGRATION_V12, "utf8"));
+    await pool.query(readFileSync(MIGRATION_V12, "utf8")); // safe to run again
     process.env.KS_OPS_KEY = OPS_KEY;
     process.env.KS_DEMO_CLIENT_URL = "https://client.demo.example/";
     A = await makeSession("Alice");
@@ -186,8 +190,16 @@ describe("KS v10 demo (real Postgres)", () => {
       const chunks: Buffer[] = []; res.on("data", (c: Buffer) => chunks.push(c)); res.on("end", () => cb(null, Buffer.concat(chunks)));
     });
     expect(pkg.status).toBe(200);
-    const pdf = await PDFDocument.load(pkg.body as Buffer);
-    expect(pdf.getPageCount()).toBeGreaterThanOrEqual(6); // summary + 5 accepted sample files
+    // KS_SERVER_v12_DEMO_REAL_PACKAGE - the zip a lender receives, laid out by the real package builder.
+    expect(pkg.headers["content-type"]).toMatch(/application\/zip/);
+    expect(pkg.headers["content-disposition"]).toMatch(/filename="application-[0-9a-f-]{36}\.zip"/);
+    const zip = await JSZip.loadAsync(pkg.body as Buffer);
+    const names = Object.keys(zip.files).filter((n) => !zip.files[n]!.dir);
+    expect(names.slice(0, 3)).toEqual(["signed-application.pdf", "application-fields.json", "application-fields.pdf"]);
+    expect(names.filter((n) => n.includes("/")).length).toBeGreaterThanOrEqual(4); // the accepted sample files, by category
+    expect(names.some((n) => n.startsWith("bank_statements_6_months/"))).toBe(true);
+    const signed = await PDFDocument.load(await zip.file("signed-application.pdf")!.async("nodebuffer"));
+    expect(signed.getPageCount()).toBeGreaterThanOrEqual(1);
     expect((await request(app()).get("/api/demo/staff/package").set(auth(B.staff))).status).toBe(404);
     const st = (await request(app()).get("/api/demo/staff/state").set(h)).body;
     expect(st.session.completed_at).toBeTruthy();
@@ -260,6 +272,13 @@ describe("KS v10 demo (real Postgres)", () => {
     const comp = posts.find((p) => p.path === `/api/demo/sessions/${A.opsId}/complete`)!;
     expect(comp.body.summary).toMatchObject({ name: "Alice", email: "alice@prospect.example", used_phone: true });
     expect(Buffer.from(comp.body.package_pdf_base64, "base64").subarray(0, 5).toString()).toBe("%PDF-");
+    // KS_SERVER_v12_DEMO_REAL_PACKAGE - the real lender email for the sample file, with the zip attached.
+    expect(comp.body.lender_email.subject).toMatch(/ application package: Juniper Hollow Millwork Ltd\. \(\$250,000\)$/);
+    expect(comp.body.lender_email.html).toContain("team,</p>");
+    expect(comp.body.lender_email.text).toMatch(/is submitting the following financing application for your review/);
+    expect(comp.body.lender_email.attachments).toHaveLength(1);
+    expect(comp.body.lender_email.attachments[0]).toMatchObject({ content_type: "application/zip", filename: expect.stringMatching(/^application-[0-9a-f-]{36}\.zip$/) });
+    expect(Buffer.from(comp.body.lender_email.attachments[0].base64, "base64").subarray(0, 4).toString("latin1")).toBe("PK\x03\x04");
     posts.length = 0;
     await flushCompletions(pool, post);
     expect(posts.some((p) => p.path.includes(A.opsId))).toBe(false); // sent once

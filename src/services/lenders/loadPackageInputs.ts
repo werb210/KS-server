@@ -146,13 +146,18 @@ async function loadSignedApplicationPdf(ctx: LoadCtx, _fields: FlatField[]): Pro
   // lender can never receive an unsigned document labelled as signed.
   return null;
 }
+/** KS_SERVER_v12_DEMO_REAL_PACKAGE - the credit summary rides in the package only for deals of $500k or more, and only
+ * once it was submitted (shared with the sales demo so it follows the same rule). */
+export function creditSummaryGoesToLenders(requestedAmount: number, submitted: boolean): boolean {
+  return !((Number.isFinite(requestedAmount) && requestedAmount < 500000) || !submitted);
+}
 async function loadCreditSummaryPdf(ctx: LoadCtx): Promise<Buffer | null> {
   // Credit summary is waived under $500k and must never be a draft. Only include
   // it when the deal is >= $500k AND the summary was actually submitted.
   const g = await ctx.pool.query<{requested_amount:string|number|null;credit_summary_completed_at:string|null}>(`SELECT requested_amount, credit_summary_completed_at FROM applications WHERE id::text = $1 LIMIT 1`, [ctx.applicationId]).catch((swallowedErr: unknown) => logWarnSwallowed(swallowedErr, "services/lenders/loadPackageInputs.ts:133", ({rows:[] as Array<{requested_amount:string|number|null;credit_summary_completed_at:string|null}>})));
   const amt = Number(g.rows[0]?.requested_amount ?? 0);
   const submitted = g.rows[0]?.credit_summary_completed_at != null;
-  if ((Number.isFinite(amt) && amt < 500000) || !submitted) return null;
+  if (!creditSummaryGoesToLenders(amt, submitted)) return null;
   // BF_SERVER_BLOCK_v540 - submitted v2 summaries supersede legacy summaries; drafts are excluded.
   const v2 = await ctx.pool.query<{ status: string }>(`SELECT status FROM credit_summaries_v2 WHERE application_id = $1`, [ctx.applicationId])
     .catch((error: unknown) => { console.warn("[lender-package] credit_summary_v2_read_failed", (error as Error)?.message); return { rows: [] as { status: string }[] }; });
@@ -178,8 +183,13 @@ async function loadAcceptedDocuments(ctx: LoadCtx): Promise<PackageInputDocs[]> 
 }
 async function loadFields(ctx: LoadCtx): Promise<FlatField[]> {
   const r = await ctx.pool.query<{metadata:unknown;name:string|null;requested_amount:string|number|null;product_category:string|null;product_type:string|null}>(`SELECT metadata, name, requested_amount, product_category, product_type FROM applications WHERE id::text = $1 LIMIT 1`, [ctx.applicationId]).catch((swallowedErr: unknown) => logWarnSwallowed(swallowedErr, "services/lenders/loadPackageInputs.ts:161", ({rows:[] as Array<{metadata:unknown;name:string|null;requested_amount:string|number|null;product_category:string|null;product_type:string|null}>})));
-  const row = r.rows[0]; if(!row) return []; const out: FlatField[]=[];
-  out.push({label:"Application ID", value:ctx.applicationId},{label:"Application Name",value:row.name??null},{label:"Requested Amount",value:row.requested_amount==null?null:Number(row.requested_amount)},{label:"Product Category",value:row.product_category??null},{label:"Product Type",value:row.product_type??null});
+  const row = r.rows[0]; if(!row) return []; return packageFields(ctx.applicationId, row);
+}
+/** The application-fields list (JSON + PDF in the package) for one application row. KS_SERVER_v12_DEMO_REAL_PACKAGE -
+ * exported so the sales demo builds the sample file's fields exactly the same way. */
+export function packageFields(applicationId: string, row: {metadata:unknown;name:string|null;requested_amount:string|number|null;product_category:string|null;product_type:string|null}): FlatField[] {
+  const out: FlatField[]=[];
+  out.push({label:"Application ID", value:applicationId},{label:"Application Name",value:row.name??null},{label:"Requested Amount",value:row.requested_amount==null?null:Number(row.requested_amount)},{label:"Product Category",value:row.product_category??null},{label:"Product Type",value:row.product_type??null});
   flatten("", row.metadata ?? {}, out); return out;
 }
 // BF_SERVER_BLOCK_v_ACCORD_PACKAGE_INCLUDE_v1 — the embedded signing GROUP can

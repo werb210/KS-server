@@ -37,7 +37,7 @@ import { scanDemoDocument } from "./fraud.js";
 import { applyWalkthrough, completeByAction, WALKTHROUGH_ACTIONS, type WalkthroughAction } from "./walkthrough.js";
 import { lenderIds, matchLenders, type LenderMatch } from "./lenders.js";
 import { buildCreditSummary, dscrFor } from "./creditSummary.js";
-import { buildLenderPackage } from "./packagePdf.js";
+import { buildDemoLenderSubmission } from "./lenderSubmission.js";
 import { answerQuestion, MAX_QUESTION_CHARS, type AskModel } from "./assistant.js";
 
 export type DemoDeps = { db: () => Q; ask?: AskModel; onEvent?: () => void };
@@ -325,11 +325,19 @@ export function demoRouter(deps: DemoDeps): Router {
     const summary = app.credit_summary ?? buildCreditSummary(app, docs);
     const matches = lenderMatchesFor(app).filter((l) => app.selected_lenders.includes(l.id));
     const submittedAt = new Date();
-    const pdf = await buildLenderPackage({
-      prospect: { name: s.prospect_name, company: s.company }, summary, lenders: matches, documents: docs,
-      accepted: await repo.acceptedDocumentFiles(db(), s.id), call: app.call, submittedAt,
+    // KS_SERVER_v12_DEMO_REAL_PACKAGE - the real package and lender email, for the first lender picked (the real send
+    // emails each picked lender the same package).
+    const sub = await buildDemoLenderSubmission({
+      applicationId: app.id, app, summary,
+      broker: { name: s.prospect_name, company: s.company || s.prospect_name, email: s.prospect_email },
+      lenderName: matches[0]?.name ?? "Lender",
+      accepted: await repo.acceptedDocumentFiles(db(), s.id), submittedAt,
     });
-    await repo.updateApplication(db(), s.id, { credit_summary: summary, submitted_at: submittedAt, status: "submitted_to_lenders", package_pdf: pdf });
+    await repo.updateApplication(db(), s.id, {
+      credit_summary: summary, submitted_at: submittedAt, status: "submitted_to_lenders",
+      package_pdf: sub.signedApplicationPdf, package_zip: sub.zip,
+      package_mail: { lender_name: sub.email.lenderName, subject: sub.email.subject, html: sub.email.html, text: sub.email.text, attachment_filename: sub.zipFilename },
+    });
     let w = completeByAction(repo.walkthroughOf(s), "lenders");
     w = completeByAction(w, "submit");
     await repo.setWalkthrough(db(), s.id, w);
@@ -337,13 +345,13 @@ export function demoRouter(deps: DemoDeps): Router {
     await event(s.id, "submitted", {
       step: "submit",
       data: {
-        lenders: matches.map((l) => l.name), package_bytes: pdf.length,
+        lenders: matches.map((l) => l.name), package_bytes: sub.zip.length,
         accepted: docs.filter((d) => d.status === "accepted").map((d) => d.sample_key),
         rejected: docs.filter((d) => d.status === "rejected").map((d) => d.sample_key),
         doctored_rejected: docs.some((d) => d.fraud_status === "red" && d.status === "rejected"),
       },
     });
-    return { submitted_at: submittedAt, emailed_to: s.prospect_email, lenders: matches.map((l) => l.name), package_bytes: pdf.length };
+    return { submitted_at: submittedAt, emailed_to: s.prospect_email, lenders: matches.map((l) => l.name), package_bytes: sub.zip.length };
   };
 
   router.post("/staff/submit", staff, safeHandler(async (req: DemoReq, res: Response) => {
@@ -432,12 +440,12 @@ export function demoRouter(deps: DemoDeps): Router {
   }));
 
   router.get("/staff/package", staff, safeHandler(async (req: DemoReq, res: Response) => {
-    const pdf = await repo.packageFor(db(), sess(req).id);
-    if (!pdf) return res.status(404).json({ error: "not_submitted" });
+    const pkg = await repo.packageFor(db(), sess(req).id);
+    if (!pkg) return res.status(404).json({ error: "not_submitted" });
     await event(sess(req).id, "package_downloaded", { step: "submit" });
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="Lender-Submission-Package-SAMPLE.pdf"`);
-    res.send(pdf);
+    res.setHeader("Content-Type", pkg.contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${pkg.filename.replace(/[^A-Za-z0-9._-]/g, "_")}"`);
+    res.send(pkg.content);
   }));
 
   router.post("/staff/track", staff, safeHandler(async (req: DemoReq, res: Response) => {

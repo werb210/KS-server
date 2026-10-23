@@ -2,7 +2,10 @@
 //
 // Every step, click and upload is written to demo_events (the outbox) in the same request, then sent in batches:
 //   POST {KS_OPS_URL}/api/demo/sessions/{ops_session_id}/events    { events: [{ type, step, at, data }] }
-//   POST {KS_OPS_URL}/api/demo/sessions/{ops_session_id}/complete  { summary, package_pdf_base64, package_filename }
+//   POST {KS_OPS_URL}/api/demo/sessions/{ops_session_id}/complete  { summary, package_pdf_base64, package_filename, lender_email }
+//        lender_email (KS_SERVER_v12_DEMO_REAL_PACKAGE) = the real lender email for the sample file:
+//        { lender_name, subject, html, text, attachments: [{ filename, content_type, base64 }] } - KS-Ops sends it to the
+//        prospect with a one-line demo banner. package_pdf_base64 (the signed application) stays for older KS-Ops.
 // both with X-KS-Ops-Key = KS_OPS_KEY. KS-Ops sends the two demo emails (the prospect's lender package and the note
 // to sales); this server sends no email at all. A failed post is retried by the flusher (every 15 s).
 import type pg from "pg";
@@ -98,6 +101,19 @@ export async function flushEvents(pool: Pool, post: OpsPoster = postToKsOps): Pr
   return { sent, failed };
 }
 
+export type LenderEmailPayload = {
+  lender_name: string; subject: string; html: string; text: string;
+  attachments: Array<{ filename: string; content_type: string; base64: string }>;
+};
+
+/** The stored lender email plus its zip attachment, as KS-Ops takes it. */
+export function lenderEmailPayload(mail: { lender_name?: string; subject?: string; html?: string; text?: string; attachment_filename?: string }, zip: Buffer): LenderEmailPayload {
+  return {
+    lender_name: String(mail.lender_name ?? ""), subject: String(mail.subject ?? ""), html: String(mail.html ?? ""), text: String(mail.text ?? ""),
+    attachments: [{ filename: String(mail.attachment_filename ?? "application-package.zip"), content_type: "application/zip", base64: Buffer.from(zip).toString("base64") }],
+  };
+}
+
 /** Sends the completion (summary + lender package) for submitted sessions KS-Ops has not taken yet. */
 export async function flushCompletions(pool: Pool, post: OpsPoster = postToKsOps): Promise<number> {
   const client = await pool.connect();
@@ -106,7 +122,7 @@ export async function flushCompletions(pool: Pool, post: OpsPoster = postToKsOps
     await client.query("BEGIN");
     const r = await client.query(
       `SELECT s.id, s.ops_session_id, s.prospect_name, s.prospect_email, s.company, s.used_phone, s.used_screen,
-              s.walkthrough, s.created_at, s.completed_at, a.package_pdf, a.selected_lenders
+              s.walkthrough, s.created_at, s.completed_at, a.package_pdf, a.package_zip, a.package_mail, a.selected_lenders
          FROM demo_sessions s JOIN demo_applications a ON a.session_id = s.id
         WHERE s.completed_at IS NOT NULL AND s.complete_sent_at IS NULL AND s.complete_attempts < 50
           AND a.package_pdf IS NOT NULL
@@ -122,8 +138,9 @@ export async function flushCompletions(pool: Pool, post: OpsPoster = postToKsOps
           started_at: new Date(row.created_at).toISOString(), completed_at: new Date(row.completed_at).toISOString(),
           lenders: row.selected_lenders,
         },
-        package_filename: "Lender-Submission-Package-SAMPLE.pdf",
+        package_filename: row.package_zip ? "signed-application.pdf" : "Lender-Submission-Package-SAMPLE.pdf",
         package_pdf_base64: Buffer.from(row.package_pdf).toString("base64"),
+        ...(row.package_zip && row.package_mail ? { lender_email: lenderEmailPayload(row.package_mail, row.package_zip) } : {}),
       });
       if (res.ok) {
         await client.query(`UPDATE demo_sessions SET complete_sent_at = now() WHERE id = $1`, [row.id]);

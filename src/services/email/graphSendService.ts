@@ -39,13 +39,19 @@ async function getAccessToken(): Promise<string> {
   return cachedToken.token;
 }
 
-function graphMessage(input: GraphSendInput, includeAttachments: boolean) {
+/** The body Graph sends: the HTML (or text) with the sender's signature after it. KS_SERVER_v12_DEMO_REAL_PACKAGE -
+ * exported so the sales demo renders the lender email exactly as it is sent. */
+export function graphMessageBody(input: Pick<GraphSendInput, "bodyText" | "bodyHtml" | "signatureHtml">): { contentType: "HTML" | "Text"; content: string } {
   const signature = (input.signatureHtml ?? "").trim();
   const base = input.bodyHtml ?? (signature ? String(input.bodyText ?? "").replace(/\n/g, "<br/>") : input.bodyText);
+  return { contentType: input.bodyHtml || signature ? "HTML" : "Text", content: signature ? `${base}<br/><br/>${signature}` : base };
+}
+
+function graphMessage(input: GraphSendInput, includeAttachments: boolean) {
   const attachments = input.attachments ?? [];
   return {
     subject: input.subject,
-    body: { contentType: input.bodyHtml || signature ? "HTML" : "Text", content: signature ? `${base}<br/><br/>${signature}` : base },
+    body: graphMessageBody(input),
     toRecipients: asArray(input.to).map((address) => ({ emailAddress: { address } })),
     ccRecipients: asArray(input.cc).map((address) => ({ emailAddress: { address } })),
     bccRecipients: asArray(input.bcc).map((address) => ({ emailAddress: { address } })),
