@@ -45,6 +45,10 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # KS_LICENSEE_DEPLOY_v1 - the licensee registry the deploy workflow reads must be valid before it reaches main.
+      - name: Licensee deploy registry
+        run: node deploy/licensee-matrix.mjs --check
+
       # BF_SERVER_v789_SOURCE_GREP_RATCHET - tests that grep src/ source text may
       # only go down; new tests must exercise behaviour.
       - name: No new source-grep tests

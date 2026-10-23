@@ -1,0 +1,4 @@
+{
+  "$comment": "Keystone licensees the deploy workflows deploy to (KS_LICENSEE_DEPLOY_v1). Keep this file identical in KS-server, KS-Agent, KS-Portal and KS-Client. Not secret: each licensee's settings live in its GitHub environment (normally ks-<code>). Entry: {\"code\": \"northwind\", \"environment\": \"ks-northwind\", \"enabled\": true, \"apps\": [\"server\", \"agent\", \"portal\", \"client\"]}. See KS-Ops docs/PROVISIONING.md.",
+  "licensees": []
+}
