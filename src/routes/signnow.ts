@@ -225,7 +225,7 @@ router.post(
           const { sendPgiLinkAfterTermSheet } = await import("../services/termSheetSigned.js");
           await sendPgiLinkAfterTermSheet(applicationId);
           const { syncReferral } = await import("../pgi/service.js");
-          await syncReferral(pool as any, applicationId);
+          void syncReferral(pool as any, applicationId); // background: never holds up the webhook
         } catch (e) { console.warn("[signnow-webhook] pgi follow-up failed", e instanceof Error ? e.message : String(e)); }
         console.log("[signnow-webhook] offer_term_sheet_signed", { applicationId, ...attach });
         res.status(200).json({ received: true, match: "offer_term_sheet", attached: attach.attached });

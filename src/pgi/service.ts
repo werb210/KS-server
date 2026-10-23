@@ -65,7 +65,10 @@ export async function getReferral(db: Q, applicationId: string): Promise<Referra
   return (r.rows[0] as ReferralRow) ?? null;
 }
 
-/** The client ticked PGI and submitted: keep what they told us and send it (failures are retried by the worker). */
+/**
+ * The client ticked PGI and submitted: keep what they told us, then send it in the background so the client's submit
+ * never waits for the partner (sendReferral never throws; the worker retries anything that did not go through).
+ */
 export async function recordPgiOptIn(db: Q, src: { applicationId: string; legacyApp?: any; normalized?: any; businessSource?: any; applicantSource?: any }, deps: Deps = {}): Promise<void> {
   const input = pgiInputFromApplication(src);
   await db.query(
@@ -74,7 +77,7 @@ export async function recordPgiOptIn(db: Q, src: { applicationId: string; legacy
      ON CONFLICT (application_id) DO UPDATE SET input = pgi_referrals.input || EXCLUDED.input, updated_at = now()`,
     [src.applicationId, JSON.stringify(input)],
   );
-  await sendReferral(db, src.applicationId, deps);
+  void sendReferral(db, src.applicationId, deps);
 }
 
 /** Staff turn PGI on for an application from the portal: read what the application already has. */
