@@ -9,6 +9,8 @@
 //   POST /api/demo/staff/documents/:id/decision { decision: accepted|rejected, reason? } ; GET .../documents/:id/file
 //   POST /api/demo/staff/call { action: ring|answer|decline|complete } ; POST /api/demo/staff/financials/review
 //   POST /api/demo/staff/credit-summary ; POST /api/demo/staff/lenders { lender_ids } ; POST /api/demo/staff/submit
+//   POST /api/demo/staff/guided-submit { accepted, rejected, lenders, call_answered } (KS_SERVER_v11_LIVE_DEMO)
+//   GET  /api/demo/samples/:key (public: the sample PDFs)
 //   GET  /api/demo/staff/package ; POST /api/demo/staff/track { name, step? } ; POST /api/demo/staff/heartbeat
 // Prospect playing the borrower (phone link, or on-screen):
 //   POST /api/demo/client/session { code } -> { client_token }   (public, rate limited)
@@ -317,12 +319,8 @@ export function demoRouter(deps: DemoDeps): Router {
     res.json({ selected_lenders: ids });
   }));
 
-  router.post("/staff/submit", staff, safeHandler(async (req: DemoReq, res: Response) => {
-    const s = sess(req);
-    const app = await repo.applicationFor(db(), s.id);
-    if (!app) return res.status(404).json({ error: "not_found" });
-    if (app.submitted_at) return res.status(409).json({ error: "already_submitted", submitted_at: app.submitted_at });
-    if (!(app.selected_lenders ?? []).length) return res.status(400).json({ error: "pick_lenders_first", message: "Pick at least one lender first." });
+  /** Builds the lender package, marks the demo complete and queues the emails (KS-Ops sends them). */
+  const submitToLenders = async (s: repo.SessionRow, app: repo.ApplicationRow) => {
     const docs = await repo.documentsFor(db(), s.id);
     const summary = app.credit_summary ?? buildCreditSummary(app, docs);
     const matches = lenderMatchesFor(app).filter((l) => app.selected_lenders.includes(l.id));
@@ -345,7 +343,92 @@ export function demoRouter(deps: DemoDeps): Router {
         doctored_rejected: docs.some((d) => d.fraud_status === "red" && d.status === "rejected"),
       },
     });
-    res.json({ submitted_at: submittedAt, emailed_to: s.prospect_email, lenders: matches.map((l) => l.name), package_bytes: pdf.length });
+    return { submitted_at: submittedAt, emailed_to: s.prospect_email, lenders: matches.map((l) => l.name), package_bytes: pdf.length };
+  };
+
+  router.post("/staff/submit", staff, safeHandler(async (req: DemoReq, res: Response) => {
+    const s = sess(req);
+    const app = await repo.applicationFor(db(), s.id);
+    if (!app) return res.status(404).json({ error: "not_found" });
+    if (app.submitted_at) return res.status(409).json({ error: "already_submitted", submitted_at: app.submitted_at });
+    if (!(app.selected_lenders ?? []).length) return res.status(400).json({ error: "pick_lenders_first", message: "Pick at least one lender first." });
+    res.json(await submitToLenders(s, app));
+  }));
+
+  // KS_SERVER_v11_LIVE_DEMO - the guided demo runs the real portal in the browser on sample data and sends everything
+  // the prospect decided in one call when they press Send: the six sample documents arrive (fraud-scanned), their
+  // decisions, the call, the credit summary and the lenders, then the package is built and emailed like /staff/submit.
+  router.post("/staff/guided-submit", staff, safeHandler(async (req: DemoReq, res: Response) => {
+    const s = sess(req);
+    const keys = new Set(SAMPLE_DOCS.map((d) => d.key));
+    const list = (v: unknown) => (Array.isArray(v) ? [...new Set(v.map(String))] : []);
+    const accepted = list(req.body?.accepted);
+    const rejected = list(req.body?.rejected).filter((k) => !accepted.includes(k));
+    const lenders = list(req.body?.lenders);
+    if ([...accepted, ...rejected].some((k) => !keys.has(k))) return res.status(400).json({ error: "unknown_document" });
+    const known = lenderIds();
+    if (!lenders.length) return res.status(400).json({ error: "pick_lenders_first", message: "Pick at least one lender first." });
+    if (lenders.some((id) => !known.has(id))) return res.status(400).json({ error: "unknown_lender" });
+    if (lenders.length > MAX_LENDERS) return res.status(400).json({ error: "too_many_lenders", max: MAX_LENDERS });
+    let app = await repo.applicationFor(db(), s.id);
+    if (!app) return res.status(404).json({ error: "not_found" });
+    if (app.submitted_at) return res.status(409).json({ error: "already_submitted", submitted_at: app.submitted_at, emailed_to: s.prospect_email });
+
+    // The client's documents arrive (the demo client app never uploads anything).
+    const have = new Set((await repo.documentsFor(db(), s.id)).map((d) => d.sample_key));
+    for (const def of SAMPLE_DOCS) {
+      if (have.has(def.key)) continue;
+      const sample = await sampleFile(def.key);
+      if (!sample) continue;
+      const scan = await scanDemoDocument(sample.bytes, def.category);
+      await repo.upsertDocument(db(), s.id, {
+        applicationId: app.id, sampleKey: def.key, category: def.category, label: def.label, filename: def.filename,
+        mime: sample.mime, content: sample.bytes, via: "phone", tamper: scan.tamper,
+        statementMath: scan.statement_math ? { ...scan.statement_math, totals: scan.totals } : null, fraudStatus: scan.status,
+      });
+    }
+    const now = new Date();
+    if (!app.borrower_submitted_at) {
+      await repo.updateApplication(db(), s.id, { borrower_submitted_at: now, status: "in_review" });
+      await event(s.id, "borrower_submitted", { step: "borrower", data: { documents: SAMPLE_DOCS.length, guided: true } });
+    }
+    const byKey = new Map((await repo.documentsFor(db(), s.id)).map((d) => [d.sample_key, d]));
+    for (const [decision, ks] of [["accepted", accepted], ["rejected", rejected]] as const) {
+      for (const k of ks) {
+        const d = byKey.get(k);
+        if (!d || d.status === decision) continue;
+        await repo.decideDocument(db(), s.id, d.id, decision, decision === "rejected" ? "Not acceptable as sent." : null);
+        await event(s.id, "document_decision", { step: "documents", data: { document: d.label, sample_key: k, decision, fraud_status: d.fraud_status } });
+      }
+    }
+    if (req.body?.call_answered === true) {
+      const at = now.toISOString();
+      const call = {
+        status: "completed", answered_at: at, completed_at: at, duration_seconds: DEMO_DURATION_SECONDS,
+        from: app.contact?.name, phone: app.contact?.phone, transcript: CALL_SCRIPT, summary: CALL_SUMMARY,
+      };
+      const notes = [...(app.notes ?? []).filter((n: { kind?: string }) => n.kind !== "call_summary"),
+        { kind: "call_summary", at, author: "AI call summary", body: CALL_SUMMARY.headline, points: CALL_SUMMARY.points, follow_up: CALL_SUMMARY.follow_up }];
+      await repo.updateApplication(db(), s.id, { call, notes });
+      await event(s.id, "call_completed", { step: "call", data: { guided: true } });
+    }
+    app = (await repo.applicationFor(db(), s.id))!;
+    const summary = buildCreditSummary(app, await repo.documentsFor(db(), s.id));
+    await repo.updateApplication(db(), s.id, { financials_reviewed_at: app.financials_reviewed_at ?? now, credit_summary: summary, selected_lenders: lenders });
+    await event(s.id, "lenders_selected", { step: "lenders", data: { lenders } });
+    app = (await repo.applicationFor(db(), s.id))!;
+    res.json(await submitToLenders(s, app));
+  }));
+
+  // The sample documents themselves (fictional, the same bytes for everyone), for the guided demo's document preview.
+  router.get("/samples/:key", limiter(300, 10 * 60_000), safeHandler(async (req: Request, res: Response) => {
+    const def = sampleDoc(req.params.key);
+    const sample = def ? await sampleFile(def.key) : null;
+    if (!def || !sample) return res.status(404).json({ error: "not_found" });
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("Content-Type", sample.mime);
+    res.setHeader("Content-Disposition", `inline; filename="${def.filename}"`);
+    res.send(sample.bytes);
   }));
 
   router.get("/staff/package", staff, safeHandler(async (req: DemoReq, res: Response) => {
