@@ -11,6 +11,14 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      licensee:
+        description: >-
+          Only this licensee (its code in deploy/licensees.json, e.g. northwind). Empty deploys the development copy,
+          the demo server and every enabled licensee.
+        required: false
+        default: ''
+        type: string
 
 concurrency:
   group: deploy-ks-server-dev
@@ -19,8 +27,9 @@ concurrency:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-24.04
+    # KS_LICENSEE_DEPLOY_v1 - a manual run for one licensee leaves the development copy alone.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && inputs.licensee == '') ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push')
 
@@ -97,4 +106,144 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ vars.DEMO_WEBAPP_NAME || 'ks-demo-server' }}
+          package: release.zip
+
+  # KS_LICENSEE_DEPLOY_v1 - every licensee's own copy (resource group ks-<code>). deploy/licensees.json lists the
+  # licensees; each one's settings live in its GitHub environment (normally ks-<code>, Settings > Environments):
+  #   secret   AZURE_CREDENTIALS   service principal limited to ks-<code> (provision-licensee.sh CREATE_DEPLOY_SP=1)
+  #   variable AZURE_WEBAPP_NAME   optional; default ks-<code>-server
+  # The database needs nothing here: KS-server applies its migrations itself on startup, with the DATABASE_URL app
+  # setting provision-licensee.sh wrote. Separate jobs from the development deploy above, so neither blocks the other,
+  # and one licensee failing never stops the rest (fail-fast: false).
+  licensee-plan:
+    runs-on: ubuntu-24.04
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      count: ${{ steps.plan.outputs.count }}
+      repo_credentials: ${{ steps.repo.outputs.credentials }}
+      repo_webapp_name: ${{ steps.repo.outputs.webapp_name }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Licensees to deploy
+        id: plan
+        env:
+          WANTED: ${{ inputs.licensee }}
+        run: node deploy/licensee-matrix.mjs server "$WANTED"
+
+      # A licensee environment without its own value silently gets the repository's (the development copy's).
+      # Fingerprints let each licensee job notice that without the secret itself leaving this job.
+      - name: Repository-level settings (to tell them apart from a licensee's)
+        id: repo
+        env:
+          REPO_AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+          REPO_AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+        run: |
+          {
+            echo "credentials=$(printf '%s' "$REPO_AZURE_CREDENTIALS" | sha256sum | cut -d' ' -f1)"
+            echo "webapp_name=$REPO_AZURE_WEBAPP_NAME"
+          } >> "$GITHUB_OUTPUT"
+
+  licensee-package:
+    needs: licensee-plan
+    if: needs.licensee-plan.outputs.count != '0'
+    runs-on: ubuntu-24.04
+    env:
+      SCM_DO_BUILD_DURING_DEPLOYMENT: false
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Use Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22.x'
+
+      - name: Install deps
+        run: npm ci --include=optional
+
+      - name: Build
+        run: |
+          rm -rf dist
+          npm run build
+
+      - name: Prune dev deps
+        run: npm prune --omit=dev
+
+      # Import check only: nothing connects, so a placeholder database address and JWT secret are enough.
+      - name: Verify build
+        env:
+          DATABASE_URL: postgres://verify:verify@127.0.0.1:5432/verify
+          JWT_SECRET: verify-build-only-${{ github.sha }}
+        run: node -e "require('./dist/routes/auth'); require('./dist/config/env');"
+
+      - name: Create deployment package
+        run: |
+          zip -q -r release.zip . \
+            -x "*.git*" \
+               "node_modules/.cache/*" \
+               "src/*" \
+               "test/*" \
+               ".github/*" \
+               ".env"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ks-server-release
+          path: release.zip
+          retention-days: 1
+
+  licensee-deploy:
+    name: deploy ${{ matrix.code }}
+    needs: [licensee-plan, licensee-package]
+    if: needs.licensee-plan.outputs.count != '0'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.licensee-plan.outputs.matrix) }}
+    environment: ${{ matrix.environment }}
+    concurrency:
+      group: deploy-ks-server-${{ matrix.code }}
+      cancel-in-progress: false
+    steps:
+      - name: Check the licensee's settings
+        id: settings
+        env:
+          CODE: ${{ matrix.code }}
+          ENVIRONMENT: ${{ matrix.environment }}
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+          AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+          REPO_CREDENTIALS: ${{ needs.licensee-plan.outputs.repo_credentials }}
+          REPO_WEBAPP_NAME: ${{ needs.licensee-plan.outputs.repo_webapp_name }}
+        run: |
+          if [ -z "$AZURE_CREDENTIALS" ] ||
+             [ "$(printf '%s' "$AZURE_CREDENTIALS" | sha256sum | cut -d' ' -f1)" = "$REPO_CREDENTIALS" ]; then
+            echo "::error title=$CODE::Add the secret AZURE_CREDENTIALS (the licensee's deploy service principal) to the GitHub environment '$ENVIRONMENT'."
+            exit 1
+          fi
+          app="$AZURE_WEBAPP_NAME"
+          if [ -z "$app" ] || [ "$app" = "$REPO_WEBAPP_NAME" ]; then app="ks-$CODE-server"; fi
+          echo "webapp=$app" >> "$GITHUB_OUTPUT"
+          echo "Deploying to $app"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ks-server-release
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ steps.settings.outputs.webapp }}
           package: release.zip
