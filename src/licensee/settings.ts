@@ -11,6 +11,7 @@ export const LICENSEE_FIELDS = [
   "company_name", "legal_name", "assistant_name", "support_email", "support_phone",
   "logo_url", "primary_color", "accent_color", "time_zone", "country",
   "mailing_address", // KS_SERVER_v5_MAILING_ADDRESS
+  "workspace_provider", // KS_SERVER_v12_GOOGLE_WORKSPACE - m365 | google | both: which Connect buttons staff see
 ] as const;
 export type LicenseeField = (typeof LICENSEE_FIELDS)[number];
 
@@ -71,6 +72,7 @@ const ENV_NAMES: Record<LicenseeField, string> = {
   support_email: "KS_SUPPORT_EMAIL", support_phone: "KS_SUPPORT_PHONE", logo_url: "KS_LOGO_URL",
   primary_color: "KS_PRIMARY_COLOR", accent_color: "KS_ACCENT_COLOR", time_zone: "KS_TIME_ZONE", country: "KS_COUNTRY",
   mailing_address: "KS_MAILING_ADDRESS",
+  workspace_provider: "KS_WORKSPACE_PROVIDER",
 };
 
 /** KS_SERVER_v8_USAGE - the time zone a licensee gets when it sets none. */
@@ -80,6 +82,7 @@ const NEUTRAL: LicenseeSettings = {
   company_name: "Keystone Demo Brokerage", legal_name: "", assistant_name: "Assistant", support_email: "",
   support_phone: "", logo_url: "", primary_color: "#0B1F3A", accent_color: "#2563EB",
   time_zone: DEFAULT_LICENSEE_TIME_ZONE, country: "CA", mailing_address: "",
+  workspace_provider: "m365", // today's behaviour: Microsoft 365 only
 };
 
 export function envDefaults(env: NodeJS.ProcessEnv = process.env): LicenseeSettings {
@@ -102,6 +105,11 @@ export function checkField(field: LicenseeField, raw: unknown): { ok: true; valu
   if (field === "logo_url" && !/^https:\/\/[^\s]+$/i.test(value)) return { ok: false, error: "logo_url must start with https://" };
   if (field === "support_email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return { ok: false, error: "support_email is not an email address" };
   if (field === "country" && !/^[A-Z]{2}$/.test(value.toUpperCase())) return { ok: false, error: "country must be a two-letter code like CA or US" };
+  if (field === "workspace_provider") {
+    const v = value.toLowerCase();
+    if (v !== "m365" && v !== "google" && v !== "both") return { ok: false, error: "workspace_provider must be m365, google or both" };
+    return { ok: true, value: v };
+  }
   return { ok: true, value: field === "country" ? value.toUpperCase() : value };
 }
 

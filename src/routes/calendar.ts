@@ -10,6 +10,9 @@ import { pool } from "../db.js";
 import { getGraphForUser, type GraphClient } from "../modules/o365/graphClient.js";
 import { parseMicrosoftError, recordO365Failure } from "../modules/o365/o365Health.js"; // BF_SERVER_O365_VISIBILITY_v274
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_v789_CALENDAR_TASKS_ON_TASKS
+import { getGoogleForUser } from "../services/workspace/googleAuth.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
+import { googleCalendar } from "../services/workspace/googleCalendarRoutes.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
+import { syncGoogleTaskNow } from "../workers/googleTasksWorker.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
 function noteCalendarFailure(req: any, err: unknown): void {
   const e = err as { status?: number; bodyText?: string; message?: string };
   recordO365Failure(req.user?.userId ? String(req.user.userId) : null, { stage: "graph_calendar", status: e?.status ?? null, ...parseMicrosoftError(String(e?.bodyText ?? e?.message ?? "")) });
@@ -194,7 +197,11 @@ function calendarWindow(req: any): { start: string; end: string } {
 // GET /api/calendar — summary
 router.get("/", safeHandler(async (req: any, res: any) => {
   const graph = await getGraphForUser(pool, req.user?.userId).catch(() => null);
-  if (!graph) return res.status(200).json({ status: "ok", data: { items: [], connected: false } });
+  if (!graph) {
+    const google = await getGoogleForUser(pool, req.user?.userId); // KS_SERVER_v12_GOOGLE_WORKSPACE
+    if (google) return googleCalendar.summary(req, res, google, calendarWindow(req));
+    return res.status(200).json({ status: "ok", data: { items: [], connected: false } });
+  }
   try {
     const { start, end } = calendarWindow(req); // BF_SERVER_BLOCK_v685_CALENDAR_WINDOW_v1
     const data = await graphCall(graph, `/me/calendarView?startDateTime=${start}&endDateTime=${end}&$top=200&$orderby=start/dateTime`);
@@ -211,7 +218,11 @@ router.get("/", safeHandler(async (req: any, res: any) => {
 // so the portal calendar grid actually renders.
 router.get("/events", safeHandler(async (req: any, res: any) => {
   const graph = await getGraphForUser(pool, req.user?.userId).catch(() => null);
-  if (!graph) return res.status(200).json({ status: "ok", data: [] });
+  if (!graph) {
+    const google = await getGoogleForUser(pool, req.user?.userId); // KS_SERVER_v12_GOOGLE_WORKSPACE
+    if (google) return googleCalendar.list(req, res, google, calendarWindow(req));
+    return res.status(200).json({ status: "ok", data: [] });
+  }
   try {
     const { start, end } = calendarWindow(req); // BF_SERVER_BLOCK_v685_CALENDAR_WINDOW_v1
     const data = await graphCall(graph, `/me/calendarView?startDateTime=${start}&endDateTime=${end}&$top=200&$orderby=start/dateTime`);
@@ -252,7 +263,11 @@ function toGraphAttendees(raw: any): Array<{ emailAddress: { address: string }; 
 // invalidation refetch lands on the right structure.
 router.post("/events", safeHandler(async (req: any, res: any) => {
   const graph = await getGraphForUser(pool, req.user?.userId).catch(() => null);
-  if (!graph) return res.status(412).json({ status: "error", code: "o365_not_connected", message: "Connect Microsoft 365 to save calendar events." });
+  if (!graph) {
+    const google = await getGoogleForUser(pool, req.user?.userId); // KS_SERVER_v12_GOOGLE_WORKSPACE
+    if (google) return googleCalendar.create(req, res, google, getSilo);
+    return res.status(412).json({ status: "error", code: "o365_not_connected", message: "Connect Microsoft 365 to save calendar events." });
+  }
   const body = req.body ?? {};
   const graphAttendees = toGraphAttendees(body.attendees); // BF_SERVER_CALENDAR_ATTENDEES_v1
   try {
@@ -322,7 +337,11 @@ router.post("/events", safeHandler(async (req: any, res: any) => {
 router.patch("/events/:id", safeHandler(async (req: any, res: any) => {
   const graph = await getGraphForUser(pool, req.user?.userId).catch(() => null);
   const { id } = req.params as { id: string };
-  if (!graph) return res.status(412).json({ status: "error", code: "o365_not_connected", message: "Connect Microsoft 365 to edit calendar events." });
+  if (!graph) {
+    const google = await getGoogleForUser(pool, req.user?.userId); // KS_SERVER_v12_GOOGLE_WORKSPACE
+    if (google) return googleCalendar.update(req, res, google, id);
+    return res.status(412).json({ status: "error", code: "o365_not_connected", message: "Connect Microsoft 365 to edit calendar events." });
+  }
   const body = req.body ?? {};
   const patch: Record<string, unknown> = {};
   if (body.title ?? body.subject) patch.subject = body.title ?? body.subject;
@@ -342,7 +361,11 @@ router.patch("/events/:id", safeHandler(async (req: any, res: any) => {
 router.delete("/events/:id", safeHandler(async (req: any, res: any) => {
   const graph = await getGraphForUser(pool, req.user?.userId).catch(() => null);
   const { id } = req.params as { id: string };
-  if (!graph) return res.status(412).json({ status: "error", code: "o365_not_connected", message: "Connect Microsoft 365 to delete calendar events." });
+  if (!graph) {
+    const google = await getGoogleForUser(pool, req.user?.userId); // KS_SERVER_v12_GOOGLE_WORKSPACE
+    if (google) return googleCalendar.cancel(req, res, google, id);
+    return res.status(412).json({ status: "error", code: "o365_not_connected", message: "Connect Microsoft 365 to delete calendar events." });
+  }
   try {
     await graphCall(graph, `/me/events/${id}`, { method: "DELETE" });
     res.status(200).json({ status: "ok", data: null });
@@ -444,6 +467,8 @@ router.post("/tasks", safeHandler(async (req: any, res: any) => {
     } catch (err) {
       console.error({ event: "calendar_task_graph_create_error", err: String(err) });
     }
+  } else if (row?.id) {
+    void syncGoogleTaskNow(pool, String(row.id)); // KS_SERVER_v12_GOOGLE_WORKSPACE - Google Tasks when no Microsoft To Do
   }
 
   return res.status(201).json(toTaskResponse(row));
@@ -540,6 +565,8 @@ router.patch("/tasks/:id", safeHandler(async (req: any, res: any) => {
     } catch (err) {
       console.error({ event: "calendar_task_graph_patch_error", err: String(err) });
     }
+  } else if (!graph && updated?.id) {
+    void syncGoogleTaskNow(pool, String(updated.id)); // KS_SERVER_v12_GOOGLE_WORKSPACE
   }
 
   return res.status(200).json(toTaskResponse(updated));
@@ -571,6 +598,8 @@ router.delete("/tasks/:id", safeHandler(async (req: any, res: any) => {
     } catch (err) {
       console.error({ event: "calendar_task_graph_delete_error", err: String(err) });
     }
+  } else if (!graph) {
+    void syncGoogleTaskNow(pool, String(req.params.id)); // KS_SERVER_v12_GOOGLE_WORKSPACE - removes it from Google Tasks
   }
 
   return res.status(200).json({ ok: true });
@@ -580,7 +609,11 @@ router.delete("/tasks/:id", safeHandler(async (req: any, res: any) => {
 // view a teammate's calendar (needs Calendars.Read.Shared).
 router.get("/schedule", safeHandler(async (req: any, res: any) => {
   const graph = await getGraphForUser(pool, req.user?.userId).catch(() => null);
-  if (!graph) return res.status(200).json({ status: "ok", data: { schedules: [], connected: false } });
+  if (!graph) {
+    const google = await getGoogleForUser(pool, req.user?.userId); // KS_SERVER_v12_GOOGLE_WORKSPACE
+    if (google) return googleCalendar.schedule(req, res);
+    return res.status(200).json({ status: "ok", data: { schedules: [], connected: false } });
+  }
   const emails = String(req.query.emails ?? "").split(",").map((e: string) => e.trim()).filter(Boolean).slice(0, 20);
   if (!emails.length) return res.status(400).json({ status: "error", error: "emails required" });
   // BF_SERVER_SCHEDULE_TODAY_WINDOW_v1 - getSchedule cannot span the wide

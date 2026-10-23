@@ -70,6 +70,7 @@ import tasksRoutes from "./tasks.js";
 import usersRoutes from "./users.js";
 import o365TokensRoutes from "./o365Tokens.js";
 import o365OAuthRoutes from "./o365OAuth.js";
+import googleOAuthRoutes from "./googleOAuth.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
 import auditActivityRoutes from "./auditActivity.js"; // BF_SERVER_AUDIT_ACTIVITY_v802
 import portalRoutes from "./portal.js";
 import portalLendersRoutes from "./portalLenders.js";
@@ -322,6 +323,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/r", router: smsRedirectRoutes }, // BF_SERVER_SMS_REDIRECT_v1 (public)
   { path: "/webhooks/sendgrid", router: sendgridWebhookRoutes }, // BF_SERVER_SENDGRID_WEBHOOK_v1 (public)
   { path: "/o365-oauth", router: o365OAuthRoutes },
+  { path: "/google", router: googleOAuthRoutes }, // KS_SERVER_v12_GOOGLE_WORKSPACE - connect/status/disconnect (callback public)
   { path: "/audit", router: auditActivityRoutes }, // BF_SERVER_AUDIT_ACTIVITY_v802
   { path: "/o365", router: o365Routes },
   { path: "/shared", router: libraryPublicRoutes }, // BF_SERVER_v810_LIBRARY_PLUS - share links and upload links (public)

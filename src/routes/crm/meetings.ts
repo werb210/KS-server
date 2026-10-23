@@ -6,6 +6,8 @@ import { getGraphForUser } from "../../modules/o365/graphClient.js";
 // BF_SERVER_BLOCK_BI_ROUND5_CRM_SILO_RESOLVE_v1
 import { resolveSiloFromRequest } from "../../middleware/silo.js";
 import { enableAutoRecording } from "../../services/teams/autoRecord.js"; // BF_SERVER_TEAMS_AUTO_RECORD_v1
+import { getGoogleForUser } from "../../services/workspace/googleAuth.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
+import { createGoogleEvent } from "../../services/workspace/google.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
 
 const router = express.Router({ mergeParams: true });
 
@@ -106,6 +108,30 @@ router.post("/", safeHandler(async (req: any, res: any) => {
       }
     }
   }
+  // KS_SERVER_v12_GOOGLE_WORKSPACE - no Microsoft 365: the event goes on the user's Google Calendar, and an
+  // online meeting gets a Google Meet link where Teams would have been used.
+  let googleEventId: string | null = null;
+  if (!graph) {
+    const google = await getGoogleForUser(pool, userId);
+    if (google) {
+      try {
+        const created = await createGoogleEvent(google, {
+          title,
+          start: new Date(b.start_at).toISOString(),
+          end: new Date(b.end_at).toISOString(),
+          notes: b.attendee_description ?? null,
+          location: b.location ?? null,
+          attendees: (b.attendees ?? []).map((a: any) => ({ email: String(a?.address ?? ""), name: a?.name ?? null, optional: a?.optional === true })),
+          reminderMinutes: b.reminder_minutes ?? 60,
+          meet: wantsOnline,
+        });
+        googleEventId = created.id;
+        joinUrl = created.joinUrl;
+      } catch (e: any) {
+        console.error("google_meeting_event_create_failed", { message: e?.message, detail: String(e?.bodyText ?? "").slice(0, 300) });
+      }
+    }
+  }
 
   const silo = resolveSiloFromRequest(req);
   const { rows } = await pool.query(
@@ -181,6 +207,10 @@ router.post("/", safeHandler(async (req: any, res: any) => {
   // scheduling must not wait on it or fail because of it.
   if (wantsOnline && graphId && organizerUpn && joinUrl) {
     void enableAutoRecording(pool, graphId, organizerUpn, joinUrl);
+  }
+  if (googleEventId && rows[0]?.id) {
+    await pool.query(`UPDATE crm_meetings SET google_event_id = $2 WHERE id = $1`, [rows[0].id, googleEventId]);
+    rows[0].google_event_id = googleEventId; // KS_SERVER_v12_GOOGLE_WORKSPACE
   }
 
   res.status(201).json({ ok: true, data: rows[0] });

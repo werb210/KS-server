@@ -43,6 +43,9 @@ export interface TodoTaskInput {
 export async function mirrorTaskToTodo(pool: Pool, t: TodoTaskInput): Promise<string | null> {
   const { syncTaskNow } = await import("../../workers/todoReconcileWorker.js");
   await syncTaskNow(pool, t.id);
+  // KS_SERVER_v12_GOOGLE_WORKSPACE - assignees on Google Workspace (no Microsoft sign-in) get it in Google Tasks.
+  const { syncGoogleTaskNow } = await import("../../workers/googleTasksWorker.js");
+  await syncGoogleTaskNow(pool, t.id);
   return null;
 }
 
