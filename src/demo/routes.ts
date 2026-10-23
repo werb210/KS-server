@@ -2,6 +2,7 @@
 //
 // Operations (X-KS-Ops-Key = KS_OPS_KEY; KS-Ops calls these):
 //   POST   /api/demo/ops/sessions                  { ops_session_id, name, email, company, expires_at }
+//          (an existing session takes the name, email and company sent, so a repeat sign-up's new details show)
 //          -> 201 { session_id, staff_token, client_code, client_url, expires_at }   (same ops id again: a fresh token)
 //   DELETE /api/demo/ops/sessions/:opsSessionId    wipe the session and everything it made -> 204
 // Prospect in the demo portal (Bearer staff token):
@@ -170,6 +171,9 @@ export function demoRouter(deps: DemoDeps): Router {
         if (!s) throw err;
       }
       if (created) await event(s.id, "session_created");
+    } else if (s.prospect_name !== name || s.prospect_email !== email || s.company !== company) {
+      // A repeat sign-up with new details: the reopened demo shows what they typed last.
+      s = (await repo.refreshProspect(db(), s.id, { name, email, company })) ?? s;
     }
     const link = clientLinkFor(s.id);
     return res.status(created ? 201 : 200).json({
