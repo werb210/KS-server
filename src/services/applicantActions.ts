@@ -214,7 +214,14 @@ async function promptItems(applicationId: string, submittedFormTypes: string[], 
   );
   const rows = prompts.rows ?? [];
   const pgiUrl = rows.find((r) => r.cta_label === PGI_PROMPT_LABEL && /^https?:\/\//i.test(String(r.cta_action ?? "")))?.cta_action ?? null;
-  void pgiUrl; void termSheetSigned; // KS_SERVER_v1_NO_BI - Keystone has no PGI to-do.
+  // KS_SERVER_v11_PGI - the client's PGI to-do: after the term sheet is signed, until the insurer has their answers.
+  if (pgiUrl && (await termSheetSigned(applicationId))) {
+    const st = await dbQuery<{ status: string | null }>(`SELECT status FROM pgi_referrals WHERE application_id = $1 LIMIT 1`, [applicationId])
+      .catch((err: any) => { console.warn("[action-center] pgi_status_read_failed", { applicationId, message: err?.message }); return { rows: [] as Array<{ status: string | null }> }; });
+    const status = String(st.rows?.[0]?.status ?? "awaiting_client");
+    const item: ActionItem = { key: "pgi", kind: "action", label: "Complete your Personal Guarantee Insurance application", action: pgiUrl, urgent: true };
+    if (["awaiting_client", "pending", "needs_details", "not_configured", "error"].includes(status)) outstanding.push(item); else completed.push(item);
+  }
   // BF_SERVER_SBA_FORMS_TODO_v757 - skipped when the forms are already listed one by one.
   if (!sbaListed && rows.some((r) => r.cta_action === "sba_forms" || r.cta_action === "form:sba_forms")) {
     const { resolveSbaOwners } = await import("../signnow/sba/sbaOwners.js");

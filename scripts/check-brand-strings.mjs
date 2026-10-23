@@ -32,6 +32,8 @@ export const ALLOW = {
   "src/services/push/pushCategories.ts": ["BOREAL_NOTIFICATION_CLICK"],
   // KS_SERVER_v6_PLANS - default inbox for upgrade requests to the software vendor (KS_SALES_EMAIL overrides it)
   "src/plans/email.ts": ["keystone@boreal.financial"],
+  // KS_SERVER_v11_PGI - the insurance partner Keystone refers PGI to, named on purpose (one constant)
+  "src/pgi/partner.ts": ["Boreal Insurance"],
 };
 
 const TEST_FILE = /(^|\/)(__tests__|tests?)\/|\.(test|spec)\.[cm]?[jt]sx?$/;

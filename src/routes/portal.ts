@@ -1911,6 +1911,10 @@ router.post(
       } catch (err) {
         console.warn("[doc-accept] v198 gate check failed", err);
       }
+      // KS_SERVER_v11_PGI - an accepted document that fills a PGI slot goes to the insurance partner (when referred).
+      void import("../pgi/service.js")
+        .then((m) => m.forwardDocuments(pool as any, String(appId)))
+        .catch((err: unknown) => console.warn("[doc-accept] pgi forward failed", { appId, message: err instanceof Error ? err.message : String(err) }));
     }
     res.status(200).json({ ok: true, document: doc });
   })

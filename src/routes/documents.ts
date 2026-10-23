@@ -543,6 +543,10 @@ router.post("/:id/accept", requireAuth, safeHandler(async (req: Request, res: Re
         await setProcessingStage({ applicationId, toStage: app.previous_processing_stage as any, reason: "all_documents_resolved", actorUserId: (req as any)?.user?.id ?? null }).catch(() => {});
       }
     }
+    // KS_SERVER_v11_PGI - an accepted document that fills a PGI slot goes to the insurance partner (when referred).
+    void import("../pgi/service.js")
+      .then((m) => m.forwardDocuments(pool as any, String(applicationId)))
+      .catch((err: unknown) => console.warn("[pgi] forward on accept failed", { applicationId, message: err instanceof Error ? err.message : String(err) }));
   }
   return ok(res, { id, status: "accepted" });
 }));
