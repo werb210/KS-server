@@ -195,6 +195,43 @@ describe("KS v10 demo (real Postgres)", () => {
     expect(st.application.notes[0]).toMatchObject({ kind: "call_summary" });
   });
 
+  it("KS_SERVER_v11_LIVE_DEMO guided submit: the documents arrive, decisions + call + lenders apply, the package is built once", async () => {
+    const C = await makeSession("Cara");
+    const h = auth(C.staff);
+    expect((await request(app()).post("/api/demo/staff/guided-submit").set(h).send({ accepted: ["nope"], lenders: ["aspen-ridge"] })).status).toBe(400);
+    expect((await request(app()).post("/api/demo/staff/guided-submit").set(h).send({ accepted: [], lenders: [] })).status).toBe(400);
+    expect((await request(app()).post("/api/demo/staff/guided-submit").set(h).send({ lenders: ["made-up"] })).status).toBe(400);
+    const all = ["bank_2026_07", "bank_2026_08", "bank_2026_09", "financials_2025", "void_cheque", "photo_id"];
+    const r = await request(app()).post("/api/demo/staff/guided-submit").set(h)
+      .send({ accepted: all, rejected: [], lenders: ["aspen-ridge", "granite-peak"], call_answered: true });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ emailed_to: "cara@prospect.example", lenders: expect.arrayContaining(["Aspen Ridge Capital", "Granite Peak Credit Union"]) });
+    const st = (await request(app()).get("/api/demo/staff/state").set(h)).body;
+    expect(st.documents).toHaveLength(6);
+    expect(st.documents.every((d: { status: string }) => d.status === "accepted")).toBe(true);
+    expect(st.documents.find((d: { sample_key: string }) => d.sample_key === "bank_2026_09").fraud_status).toBe("red");
+    expect(st.application.call.status).toBe("completed");
+    expect(st.application.notes[0]).toMatchObject({ kind: "call_summary" });
+    expect(st.application.selected_lenders).toEqual(["aspen-ridge", "granite-peak"]);
+    expect(st.session.completed_at).toBeTruthy();
+    const again = await request(app()).post("/api/demo/staff/guided-submit").set(h).send({ accepted: all, lenders: ["aspen-ridge"] });
+    expect(again.status).toBe(409);
+    expect(again.body.emailed_to).toBe("cara@prospect.example");
+    // Another prospect's token cannot see Cara's file.
+    expect((await request(app()).get("/api/demo/staff/package").set(auth(B.staff))).status).toBe(404);
+  });
+
+  it("KS_SERVER_v11_LIVE_DEMO serves the sample PDFs publicly (same bytes as the uploads check), and 404s anything else", async () => {
+    const r = await request(app()).get("/api/demo/samples/bank_2026_09").buffer(true).parse((res, cb) => {
+      const chunks: Buffer[] = []; res.on("data", (c: Buffer) => chunks.push(c)); res.on("end", () => cb(null, Buffer.concat(chunks)));
+    });
+    expect(r.status).toBe(200);
+    expect(r.headers["content-type"]).toMatch(/application\/pdf/);
+    expect(Buffer.compare(r.body as Buffer, (await sampleFiles()).get("bank_2026_09")!.bytes)).toBe(0);
+    expect((await request(app()).get("/api/demo/samples/..%2Fetc").send()).status).toBe(404);
+    expect((await request(app()).get("/api/demo/samples/nope")).status).toBe(404);
+  });
+
   it("the borrower can ask the assistant (capped) and finish from the phone", async () => {
     const r = await request(app()).post("/api/demo/client/assistant").set(auth(clientB)).send({ message: "How long will approval take?" });
     expect(r.status).toBe(200);
