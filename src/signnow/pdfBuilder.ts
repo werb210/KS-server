@@ -39,7 +39,11 @@ type Cell = { label: string; value: unknown } | null;
 export type DateAnchor = { role: string; page: number; x: number; y: number };
 // BF_SERVER_SBA_ONE_SIGNING_v758 - opts.signOnlyAs builds a copy of the application carrying only that owner's
 // signature box, for the owner's own SBA signing envelope (each owner signs a counterpart, privately).
-export async function buildApplicationPdf(inputs: ApplicationPdfInputs, out?: { dateAnchors: DateAnchor[] }, opts?: { signOnlyAs?: string }): Promise<Uint8Array> {
+// KS_SERVER_v12_DEMO_REAL_PACKAGE - opts.brand prints another broker's name and contacts instead of this licensee's
+// (the sales demo builds the application for the prospect's own company). Omitted, the licensee's brand is used.
+export type PdfBrand = { name: string; website?: string | null; supportEmail?: string | null };
+export async function buildApplicationPdf(inputs: ApplicationPdfInputs, out?: { dateAnchors: DateAnchor[] }, opts?: { signOnlyAs?: string; brand?: PdfBrand }): Promise<Uint8Array> {
+  const B = opts?.brand ? { name: opts.brand.name, website: opts.brand.website ?? "", support: opts.brand.supportEmail ?? "" } : { name: brandName(), website: websiteHost(), support: supportEmail() };
   const doc = await PDFDocument.create();
   const F = await doc.embedFont(StandardFonts.Helvetica);
   const FB = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -53,9 +57,9 @@ export async function buildApplicationPdf(inputs: ApplicationPdfInputs, out?: { 
 
   // header
   // KS_SERVER_v4_BRANDING - the licensee's name, website and support email (was Boreal's).
-  text(winAnsi(brandName()).toUpperCase(), M, y - 16, 18, FB, DARK);
-  text(winAnsi(websiteHost()), PW - M - 150, y - 4, 8, F, DARK);
-  if (supportEmail()) text(winAnsi(supportEmail()), PW - M - 150, y - 14, 8, F, DARK);
+  text(winAnsi(B.name).toUpperCase(), M, y - 16, 18, FB, DARK);
+  text(winAnsi(B.website), PW - M - 150, y - 4, 8, F, DARK);
+  if (B.support) text(winAnsi(B.support), PW - M - 150, y - 14, 8, F, DARK);
   y -= 30;
   page.drawLine({ start: { x: M, y }, end: { x: PW - M, y }, thickness: 1.2, color: NAVY });
   y -= 6;
@@ -99,7 +103,7 @@ export async function buildApplicationPdf(inputs: ApplicationPdfInputs, out?: { 
 
   // consent
   y -= 8; ensure(140);
-  const consent = "The undersigned certifies the above information is true, correct and complete and authorizes " + winAnsi(brandName()) + " and its representatives to obtain, verify, use and disclose to third parties (including credit reporting agencies and lenders) any credit, financial and personal information necessary to assess, service or enforce this application, in accordance with applicable privacy law (PIPEDA). Contact " + (winAnsi(supportEmail()) || "us") + " to review or correct your information.";
+  const consent = "The undersigned certifies the above information is true, correct and complete and authorizes " + winAnsi(B.name) + " and its representatives to obtain, verify, use and disclose to third parties (including credit reporting agencies and lenders) any credit, financial and personal information necessary to assess, service or enforce this application, in accordance with applicable privacy law (PIPEDA). Contact " + (winAnsi(B.support) || "us") + " to review or correct your information.";
   const words = consent.split(" "); let line = ""; const grey = rgb(0.22, 0.25, 0.3);
   for (const w of words) { const t = line ? line + " " + w : w; if (F.widthOfTextAtSize(t, 7) > CW) { text(line, M, y, 7, F, grey); y -= 9; line = w; } else line = t; }
   if (line) { text(line, M, y, 7, F, grey); y -= 9; }

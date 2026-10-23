@@ -127,9 +127,11 @@ export async function applicationFor(db: Q, sessionId: string): Promise<Applicat
   return (r.rows[0] as ApplicationRow) ?? null;
 }
 
-const APP_FIELDS = ["status", "credit_summary", "selected_lenders", "call", "notes", "financials_reviewed_at", "borrower_submitted_at", "submitted_at", "package_pdf"] as const;
+// KS_SERVER_v12_DEMO_REAL_PACKAGE - package_pdf holds the signed application; package_zip the zip a lender receives;
+// package_mail the lender email rendered for it ({ lender_name, subject, html, text, attachment_filename }).
+const APP_FIELDS = ["status", "credit_summary", "selected_lenders", "call", "notes", "financials_reviewed_at", "borrower_submitted_at", "submitted_at", "package_pdf", "package_zip", "package_mail"] as const;
 type AppField = (typeof APP_FIELDS)[number];
-const JSON_FIELDS = new Set<AppField>(["credit_summary", "selected_lenders", "call", "notes"]);
+const JSON_FIELDS = new Set<AppField>(["credit_summary", "selected_lenders", "call", "notes", "package_mail"]);
 
 /** Sets the named columns on the session's application (column names come from the fixed list above). */
 export async function updateApplication(db: Q, sessionId: string, fields: Partial<Record<AppField, unknown>>): Promise<void> {
@@ -145,9 +147,14 @@ export async function updateApplication(db: Q, sessionId: string, fields: Partia
   await db.query(`UPDATE demo_applications SET ${sets.join(", ")}, updated_at = now() WHERE session_id = $1`, params);
 }
 
-export async function packageFor(db: Q, sessionId: string): Promise<Buffer | null> {
-  const r = await db.query(`SELECT package_pdf FROM demo_applications WHERE session_id = $1`, [sessionId]);
-  return (r.rows[0]?.package_pdf as Buffer) ?? null;
+/** What the lender receives: the zip and its filename (older sessions have only the PDF). */
+export async function packageFor(db: Q, sessionId: string): Promise<{ content: Buffer; filename: string; contentType: string } | null> {
+  const r = await db.query(`SELECT package_pdf, package_zip, package_mail FROM demo_applications WHERE session_id = $1`, [sessionId]);
+  const row = r.rows[0];
+  if (row?.package_zip) {
+    return { content: row.package_zip as Buffer, filename: String(row.package_mail?.attachment_filename ?? "application-package.zip"), contentType: "application/zip" };
+  }
+  return row?.package_pdf ? { content: row.package_pdf as Buffer, filename: "Lender-Submission-Package-SAMPLE.pdf", contentType: "application/pdf" } : null;
 }
 
 const DOC_COLS = `id, session_id, application_id, sample_key, category, label, filename, mime_type, size_bytes, uploaded_via,
@@ -170,12 +177,12 @@ export async function documentContent(db: Q, sessionId: string, documentId: stri
 }
 
 /** Accepted documents' files, for the lender package. */
-export async function acceptedDocumentFiles(db: Q, sessionId: string): Promise<Array<{ label: string; content: Buffer; mime_type: string }>> {
+export async function acceptedDocumentFiles(db: Q, sessionId: string): Promise<Array<{ category: string; label: string; filename: string; content: Buffer; mime_type: string }>> {
   const r = await db.query(
-    `SELECT label, content, mime_type FROM demo_documents WHERE session_id = $1 AND status = 'accepted' ORDER BY created_at, sample_key`,
+    `SELECT category, label, filename, content, mime_type FROM demo_documents WHERE session_id = $1 AND status = 'accepted' ORDER BY created_at, sample_key`,
     [sessionId],
   );
-  return r.rows as Array<{ label: string; content: Buffer; mime_type: string }>;
+  return r.rows as Array<{ category: string; label: string; filename: string; content: Buffer; mime_type: string }>;
 }
 
 /** Stores (or replaces) the upload of one sample; a re-upload goes back to pending. */
