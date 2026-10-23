@@ -17,7 +17,9 @@ import JSZip from "jszip";
 import { buildDemoLenderSubmission, REAL_CATEGORY, SAMPLE_FOOTER, sampleApplicationPdfInputs } from "../lenderSubmission.js";
 import { buildApplicationPdf } from "../../signnow/pdfBuilder.js";
 import { buildApplicationPackage } from "../../services/lenders/buildApplicationPackage.js";
-import { lenderEmail, lenderEmailSubject } from "../../services/lenders/lenderEmail.js";
+import { formatPackageSize, lenderEmail, lenderEmailSubject } from "../../services/lenders/lenderEmail.js";
+import { CALL_SCRIPT, CALL_SUMMARY } from "../fixture.js";
+import { demoFraudScore, DEMO_FRAUD_SCORE } from "../packageExtras.js";
 import { creditSummaryGoesToLenders } from "../../services/lenders/loadPackageInputs.js";
 import { clientCodeFor, signDemoToken, verifyDemoToken } from "../tokens.js";
 import { demoAllowedPath, demoMode, demoTokenKey } from "../config.js";
@@ -26,6 +28,8 @@ import { demoRouter } from "../routes.js";
 import { answerQuestion, scriptedAnswer } from "../assistant.js";
 
 const SID = "6f1d3c1e-1111-4111-8111-111111111111";
+const DEMO_EXTRAS = ["fraud-prescreen.pdf", "client-intake-call-note.pdf", "bank-summary.pdf", "financials-summary.pdf"];
+const DEMO_CONTENTS_HEAD = ["Signed application", "Credit summary", "Fraud pre-screen report", "Client intake call note", "Bank summary", "Financials summary"];
 const OTHER = "6f1d3c1e-2222-4222-8222-222222222222";
 
 describe("sample documents", () => {
@@ -167,12 +171,13 @@ describe("lender match, credit summary and package", () => {
       lenderName: "Aspen Ridge Capital", accepted, submittedAt: new Date("2026-10-24T16:00:00Z"),
     });
     expect(sub.zipFilename).toBe(`application-${appId}.zip`);
-    // The sample is under $500k, so the real rule leaves the credit summary out - and so does the demo.
+    // KS_SERVER_v13 - the sample is under $500k, so the REAL rule would leave the credit summary out; the demo shows
+    // everything, so it is in anyway, with the walkthrough's extra pages at the package root.
     expect(SAMPLE_REQUEST.amount).toBeLessThan(500_000);
     expect(creditSummaryGoesToLenders(SAMPLE_REQUEST.amount, true)).toBe(false);
     const biz = SAMPLE_BUSINESS.legal_name;
     expect(sub.entries).toEqual([
-      "signed-application.pdf", "application-fields.json", "application-fields.pdf",
+      "signed-application.pdf", ...DEMO_EXTRAS, "credit-summary.pdf", "application-fields.json", "application-fields.pdf",
       `bank_statements_6_months/${biz} - Bank Statement - August 2026.pdf`,
       `bank_statements_6_months/${biz} - Bank Statement - July 2026.pdf`,
       `financial_statements/${biz} - Financial Statements - FY2025.pdf`,
@@ -183,7 +188,8 @@ describe("lender match, credit summary and package", () => {
     const fields = JSON.parse(await zip.file("application-fields.json")!.async("string"));
     expect(fields).toMatchObject({ "Application ID": appId, "Application Name": biz, "Requested Amount": 250_000, "Product Category": "EQUIPMENT", "business.legalName": biz, "applicant.firstName": "Sam", "kyc.lookingFor": "EQUIPMENT" });
     const real = await buildApplicationPackage({
-      applicationId: appId, signedApplicationPdf: Buffer.from("%PDF-"), creditSummaryPdf: null, additionalSignedDocs: [],
+      applicationId: appId, signedApplicationPdf: Buffer.from("%PDF-"), creditSummaryPdf: Buffer.from("%PDF-"),
+      additionalSignedDocs: DEMO_EXTRAS.map((filename) => ({ filename, content: Buffer.from("%PDF-") })),
       fields: Object.entries(fields).map(([label, value]) => ({ label, value: value as string })),
       documents: Object.values(zip.files).filter((f) => f.name.includes("/")).reduce<Array<{ category: string; files: { filename: string; content: Buffer }[] }>>((acc, f) => {
         const [category, filename] = f.name.split("/") as [string, string];
@@ -222,19 +228,81 @@ describe("lender match, credit summary and package", () => {
       accepted: [{ category: "bank_statement", label: "Bank statement - July 2026", filename: "Bank-Statement-2026-07-SAMPLE.pdf", content: files.get("bank_2026_07")!.bytes, mime_type: "application/pdf" }],
       submittedAt: new Date("2026-10-24T16:00:00Z"),
     });
-    const details = { lenderName: "Northgate Equipment Finance", applicationId: appId, businessName: SAMPLE_BUSINESS.legal_name, requestedAmount: 250_000, productCategory: "EQUIPMENT", contents: ["Signed application", "bank_statements_6_months"] };
-    const opts = { brand: "Prairie Capital <Brokers>", logoUrl: null };
+    const details = { lenderName: "Northgate Equipment Finance", applicationId: appId, businessName: SAMPLE_BUSINESS.legal_name, requestedAmount: 250_000, productCategory: "EQUIPMENT", contents: [...DEMO_CONTENTS_HEAD, "Bank statements (1 month)"] };
+    const opts = { brand: "Prairie Capital <Brokers>", logoUrl: null, formatSize: formatPackageSize };
     expect(sub.email.subject).toBe(lenderEmailSubject(details, opts));
     expect(sub.email.subject).toBe("Prairie Capital <Brokers> application package: Juniper Hollow Millwork Ltd. ($250,000)");
     const real = lenderEmail(details, { mode: "attached", sizeBytes: sub.zip.length }, opts);
     expect(sub.email.html.startsWith(real.bodyHtml)).toBe(true);
     expect(sub.email.html).toContain("Hello Northgate Equipment Finance team,");
-    expect(sub.email.html).toContain("The complete package is attached as one .zip file");
+    expect(sub.email.html).toMatch(/The complete package is attached as one \.zip file \(\d+ KB\)/);
+    expect(sub.email.html).not.toContain("0.0 MB");
     expect(sub.email.html).toContain("<br/><br/><p");
     expect(sub.email.html).toContain("Prairie Capital &lt;Brokers&gt;</p>");
     expect(sub.email.html).not.toContain("<img");
     expect(sub.email.text.startsWith(real.bodyText)).toBe(true);
     expect(sub.email.text.endsWith("Dana Broker\nPrairie Capital <Brokers>")).toBe(true);
+  });
+
+  it("KS_SERVER_v13 the demo package shows everything: readable PDFs, readable names in the email, size in KB", async () => {
+    const docs = await docRows({ bank_2026_07: "accepted", bank_2026_08: "accepted", bank_2026_09: "rejected", financials_2025: "accepted", void_cheque: "accepted", photo_id: "accepted" });
+    const files = await sampleFiles();
+    const accepted = docs.filter((d) => d.status === "accepted").map((d) => ({ category: d.category, label: d.label, filename: d.filename, content: files.get(d.sample_key)!.bytes, mime_type: d.mime_type }));
+    const at = "2026-10-24T15:58:00Z";
+    const call = { status: "completed", answered_at: at, completed_at: at, duration_seconds: 42, from: "Sam Carter", transcript: CALL_SCRIPT, summary: CALL_SUMMARY };
+    const a = app({ call });
+    const sub = await buildDemoLenderSubmission({
+      applicationId: "0b6c1f0e-5555-4555-8555-555555555555", app: a, summary: buildCreditSummary(a, docs),
+      broker: { name: "Dana Broker", company: "Big Broker", email: "dana@big.example" }, lenderName: "Aspen Ridge Capital",
+      accepted, submittedAt: new Date("2026-10-24T16:00:00Z"), documents: docs, call,
+    });
+    const zip = await JSZip.loadAsync(sub.zip);
+    const text = async (name: string) => (await pdfTextLines(await zip.file(name)!.async("nodebuffer"))).join("\n");
+    // The credit summary is in at $250k, signed with the prospect's company.
+    const cs = await text("credit-summary.pdf");
+    expect(cs).toMatch(/Juniper Hollow Millwork Ltd\./);
+    expect(cs).toContain("Big Broker");
+    expect(cs).toMatch(/DSCR/);
+    const pre = await text("fraud-prescreen.pdf");
+    expect(pre).toContain(`Fraud score: ${DEMO_FRAUD_SCORE} / 100 (high risk)`);
+    expect(pre).toMatch(/Bank statement - September 2026/);
+    expect(pre).toContain(SAMPLE_FOOTER);
+    const note = await text("client-intake-call-note.pdf");
+    expect(note).toMatch(/Client intake call note/);
+    expect(note).toContain(CALL_SUMMARY.headline);
+    expect(note).toMatch(/Dana Broker: Hi Sam, thanks for calling/);
+    expect(note).toMatch(/Sam Carter: Great\./);
+    const bank = await text("bank-summary.pdf");
+    expect(bank).toMatch(/Bank summary/);
+    expect(bank).toMatch(/September 2026.*rejected, failed fraud check/);
+    expect(bank).toMatch(/July 2026.*accepted, passed/);
+    const fin = await text("financials-summary.pdf");
+    expect(fin).toMatch(/Revenue\s+\$2,140,000\s+\$1,860,000/);
+    expect(fin).toMatch(/Debt service coverage/);
+    // Every demo-made page is dark text at 10 pt or more (the real application fields page is 10 pt as well).
+    for (const name of DEMO_EXTRAS) {
+      const raw = Buffer.from(await PDFDocument.load(await zip.file(name)!.async("nodebuffer")).then((d) => d.save({ useObjectStreams: false }))).toString("latin1");
+      expect(raw).not.toMatch(/\b1 1 1 rg\b/);
+    }
+    // The email: readable names, in package order, and a KB size.
+    expect(sub.email.text).toContain(["The package contains:", ...[...DEMO_CONTENTS_HEAD, "Bank statements (2 months)", "Financial statements", "Government ID", "Void cheque"].map((c) => `- ${c}`)].join("\n"));
+    expect(sub.email.text).not.toMatch(/bank_statements_6_months|government_id|void_cheque|financial_statements/);
+    expect(sub.email.text).toMatch(/attached as one \.zip file \(\d+ KB\)/);
+    expect(formatPackageSize(36_000)).toBe("35 KB");
+    expect(formatPackageSize(100)).toBe("1 KB");
+    expect(formatPackageSize(3 * 1024 * 1024)).toBe("3.0 MB");
+  });
+
+  it("KS_SERVER_v13 the demo fraud score is the walkthrough's 72 only when a document failed", async () => {
+    const red = await docRows({ bank_2026_09: "rejected" });
+    expect(demoFraudScore(red, true).score).toBe(72);
+    expect(demoFraudScore(red, false).not_covered.map((c) => c.check)).toEqual(["fraud_15"]);
+    const clean = await docRows({ bank_2026_07: "accepted" });
+    expect(demoFraudScore(clean, true)).toMatchObject({ band: "low", reasons: [] });
+  });
+
+  it("KS_SERVER_v13 the real lender email still shows MB (the KB size is the demo's only)", () => {
+    expect(lenderEmail({ lenderName: "L", applicationId: "abc" }, { mode: "attached", sizeBytes: 36_000 }).bodyText).toContain("(0.0 MB)");
   });
 
   it("KS_SERVER_v12 the lender email template is unchanged for the real send (licensee name and logo)", () => {

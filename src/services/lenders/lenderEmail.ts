@@ -15,7 +15,15 @@ const publicBase = () => serverUrl();
 
 // KS_SERVER_v12_DEMO_REAL_PACKAGE - opts lets the sales demo render this same email for the prospect's own company
 // (brand) and without the licensee logo (logoUrl: null). Omitted, the licensee's name and logo are used as before.
-export type LenderEmailOptions = { brand?: string; logoUrl?: string | null };
+// KS_SERVER_v13_DEMO_SHOW_EVERYTHING - formatSize lets the demo show a small package as KB; omitted, the size is
+// shown in MB as before.
+export type LenderEmailOptions = { brand?: string; logoUrl?: string | null; formatSize?: (sizeBytes: number) => string };
+
+/** KB under 1 MB (never "0.0 MB"), MB above. Used by the sales demo. */
+export function formatPackageSize(sizeBytes: number): string {
+  if (sizeBytes < 1024 * 1024) return `${Math.max(1, Math.round(sizeBytes / 1024))} KB`;
+  return formatMegabytes(sizeBytes);
+}
 
 export function lenderEmailSubject(d: LenderEmailDetails, opts: LenderEmailOptions = {}): string {
   const who = (d.businessName ?? "").trim() || `application ${d.applicationId.slice(0, 8)}`;
@@ -27,7 +35,7 @@ export function lenderEmail(d: LenderEmailDetails, delivery: LenderEmailDelivery
   const business = (d.businessName ?? "").trim() || "Not provided";
   const amount = formatAmount(d.requestedAmount) ?? "Not provided";
   const product = (d.productCategory ?? "").trim() || "Not provided";
-  const size = formatMegabytes(delivery.sizeBytes);
+  const size = (opts.formatSize ?? formatMegabytes)(delivery.sizeBytes);
   const contents = (d.contents ?? []).map((c) => c.trim()).filter(Boolean);
   const isLink = delivery.mode === "link";
   const host = isLink ? new URL(delivery.url).host : "";

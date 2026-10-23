@@ -10,16 +10,21 @@
 //
 // The inputs come from the sample file in the shape loadPackageInputs() reads from a real application: the wizard
 // metadata (business / applicant / kyc), the accepted documents named and filed as staff accept them, the application
-// PDF the applicant signs (src/signnow/pdfBuilder.ts) with the signature and signing date applied, and the credit summary
-// only when the real rule would include it (deals of $500k or more). The fraud pre-screen page is off by default for a
-// licensee, so it is not in the package either. The broker in this story is the prospect's own company.
+// PDF the applicant signs (src/signnow/pdfBuilder.ts) with the signature and signing date applied. The broker in this
+// story is the prospect's own company.
+//
+// KS_SERVER_v13_DEMO_SHOW_EVERYTHING - the demo is a demo: it shows the system off, it does not process deals. So the
+// real package's limits are dropped HERE ONLY: the credit summary is always in (the real rule sends it for $500k or
+// more), and the package also carries what the walkthrough showed - the fraud pre-screen (score 72), the client intake
+// call note and transcript, the bank summary and the financials summary (src/demo/packageExtras.ts). The email lists
+// the documents by readable names and shows a small package in KB. The real submission code is unchanged.
 //
 // SAMPLE labelling sits only where the real templates have room: a footer line on the signed application's pages. The
 // sample documents are themselves watermarked SAMPLE.
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { buildApplicationPackage, type CategoryGroup } from "../services/lenders/buildApplicationPackage.js";
-import { lenderEmail, lenderEmailSubject, type LenderEmailDetails } from "../services/lenders/lenderEmail.js";
-import { creditSummaryGoesToLenders, packageFields } from "../services/lenders/loadPackageInputs.js";
+import { formatPackageSize, lenderEmail, lenderEmailSubject, type LenderEmailDetails } from "../services/lenders/lenderEmail.js";
+import { packageFields } from "../services/lenders/loadPackageInputs.js";
 import { renderPdf as renderCreditSummaryPdf, type ExportDoc } from "../services/credit/creditSummaryExport.js";
 import { graphMessageBody } from "../services/email/graphSendService.js";
 import { sanitizeDisplayName, suggestedNameParts } from "../services/documents/documentNaming.js";
@@ -27,8 +32,23 @@ import { buildApplicationPdf, type ApplicationPdfInputs, type DateAnchor } from 
 import { stampSignDate } from "../signnow/stampSignDate.js";
 import type { CreditSummary } from "./creditSummary.js";
 import type { ApplicationRow } from "./repo.js";
+import { bankSummaryPdf, callNotePdf, DEMO_FOOTER, financialsSummaryPdf, fraudPrescreenPdf, type DemoDocState } from "./packageExtras.js";
 
-export const SAMPLE_FOOTER = "SAMPLE - fictional business and lenders, made in the Keystone demo. Not a real application.";
+export const SAMPLE_FOOTER = DEMO_FOOTER;
+
+/** How the email names each document category in the package (instead of the raw folder key). */
+export function readableCategory(category: string, count: number): string {
+  switch (category) {
+    case "bank_statements_6_months": return `Bank statements (${count} month${count === 1 ? "" : "s"})`;
+    case "financial_statements": return "Financial statements";
+    case "government_id": return "Government ID";
+    case "void_cheque": return "Void cheque";
+    default: {
+      const t = category.replace(/_/g, " ").trim();
+      return t.charAt(0).toUpperCase() + t.slice(1);
+    }
+  }
+}
 
 /** The real document category each sample is filed under (the folder name in the package). */
 export const REAL_CATEGORY: Record<string, string> = {
@@ -159,27 +179,38 @@ export async function sampleSignedApplicationPdf(inputs: ApplicationPdfInputs, b
   return Buffer.from(await doc.save());
 }
 
-/** The credit summary as the real export renders it (only used when the real rule would include it). */
+/** The credit summary as the real export renders it. */
 function creditSummaryExport(s: CreditSummary, app: Pick<ApplicationRow, "business" | "contact" | "request" | "financials">): ExportDoc {
   const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
   const years = (app.financials?.years ?? []) as Array<Record<string, number>>;
   const row = (item: string, pick: (y: Record<string, number>) => number | null) => ({ item, values: years.map(pick) });
+  const cost = Number(app.request?.equipment_cost ?? 0) || null;
+  const down = Number(app.request?.down_payment ?? 0) || 0;
+  const newDebt = s.financial_snapshot.proposed_payment_monthly * 12;
+  const debtService = (y: Record<string, number>) => (y.existing_debt_service ?? 0) + newDebt;
   return {
     overview: {
       applicant_name: s.borrower.legal_name, address: app.business?.address ?? null, principals: s.borrower.owner,
-      transaction: `${money(s.request.amount)} ${s.request.product}`, facility_request: money(s.request.amount),
-      term: `${s.request.term_months} months`, industry: s.borrower.industry, website: app.business?.website ?? null,
+      assets: "New 5x10 CNC router with dust collection",
+      transaction: `${money(s.request.amount)} ${s.request.product}`,
+      structure: `${s.request.term_months}-month amortising loan${down ? `, ${money(down)} down` : ""}`,
+      asset_value: cost ? money(cost) : null, facility_request: money(s.request.amount),
+      term: `${s.request.term_months} months`, industry: s.borrower.industry,
+      ltv: cost ? `${Math.round((s.request.amount / cost) * 100)}%` : null,
+      additional_security: "General security agreement; personal guarantee from the owner",
+      website: app.business?.website ?? null,
     },
     financials: {
       periods: years.map((y) => ({ label: `FY${y.year}` })),
       rows: [
         row("revenue", (y) => y.revenue), row("ebitda", (y) => y.ebitda), row("net_income", (y) => y.net_income),
+        row("total_debt_service", (y) => debtService(y)), row("dscr", (y) => (debtService(y) ? y.ebitda / debtService(y) : null)),
         row("current_assets", (y) => y.current_assets), row("current_liabilities", (y) => y.current_liabilities),
         row("current_ratio", (y) => (y.current_liabilities ? y.current_assets / y.current_liabilities : null)),
         row("equity", (y) => y.equity), row("debt_to_equity", (y) => (y.equity ? y.total_liabilities / y.equity : null)),
       ],
     },
-    equipment: null,
+    equipment: cost ? { items: [{ year: 2026, make: "Sample", model: "5x10 CNC router with dust collection", hours: "New", price: cost }], total: cost } : null,
     sections: [
       { key: "transaction", title: "Transaction", text: s.request.purpose },
       { key: "overview", title: "Overview", text: `${s.borrower.legal_name}, ${s.borrower.industry}. ${s.borrower.years_in_business} years in business, ${s.borrower.location}.` },
@@ -202,6 +233,10 @@ export async function buildDemoLenderSubmission(input: {
   lenderName: string;
   accepted: DemoAcceptedFile[];
   submittedAt: Date;
+  /** Every sample document on the file with its decision and fraud results (for the pre-screen and bank summary). */
+  documents?: DemoDocState[];
+  /** The borrower's call (app.call), when it was taken. */
+  call?: ApplicationRow["call"];
 }): Promise<LenderSubmission> {
   const { applicationId, app, broker } = input;
   const metadata = sampleMetadata(app);
@@ -212,10 +247,25 @@ export async function buildDemoLenderSubmission(input: {
 
   const signedApplicationPdf = await sampleSignedApplicationPdf(sampleApplicationPdfInputs(applicationId, app), broker, input.submittedAt);
 
-  // The credit summary is submitted in the demo; the real rule then decides by amount.
-  const creditSummaryPdf = creditSummaryGoesToLenders(Number(app.request?.amount ?? 0), true)
-    ? await renderCreditSummaryPdf(creditSummaryExport(input.summary, app), { signedBy: broker.name, phone: null, date: input.submittedAt })
-    : null;
+  // The demo always sends the credit summary, whatever the amount (the real $500k rule is not applied to the demo).
+  const creditSummaryPdf = await renderCreditSummaryPdf(creditSummaryExport(input.summary, app), { signedBy: broker.name, phone: null, date: input.submittedAt, brand: broker.company });
+
+  // What the walkthrough showed, as pages at the package root (where the real package puts the pre-screen page).
+  const docs = input.documents ?? [];
+  const call = input.call ?? null;
+  const businessName = String(app.business?.legal_name ?? "");
+  const extras = [
+    await fraudPrescreenPdf({ docs, callAnswered: call?.status === "completed", company: broker.company, applicationName: businessName, at: input.submittedAt }),
+    await callNotePdf({ app: { contact: app.contact, business: app.business, call }, brokerName: broker.name, company: broker.company, at: input.submittedAt }),
+    await bankSummaryPdf({ docs, businessName, company: broker.company }),
+    await financialsSummaryPdf({ app, company: broker.company }),
+  ];
+  const EXTRA_NAMES: Record<string, string> = {
+    "fraud-prescreen.pdf": "Fraud pre-screen report",
+    "client-intake-call-note.pdf": "Client intake call note",
+    "bank-summary.pdf": "Bank summary",
+    "financials-summary.pdf": "Financials summary",
+  };
 
   // Accepted documents, named the way staff accept them and filed by category, in the loader's order.
   const groups = new Map<string, Array<{ filename: string; content: Buffer }>>();
@@ -233,7 +283,7 @@ export async function buildDemoLenderSubmission(input: {
     files: groups.get(category)!.sort((a, b) => a.filename.localeCompare(b.filename)),
   }));
 
-  const pkg = await buildApplicationPackage({ applicationId, signedApplicationPdf, additionalSignedDocs: [], creditSummaryPdf, fields, documents });
+  const pkg = await buildApplicationPackage({ applicationId, signedApplicationPdf, additionalSignedDocs: extras, creditSummaryPdf, fields, documents });
 
   const field = (label: string) => fields.find((f) => f.label === label)?.value ?? null;
   const amount = Number(field("Requested Amount"));
@@ -241,9 +291,12 @@ export async function buildDemoLenderSubmission(input: {
     businessName: field("Application Name") == null ? null : String(field("Application Name")),
     requestedAmount: Number.isFinite(amount) && amount > 0 ? amount : null,
     productCategory: field("Product Category") == null ? null : String(field("Product Category")),
-    contents: ["Signed application", ...(creditSummaryPdf ? ["Credit summary"] : []), ...documents.filter((g) => g.files.length > 0).map((g) => g.category)],
+    contents: [
+      "Signed application", "Credit summary", ...extras.map((e) => EXTRA_NAMES[e.filename] ?? e.filename),
+      ...documents.filter((g) => g.files.length > 0).map((g) => readableCategory(g.category, g.files.length)),
+    ],
   };
-  const opts = { brand: broker.company, logoUrl: null };
+  const opts = { brand: broker.company, logoUrl: null, formatSize: formatPackageSize };
   const full = { ...details, lenderName: input.lenderName, applicationId };
   const subject = lenderEmailSubject(full, opts);
   const body = lenderEmail(full, { mode: "attached", sizeBytes: pkg.zipBuffer.length }, opts);

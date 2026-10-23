@@ -10,7 +10,9 @@ export type ExportDoc = {
   equipment: { items: any[]; total: number | null } | null;
   sections: Section[];
 };
-export type ExportMeta = { signedBy: string | null; phone: string | null; date: Date };
+// KS_SERVER_v13_DEMO_SHOW_EVERYTHING - brand: the company under the signature (the sales demo passes the prospect's
+// company); omitted, the licensee's name as before.
+export type ExportMeta = { signedBy: string | null; phone: string | null; date: Date; brand?: string };
 export type Block =
   | { t: "title"; text: string }
   | { t: "h"; text: string }
@@ -49,7 +51,7 @@ export function layout(doc: ExportDoc, meta: ExportMeta): Block[] {
   const commentary = section(doc, "financial_commentary"); if (commentary?.text) blocks.push({ t: "p", text: commentary.text });
   const rationale = section(doc, "rationale"); if (rationale?.bullets?.length) blocks.push({ t: "h", text: "Rationale for approval include:" }, { t: "bullets", items: rationale.bullets });
   const risks = section(doc, "risks"); if (risks?.risks?.length) blocks.push({ t: "h", text: "Risks and mitigants" }, { t: "table", head: ["Risk", "Mitigant"], rows: risks.risks.map(({ risk, mitigant }) => [risk, mitigant]) });
-  blocks.push({ t: "p", text: "If you have any questions, please give me a call." }, { t: "p", text: "Thanks," }, { t: "p", text: meta.signedBy ?? "", bold: true }, { t: "p", text: brandName() });
+  blocks.push({ t: "p", text: "If you have any questions, please give me a call." }, { t: "p", text: "Thanks," }, { t: "p", text: meta.signedBy ?? "", bold: true }, { t: "p", text: meta.brand ?? brandName() });
   if (meta.phone) blocks.push({ t: "p", text: meta.phone }); return blocks;
 }
 

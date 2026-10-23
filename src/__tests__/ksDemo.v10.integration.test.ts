@@ -195,7 +195,11 @@ describe("KS v10 demo (real Postgres)", () => {
     expect(pkg.headers["content-disposition"]).toMatch(/filename="application-[0-9a-f-]{36}\.zip"/);
     const zip = await JSZip.loadAsync(pkg.body as Buffer);
     const names = Object.keys(zip.files).filter((n) => !zip.files[n]!.dir);
-    expect(names.slice(0, 3)).toEqual(["signed-application.pdf", "application-fields.json", "application-fields.pdf"]);
+    // KS_SERVER_v13_DEMO_SHOW_EVERYTHING - the demo package also carries the walkthrough's pages and the credit summary.
+    expect(names.slice(0, 8)).toEqual([
+      "signed-application.pdf", "fraud-prescreen.pdf", "client-intake-call-note.pdf", "bank-summary.pdf", "financials-summary.pdf",
+      "credit-summary.pdf", "application-fields.json", "application-fields.pdf",
+    ]);
     expect(names.filter((n) => n.includes("/")).length).toBeGreaterThanOrEqual(4); // the accepted sample files, by category
     expect(names.some((n) => n.startsWith("bank_statements_6_months/"))).toBe(true);
     const signed = await PDFDocument.load(await zip.file("signed-application.pdf")!.async("nodebuffer"));
@@ -276,6 +280,8 @@ describe("KS v10 demo (real Postgres)", () => {
     expect(comp.body.lender_email.subject).toMatch(/ application package: Juniper Hollow Millwork Ltd\. \(\$250,000\)$/);
     expect(comp.body.lender_email.html).toContain("team,</p>");
     expect(comp.body.lender_email.text).toMatch(/is submitting the following financing application for your review/);
+    expect(comp.body.lender_email.text).toMatch(/- Credit summary\n- Fraud pre-screen report\n- Client intake call note\n/);
+    expect(comp.body.lender_email.text).toMatch(/attached as one \.zip file \(\d+ KB\)/);
     expect(comp.body.lender_email.attachments).toHaveLength(1);
     expect(comp.body.lender_email.attachments[0]).toMatchObject({ content_type: "application/zip", filename: expect.stringMatching(/^application-[0-9a-f-]{36}\.zip$/) });
     expect(Buffer.from(comp.body.lender_email.attachments[0].base64, "base64").subarray(0, 4).toString("latin1")).toBe("PK\x03\x04");
