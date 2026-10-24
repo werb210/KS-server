@@ -12,6 +12,7 @@ export const LICENSEE_FIELDS = [
   "logo_url", "primary_color", "accent_color", "time_zone", "country",
   "mailing_address", // KS_SERVER_v5_MAILING_ADDRESS
   "workspace_provider", // KS_SERVER_v12_GOOGLE_WORKSPACE - m365 | google | both: which Connect buttons staff see
+  "background_color", "font_family", // KS_SERVER_v14_BRAND_FONT - "" = the app's own default
 ] as const;
 export type LicenseeField = (typeof LICENSEE_FIELDS)[number];
 
@@ -73,6 +74,7 @@ const ENV_NAMES: Record<LicenseeField, string> = {
   primary_color: "KS_PRIMARY_COLOR", accent_color: "KS_ACCENT_COLOR", time_zone: "KS_TIME_ZONE", country: "KS_COUNTRY",
   mailing_address: "KS_MAILING_ADDRESS",
   workspace_provider: "KS_WORKSPACE_PROVIDER",
+  background_color: "KS_BACKGROUND_COLOR", font_family: "KS_FONT_FAMILY",
 };
 
 /** KS_SERVER_v8_USAGE - the time zone a licensee gets when it sets none. */
@@ -83,6 +85,7 @@ const NEUTRAL: LicenseeSettings = {
   support_phone: "", logo_url: "", primary_color: "#0B1F3A", accent_color: "#2563EB",
   time_zone: DEFAULT_LICENSEE_TIME_ZONE, country: "CA", mailing_address: "",
   workspace_provider: "m365", // today's behaviour: Microsoft 365 only
+  background_color: "", font_family: "", // KS_SERVER_v14_BRAND_FONT - unset: each app keeps its own background and font
 };
 
 export function envDefaults(env: NodeJS.ProcessEnv = process.env): LicenseeSettings {
@@ -99,7 +102,13 @@ export function checkField(field: LicenseeField, raw: unknown): { ok: true; valu
   const value = String(raw ?? "").trim();
   if (value.length > 200) return { ok: false, error: `${field} is too long (200 characters at most)` };
   if (!value) return { ok: true, value };
-  if ((field === "primary_color" || field === "accent_color") && !/^#[0-9a-f]{6}$/i.test(value)) {
+  // KS_SERVER_v14_BRAND_FONT - a family name only (it goes into CSS and a Google Fonts address).
+  if (field === "font_family") {
+    const v = value.replace(/\s+/g, " ");
+    if (!/^[A-Za-z0-9][A-Za-z0-9 -]{0,59}$/.test(v)) return { ok: false, error: "font_family can use letters, numbers, spaces and dashes (60 at most)" };
+    return { ok: true, value: v };
+  }
+  if ((field === "primary_color" || field === "accent_color" || field === "background_color") && !/^#[0-9a-f]{6}$/i.test(value)) {
     return { ok: false, error: `${field} must be a colour like #0B1F3A` };
   }
   if (field === "logo_url" && !/^https:\/\/[^\s]+$/i.test(value)) return { ok: false, error: "logo_url must start with https://" };

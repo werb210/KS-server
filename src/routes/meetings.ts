@@ -9,7 +9,7 @@ import { resolveSiloFromRequest } from "../middleware/silo.js";
 import { createRoom, recentDuplicateRoom, roomBySlug, inviteText, joinUrl, oneTapDial, isOpen, dialInDisplay, type MeetingRoom } from "../services/meetingRooms.js";
 import { addParticipants, listParticipants, removeParticipant, searchPeople, MAX_PEOPLE, type Person } from "../services/meetingRooms.js"; // BF_SERVER_MEETING_PARTICIPANTS_v737
 import { notifyMeeting, cancelMeetingNotices } from "../services/meetingNotify.js"; // BF_SERVER_MEETING_NOTIFY_v741
-import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { brandName, brandTheme } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING, KS_SERVER_v14_BRAND_FONT
 import { serverUrl, hostOf } from "../licensee/urls.js"; // KS_SERVER_v4_BRANDING
 
 const router = Router();
@@ -19,9 +19,10 @@ const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "
 const view = (r: MeetingRoom) => ({ ...r, joinUrl: joinUrl(r.slug), oneTap: oneTapDial(r.code), invite: inviteText(r), dialIn: dialInDisplay(), open: isOpen(r) });
 
 export function joinPageHtml(r: MeetingRoom | null): string {
-  const head = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(brandName())} meeting</title>
-<style>body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f5f8fc;color:#0B1F3A}main{max-width:520px;margin:48px auto;padding:28px;background:#fff;border:1px solid #E4EAF2;border-radius:12px}
-h1{font-size:22px;margin:0 0 6px}.muted{color:#51617D}.code{font-size:34px;font-weight:700;letter-spacing:4px;margin:6px 0 18px}a.btn{display:inline-block;background:#0B1F3A;color:#fff;text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:600;margin:6px 8px 0 0}a.sec{background:#fff;color:#0B1F3A;border:1px solid #E4EAF2}</style></head><body><main>`;
+  const t = brandTheme(); // KS_SERVER_v14_BRAND_FONT - the licensee's colours and font, readability-checked
+  const head = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(brandName())} meeting</title>${t.fontLink}
+<style>body{margin:0;font-family:${t.fontStack};background:${t.background};color:#0B1F3A}main{max-width:520px;margin:48px auto;padding:28px;background:#fff;border:1px solid #E4EAF2;border-radius:12px}
+h1{font-size:22px;margin:0 0 6px}.muted{color:#51617D}.code{font-size:34px;font-weight:700;letter-spacing:4px;margin:6px 0 18px}a.btn{display:inline-block;background:${t.primary};color:${t.primaryText};text-decoration:none;padding:12px 18px;border-radius:10px;font-weight:600;margin:6px 8px 0 0}a.sec{background:#fff;color:#0B1F3A;border:1px solid #E4EAF2}</style></head><body><main>`;
   if (!r || r.status === "cancelled") return head + `<h1>This meeting isn't available</h1><p class="muted">It may have been cancelled. Please contact ${esc(brandName())} at ${esc(dialInDisplay())}.</p></main></body></html>`;
   const when = new Date(r.starts_at).toLocaleString("en-CA", { timeZone: ALBERTA_TZ, dateStyle: "full", timeStyle: "short" });
   return head + `<p class="muted">${esc(brandName())} meeting</p><h1>${esc(r.title)}</h1><p class="muted">${esc(when)} (Alberta time)</p>

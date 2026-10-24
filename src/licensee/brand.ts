@@ -96,3 +96,63 @@ export function winAnsi(s: string): string {
     .replace(/[–—]/g, "-")
     .replace(/[^\x20-\x7E -ÿ]/g, "");
 }
+
+// ---- KS_SERVER_v14_BRAND_FONT - the licensee's colours and font on the pages this server shows to its clients ----
+// (share links, file requests, meeting join pages). Every colour pairing is checked so text stays readable: a brand
+// colour too light for white text gets dark text, and one too light to read on white is not used for text.
+
+const HEX = /^#[0-9a-f]{6}$/i;
+const INK = "#0F172A";
+const WHITE = "#FFFFFF";
+
+function luminance(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** WCAG contrast ratio of two #RRGGBB colours (1 to 21). */
+export function contrastRatio(a: string, b: string): number {
+  const [x, y] = [luminance(a), luminance(b)].sort((m, n) => n - m);
+  return (x + 0.05) / (y + 0.05);
+}
+
+/** White or dark ink, whichever reads better on `bg`. */
+export function textOn(bg: string): string {
+  return contrastRatio(bg, WHITE) >= contrastRatio(bg, INK) ? WHITE : INK;
+}
+
+/** Fonts every device already has: no web font is loaded for these. */
+const SYSTEM_FONTS = new Set(["arial", "helvetica", "georgia", "verdana", "tahoma", "trebuchet ms", "times new roman", "courier new", "system-ui", "segoe ui"]);
+
+export type BrandTheme = {
+  primary: string;
+  primaryText: string;
+  /** The brand colour for text on white, or dark ink when the brand colour is too light to read there. */
+  brandText: string;
+  background: string;
+  fontStack: string;
+  /** A Google Fonts <link> for the licensee's font, or "". */
+  fontLink: string;
+};
+
+export function brandTheme(s = brandSettings()): BrandTheme {
+  const primary = HEX.test(s.primary_color) ? s.primary_color.toUpperCase() : "#0B1F3A";
+  const background = HEX.test(String(s.background_color ?? "")) ? String(s.background_color).toUpperCase() : "#F1F5F9";
+  const family = String(s.font_family ?? "").trim();
+  const safeFamily = /^[A-Za-z0-9][A-Za-z0-9 -]{0,59}$/.test(family) ? family : "";
+  const system = "-apple-system, Segoe UI, Roboto, Arial, sans-serif";
+  return {
+    primary,
+    primaryText: textOn(primary),
+    brandText: contrastRatio(primary, WHITE) >= 4.5 ? primary : INK,
+    background,
+    fontStack: safeFamily ? `"${safeFamily}", ${system}` : system,
+    fontLink:
+      safeFamily && !SYSTEM_FONTS.has(safeFamily.toLowerCase())
+        ? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${safeFamily.replace(/ /g, "+")}:wght@400;600;700&amp;display=swap">`
+        : "",
+  };
+}
