@@ -420,6 +420,12 @@ export async function start(): Promise<void> {
     try { const w = startQuickBooksInvoiceWorker(pool); workerStops.push(w.stop); console.log("[startup] quickbooks-invoice worker started"); }
     catch (err) { console.error("[startup] quickbooks-invoice worker failed to start:", err); }
 
+    // KS_SERVER_v14_DATA_IMPORT - the Import data wizard's dry runs, runs and undos, one at a time.
+    const { startDataImportWorker } = await import("./workers/dataImportWorker.js");
+    await workerStagger();
+    try { const w = startDataImportWorker(pool); workerStops.push(w.stop); console.log("[startup] data-import worker started"); }
+    catch (err) { console.error("[startup] data-import worker failed to start:", err); }
+
     // BF_SERVER_TASKS_M6_v1 - task reminders + recurrence catch-up + daily digest.
     const { startTaskRemindersWorker } = await import("./workers/taskRemindersWorker.js");
     await workerStagger();
