@@ -138,6 +138,7 @@ import planRoutes from "./plan.js"; // KS_SERVER_v6_PLANS
 import dataExportRoutes from "./dataExport.js"; // KS_SERVER_v8_DATA_EXPORT
 import fraudRoutes from "./fraud.js"; // KS_SERVER_v9_FRAUD
 import pgiRoutes from "./pgi.js"; // KS_SERVER_v11_PGI
+import betaRoutes from "./beta.js"; // KS_SERVER_BETA_v1
 import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
 import { requireAuth, requireAuthAllowClient } from "../middleware/auth.js";
 import watchAuthRoutes from "../watch/authRoutes.js";
@@ -354,6 +355,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/export", router: dataExportRoutes }, // KS_SERVER_v8_DATA_EXPORT - Admin
   { path: "/fraud", router: fraudRoutes }, // KS_SERVER_v9_FRAUD - staff; individual checks gated per route
   { path: "/pgi", router: pgiRoutes }, // KS_SERVER_v11_PGI - PGI referrals to the insurance partner (every plan)
+  { path: "/beta", router: betaRoutes }, // KS_SERVER_BETA_v1 - beta feature flags and Labs (flags public, rest staff/Admin)
 ];
 
 export const PORTAL_ROUTE_REQUIREMENTS: Pick<ApiRoute, "method" | "path">[] = [
