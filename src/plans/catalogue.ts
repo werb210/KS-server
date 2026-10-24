@@ -1,8 +1,10 @@
 // KS_SERVER_v6_PLANS - what each plan includes, and the pure rules for the one free trial.
 //
-// Three plans: starter < growth < pro. A starter brokerage may start ONE 14-day trial by itself; while it runs the
-// copy behaves as pro for features, assistant chats and storage, but calls/texts stay at starter's allowance plus a
-// small trial bonus. Growth and pro brokerages are not offered a trial. Nothing here touches the database.
+// Three plans: starter < growth < pro. A starter or growth brokerage may start ONE 14-day trial by itself
+// (KS_SERVER_v14_TRIAL_GROWTH, Todd Oct 24 - was starter only); while it runs the copy behaves as pro for features,
+// assistant chats and storage, but calls/texts stay at starter's allowance plus a small trial bonus (never less than
+// the brokerage's own plan gives). Pro brokerages are not offered a trial. The staff free trial Keystone operations
+// starts (KS-Ops) is separate: neither trial blocks the other. Nothing here touches the database.
 
 import type { Addons } from "./addons.js";
 
@@ -11,6 +13,11 @@ export type Plan = (typeof PLANS)[number];
 export type TrialStatus = "available" | "active" | "used" | "not_offered";
 
 export const TRIAL_DAYS = 14;
+/** KS_SERVER_v14_TRIAL_GROWTH - the plans offered the in-app Pro trial. */
+export const TRIAL_PLANS: readonly Plan[] = ["starter", "growth"];
+export function trialOffered(plan: Plan): boolean {
+  return TRIAL_PLANS.includes(plan);
+}
 export const TRIAL_WARNING_DAYS = 3;
 export const GB = 1024 ** 3;
 export const STORAGE_BLOCK_GB = 50;
@@ -154,12 +161,12 @@ export type PlanState = {
 };
 
 export function trialActive(s: PlanState, now: Date = new Date()): boolean {
-  return s.plan === "starter" && !!s.trial_started_at && !!s.trial_ends_at && now.getTime() < s.trial_ends_at.getTime();
+  return trialOffered(s.plan) && !!s.trial_started_at && !!s.trial_ends_at && now.getTime() < s.trial_ends_at.getTime();
 }
 
 export function trialStatus(s: PlanState, now: Date = new Date()): TrialStatus {
   if (trialActive(s, now)) return "active";
-  if (s.plan !== "starter") return "not_offered";
+  if (!trialOffered(s.plan)) return "not_offered";
   return s.trial_started_at ? "used" : "available";
 }
 
@@ -185,14 +192,18 @@ export function allowancesFor(s: PlanState, now: Date = new Date(), env: NodeJS.
   if (!trialActive(s, now)) return { ...ALLOWANCES[s.plan], trial_bonus_minutes: 0, trial_bonus_texts: 0 };
   const bonus = trialBonus(env);
   const starter = ALLOWANCES.starter;
+  const own = ALLOWANCES[s.plan];
   const pro = ALLOWANCES.pro;
+  // Unchanged for starter (starter + bonus). A growth brokerage keeps its own, larger allowance (no bonus on top).
+  const minutes = Math.max(own.minutes_per_seat, starter.minutes_per_seat + bonus.minutes);
+  const texts = Math.max(own.texts_per_seat, starter.texts_per_seat + bonus.texts);
   return {
-    minutes_per_seat: starter.minutes_per_seat + bonus.minutes,
-    texts_per_seat: starter.texts_per_seat + bonus.texts,
+    minutes_per_seat: minutes,
+    texts_per_seat: texts,
     assistant_chats: pro.assistant_chats,
     storage_gb_per_seat: pro.storage_gb_per_seat,
-    trial_bonus_minutes: bonus.minutes,
-    trial_bonus_texts: bonus.texts,
+    trial_bonus_minutes: minutes - own.minutes_per_seat,
+    trial_bonus_texts: texts - own.texts_per_seat,
   };
 }
 

@@ -61,7 +61,8 @@ export async function readPlanRow(db: Q): Promise<Record<string, any> | null> {
   const r = await db.query(
     `SELECT plan, trial_started_at, trial_ends_at, trial_started_by, extra_storage_blocks, updated_at, updated_by,
             trial_warning_sent_at, trial_ended_sent_at, storage_80_sent_at, storage_100_sent_at,
-            service_status, cancelled_at, purge_warning_7_sent_at, purge_warning_1_sent_at, purged_at, addons
+            service_status, cancelled_at, purge_warning_7_sent_at, purge_warning_1_sent_at, purged_at, addons,
+            retention_archived_at, retention_released_at
        FROM licensee_plan WHERE id = 1`,
   );
   return r.rows[0] ?? null;
@@ -78,14 +79,14 @@ export type StartTrialResult =
   | { ok: true; state: PlanState }
   | { ok: false; reason: "active" | "used" | "not_offered" };
 
-/** Starts the one free trial. Atomic: only a starter copy that has never started one gets it. */
+/** Starts the one free trial. Atomic: only a starter or growth copy that has never started one gets it. */
 export async function startTrial(db: Q, userId: string, now: Date = new Date()): Promise<StartTrialResult> {
   await ensureRow(db);
   const ends = new Date(now.getTime() + TRIAL_DAYS * 86_400_000);
   const r = await db.query(
     `UPDATE licensee_plan
         SET trial_started_at = $1, trial_ends_at = $2, trial_started_by = $3, updated_at = now(), updated_by = $3
-      WHERE id = 1 AND plan = 'starter' AND trial_started_at IS NULL
+      WHERE id = 1 AND plan IN ('starter', 'growth') AND trial_started_at IS NULL
       RETURNING plan, trial_started_at, trial_ends_at, extra_storage_blocks, service_status, cancelled_at, addons`,
     [now.toISOString(), ends.toISOString(), userId || null],
   );
@@ -103,8 +104,9 @@ export type SetPlanInput = {
 };
 
 /**
- * Boreal operations sets the plan and/or the extra storage blocks. Moving off starter ends any running trial now
- * (trial_started_at stays, so it is never offered again).
+ * Boreal operations sets the plan and/or the extra storage blocks. Moving to pro ends any running trial now
+ * (trial_started_at stays, so it is never offered again). KS_SERVER_v14_TRIAL_GROWTH - a trial runs on starter and
+ * growth, so moving between those two leaves it running.
  */
 export async function setPlan(db: Q, input: SetPlanInput, by: string, now: Date = new Date()): Promise<PlanState> {
   await ensureRow(db);
@@ -113,7 +115,7 @@ export async function setPlan(db: Q, input: SetPlanInput, by: string, now: Date 
   if (input.plan) {
     params.push(input.plan);
     sets.push(`plan = $${params.length}`);
-    if (input.plan !== "starter") {
+    if (input.plan === "pro") {
       params.push(now.toISOString());
       sets.push(`trial_ends_at = CASE WHEN trial_ends_at IS NOT NULL AND trial_ends_at > $${params.length}::timestamptz THEN $${params.length}::timestamptz ELSE trial_ends_at END`);
       // An upgrade is not "your trial has ended": mark both trial notices as done.

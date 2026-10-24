@@ -51,9 +51,11 @@ describe("plan catalogue", () => {
 });
 
 describe("the free trial", () => {
-  it("is offered to starter only, once", () => {
+  it("is offered to starter and growth (KS_SERVER_v14_TRIAL_GROWTH), once", () => {
     expect(trialStatus(starter(), t0)).toBe("available");
-    expect(trialStatus({ ...starter(), plan: "growth" }, t0)).toBe("not_offered");
+    expect(trialStatus({ ...starter(), plan: "growth" }, t0)).toBe("available");
+    expect(trialStatus({ ...inTrial(), plan: "growth" }, t0)).toBe("active");
+    expect(effectivePlan({ ...inTrial(), plan: "growth" }, t0)).toBe("pro");
     expect(trialStatus({ ...starter(), plan: "pro" }, t0)).toBe("not_offered");
     expect(trialStatus(inTrial(), t0)).toBe("active");
     expect(trialStatus(inTrial(), new Date(t0.getTime() + 14 * DAY))).toBe("used");
@@ -80,10 +82,18 @@ describe("the free trial", () => {
     expect(allowancesFor(starter(), t0)).toMatchObject({ minutes_per_seat: 50, texts_per_seat: 100, trial_bonus_minutes: 0, trial_bonus_texts: 0 });
   });
 
+  it("on growth keeps growth's own calls/texts (never fewer), with pro chats and storage", () => {
+    expect(allowancesFor({ ...inTrial(), plan: "growth" }, t0)).toEqual({
+      minutes_per_seat: 500, texts_per_seat: 500, assistant_chats: null, storage_gb_per_seat: 50,
+      trial_bonus_minutes: 0, trial_bonus_texts: 0,
+    });
+  });
+
   it("checkFeature says when a feature is open only because of the trial", () => {
     expect(checkFeature(starter(), "contacts", t0)).toEqual({ allowed: true, viaTrial: false });
     expect(checkFeature(starter(), "sso", t0)).toEqual({ allowed: false, required_plan: "pro", trial_available: true });
-    expect(checkFeature({ ...starter(), plan: "growth" }, "sso", t0)).toEqual({ allowed: false, required_plan: "pro", trial_available: false });
+    expect(checkFeature({ ...starter(), plan: "growth" }, "sso", t0)).toEqual({ allowed: false, required_plan: "pro", trial_available: true });
+    expect(checkFeature({ ...inTrial(), plan: "growth" }, "sso", t0)).toEqual({ allowed: true, viaTrial: true });
     // KS_SERVER_v9_PORTAL_PLANS
     expect(checkFeature(starter(), "lender_portal", t0)).toEqual({ allowed: true, viaTrial: false });
     expect(checkFeature(starter(), "broker_portal", t0)).toEqual({ allowed: false, required_plan: "growth", trial_available: true });

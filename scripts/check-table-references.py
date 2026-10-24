@@ -31,6 +31,8 @@ NOT_TABLES = {
     "campaign_budget", "ad_group", "ad_group_ad", "conversion_action",
     # BF_SERVER_NEGATIVE_GUARD_v623 - GAQL resources read by googleAdsNegativeGuard.ts.
     "ad_group_criterion", "campaign_criterion", "campaign_shared_set", "shared_criterion",
+    # KS_SERVER_v14_RETENTION - a TEMP table the purge creates inside its own transaction (src/plans/purge.ts).
+    "released_now",
 }
 
 
