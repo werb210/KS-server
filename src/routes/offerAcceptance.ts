@@ -157,6 +157,8 @@ router.post("/:id/confirm-acceptance", requireAuth, requireAuthorization({ roles
       WHERE id::text = $1`,
     [row.application_id, fundedAmount, id, rawCurrency],
   ).catch((e) => console.warn("[offer_accept] funded_amount write failed", e instanceof Error ? e.message : String(e)));
+  // KS_SERVER_v13_QUICKBOOKS - funded: the fee invoice moves to the funded amount and is marked paid.
+  { const { queueFeeInvoice } = await import("../services/feeAgreement/mediaFeeAgreement.js"); await queueFeeInvoice(row.application_id, "funded"); }
 
   // Fire SignNow envelope on the lender's term sheet (best-effort).
   try {

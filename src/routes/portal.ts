@@ -1530,6 +1530,9 @@ router.patch(
           WHERE id::text = ($1)::text`,
         [applicationId, fundedAmount],
       ).catch((e) => console.warn("[status] funded_amount write failed", e instanceof Error ? e.message : String(e)));
+      // KS_SERVER_v13_QUICKBOOKS - funded: the fee invoice moves to the funded amount and is marked paid.
+      const { queueFeeInvoice } = await import("../services/feeAgreement/mediaFeeAgreement.js");
+      await queueFeeInvoice(applicationId, "funded");
     }
     res.status(200).json({ ok: true, applicationId, status });
   })
