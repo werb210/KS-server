@@ -26,7 +26,8 @@ export async function postToOps(
   // KS_SERVER_v9_FRAUD - the shared watchlist paths (see src/fraud/watchlist.ts).
   path: "usage-reports" | "requests" | "tickets" | "watchlist/report" | "watchlist/withdraw" | "watchlist/check" | "watchlist/opt-in"
     // KS_STAFF_DIRECTORY_v1 - the staff list (hashes only, see src/staffDirectory/sync.ts).
-    | "staff-directory",
+    | "staff-directory"
+    | "beta/enrolment" | "beta/feedback", // KS_SERVER_BETA_v1
   body: unknown,
   opts: { env?: NodeJS.ProcessEnv; fetchImpl?: OpsFetch } = {},
 ): Promise<OpsResult> {
