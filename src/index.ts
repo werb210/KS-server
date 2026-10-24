@@ -463,6 +463,11 @@ export async function start(): Promise<void> {
     await workerStagger();
     try { const w = startUsageReportWorker(pool); workerStops.push(w.stop); if (w.started) console.log("[startup] usage-report worker started"); }
     catch (err) { console.error("[startup] usage-report worker failed to start:", err); }
+    // KS_STAFF_DIRECTORY_v1 - the staff list (hashes) to Keystone operations, so the apps find this server by email/phone.
+    const { startStaffDirectoryWorker } = await import("./workers/staffDirectoryWorker.js");
+    await workerStagger();
+    try { const w = startStaffDirectoryWorker(pool); workerStops.push(w.stop); if (w.started) console.log("[startup] staff-directory worker started"); }
+    catch (err) { console.error("[startup] staff-directory worker failed to start:", err); }
     // KS_SERVER_v8_PURGE - a cancelled licensee's data is deleted 180 days after cancellation (with warnings).
     // KS_SERVER_v9_FRAUD - the fraud checks queue, the watchlist sync and the inside-job alerts.
     const { startFraudWorker } = await import("./workers/fraudWorker.js");

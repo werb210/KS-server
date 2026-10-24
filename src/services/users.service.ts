@@ -8,6 +8,7 @@ import { setUserStatus } from "../modules/users/users.service.js";
 import { clearStaffUserCache } from "../auth/staffUserState.js"; // BF_SERVER_v789_STAFF_USER_STATE
 import { recordAuditEvent } from "../modules/audit/audit.service.js";
 import { logger } from "../server/utils/logger.js";
+import { requestStaffDirectorySync } from "../staffDirectory/sync.js"; // KS_STAFF_DIRECTORY_v1
 
 /**
  * Schemas
@@ -227,6 +228,7 @@ export async function updateMe(req: Request, res: Response) {
          last_login_at`,
       values
     );
+    requestStaffDirectorySync(); // KS_STAFF_DIRECTORY_v1 - the email or phone may have changed
     res["json"]({ ok: true, data: normalizeUserRecord(updated.rows[0] as UserRecord) });
   } catch (err) {
     handleUserError(res, err, requestId);
@@ -395,6 +397,7 @@ export async function adminUpdateUser(req: Request, res: Response) {
       metadata: normalized,
     }).catch(() => undefined);
 
+    requestStaffDirectorySync(); // KS_STAFF_DIRECTORY_v1
     res["json"](normalizeUserRecord(updated));
   } catch (err) {
     handleUserError(res, err, requestId);
@@ -432,6 +435,7 @@ export async function createUser(req: Request, res: Response) {
 
     await db.query(`UPDATE users SET silo = $1, silos = $2 WHERE id = $3`, [requestedSilo, requestedSilos, (user as any).id]);
 
+    requestStaffDirectorySync(); // KS_STAFF_DIRECTORY_v1
     res.status(201).json({
       ok: true,
       user,
@@ -465,6 +469,7 @@ export async function deleteUser(req: Request, res: Response) {
       ...(userAgent ? { userAgent } : {}),
     };
     await setUserStatus(statusPayload);
+    requestStaffDirectorySync(); // KS_STAFF_DIRECTORY_v1 - a removed person is taken out of the directory
 
     res.status(200).json({ ok: true });
   } catch (err) {
