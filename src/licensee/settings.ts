@@ -214,3 +214,60 @@ export async function adminLicensee(db: Q, env: NodeJS.ProcessEnv = process.env)
     },
   };
 }
+
+// ---- KS_SERVER_v15_BRAND_SYNC - branding pushed by Keystone operations (KS-Ops) ----------------------------------
+// The colours, font and logo chosen at sign-up arrive with the plan push (PUT /api/plan { branding }). Rule: the
+// licensee's admin wins. A field takes the pushed value while it is empty or still equal to what operations pushed
+// last time; once the admin has set a different value on the Company page, later pushes leave it alone (and the pushed
+// value is only recorded in ops_branding).
+export const OPS_BRAND_FIELDS = ["primary_color", "accent_color", "background_color", "font_family", "logo_url"] as const;
+export type OpsBrandField = (typeof OPS_BRAND_FIELDS)[number];
+
+/** Checks a pushed branding object. Not an object = invalid; a field that is not a valid value (say an http logo
+ *  address) is skipped with a warning, so branding can never hold up a plan or status push. */
+export function parseOpsBranding(raw: unknown): { ok: true; value: Partial<Record<OpsBrandField, string>> | undefined } | { ok: false } {
+  if (raw === undefined || raw === null) return { ok: true, value: undefined };
+  if (typeof raw !== "object" || Array.isArray(raw)) return { ok: false };
+  const out: Partial<Record<OpsBrandField, string>> = {};
+  for (const f of OPS_BRAND_FIELDS) {
+    const v = (raw as Record<string, unknown>)[f];
+    if (v === undefined) continue;
+    const c = v === null || typeof v === "string" ? checkField(f, v ?? "") : null;
+    if (!c || !c.ok) {
+      console.warn(`[licensee] pushed branding ${f} ignored: ${c && !c.ok ? c.error : "not a string"}`);
+      continue;
+    }
+    out[f] = c.value;
+  }
+  return { ok: true, value: out };
+}
+
+export async function applyOpsBranding(db: Q, branding: Partial<Record<OpsBrandField, string>>)
+  : Promise<{ applied: OpsBrandField[]; kept: OpsBrandField[] }> {
+  const r = await db.query(`SELECT ${OPS_BRAND_FIELDS.join(", ")}, ops_branding FROM licensee_settings WHERE id = 1`);
+  const row = r.rows[0] ?? {};
+  const last: Record<string, unknown> = row.ops_branding && typeof row.ops_branding === "object" ? row.ops_branding : {};
+  const applied: OpsBrandField[] = [];
+  const kept: OpsBrandField[] = [];
+  for (const f of OPS_BRAND_FIELDS) {
+    if (!(f in branding)) continue;
+    const current = String(row[f] ?? "").trim();
+    const lastPushed = String(last[f] ?? "").trim();
+    const incoming = branding[f] ?? "";
+    if (current === incoming) continue;
+    if (current === "" || current.toLowerCase() === lastPushed.toLowerCase()) applied.push(f);
+    else kept.push(f);
+  }
+  const nextLast = { ...last, ...branding };
+  const cols = applied;
+  const params = [JSON.stringify(nextLast), ...cols.map((f) => branding[f] ?? "")];
+  await db.query(
+    `INSERT INTO licensee_settings (id, updated_by, ops_branding${cols.map((c) => `, ${c}`).join("")})
+     VALUES (1, 'ks-ops', $1::jsonb${cols.map((_, i) => `, $${i + 2}`).join("")})
+     ON CONFLICT (id) DO UPDATE SET ops_branding = $1::jsonb${cols.map((c, i) => `, ${c} = $${i + 2}`).join("")}${cols.length ? ", updated_by = 'ks-ops', updated_at = now()" : ""}`,
+    params,
+  );
+  clearLicenseeCache();
+  if (applied.length) await getLicenseeSettings(db);
+  return { applied, kept };
+}

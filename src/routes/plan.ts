@@ -5,6 +5,9 @@
 //   PUT  /api/plan                   operations only (X-KS-Ops-Key = KS_OPS_KEY): { plan?, extra_storage_blocks?, status?, addons? }
 //                                    addons = { bank_connect?: boolean } (KS_SERVER_BANK_CONNECT_ADDON; not a plan feature)
 //                                    beta_features = [...] this copy's whole beta list (KS_SERVER_BETA_v1, see beta/flags.ts)
+//                                    branding = { primary_color, accent_color, background_color, font_family, logo_url }
+//                                      chosen at sign-up (KS_SERVER_v15_BRAND_SYNC; the admin's own edits win, see
+//                                      licensee/settings.ts applyOpsBranding)
 //   GET  /api/plan/usage-report?period=YYYY-MM   operations only: the UsageReport (KS_SERVER_v8_USAGE)
 // Licensee admins cannot change their own plan; that is set by operations.
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -14,6 +17,7 @@ import { auth, requireAuthorization } from "../middleware/auth.js";
 import { ROLES } from "../auth/roles.js";
 import { safeHandler } from "../middleware/safeHandler.js";
 import { brandName } from "../licensee/brand.js";
+import { applyOpsBranding, parseOpsBranding } from "../licensee/settings.js";
 import { featureDef, isPlan, isServiceStatus, trialStatus } from "../plans/catalogue.js";
 import { bodies, salesEmail, sendPlanMail } from "../plans/email.js";
 import { planOverview, storageFor } from "../plans/overview.js";
@@ -147,12 +151,16 @@ router.put("/", safeHandler(async (req: any, res) => {
   if (!addons.ok) return res.status(400).json({ ok: false, error: "invalid_addons" });
   const beta = parseBetaPatch(req.body?.beta_features);
   if (!beta.ok) return res.status(400).json({ ok: false, error: "invalid_beta_features" });
+  const branding = parseOpsBranding(req.body?.branding); // KS_SERVER_v15_BRAND_SYNC
+  if (!branding.ok) return res.status(400).json({ ok: false, error: "invalid_branding" });
   const planChange = plan !== undefined || blocks.value !== undefined || status !== undefined || addons.value !== undefined;
-  if (!planChange && beta.value === undefined) return res.status(400).json({ ok: false, error: "nothing_to_change" });
+  if (!planChange && beta.value === undefined && branding.value === undefined) return res.status(400).json({ ok: false, error: "nothing_to_change" });
   const by = String(req.headers["x-ks-ops-user"] ?? "ops").slice(0, 120);
   if (planChange) await setPlan(db(), { plan: plan as any, extra_storage_blocks: blocks.value, status: status as any, addons: addons.value }, by);
   if (beta.value !== undefined) await setBetaFeatures(db(), beta.value);
-  return res.json(await planOverview(db()));
+  const brandResult = branding.value !== undefined ? await applyOpsBranding(db(), branding.value) : undefined;
+  const overview = await planOverview(db());
+  return res.json(brandResult ? { ...overview, branding: brandResult } : overview);
 }));
 
 export default router;
