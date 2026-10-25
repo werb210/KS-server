@@ -6,6 +6,7 @@ import { askAI } from "../../modules/ai/openai.service.js";
 import { loadCrmTimeline } from "../../routes/crm/timeline.js";
 import { contactContextSections } from "./contactContext.js"; // BF_SERVER_CRM_CONTEXT_v653
 import { logWarnSwallowed } from "../../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
+import { fetchSiteText, isFreeEmailDomain } from "../../modules/crmUnify/webSource.js"; // BF_SERVER_v856_CRM_UNIFY
 import { websiteUrl } from "../../licensee/urls.js"; // KS_SERVER_v4_BRANDING
 
 const FREE_EMAIL = new Set([
@@ -25,7 +26,7 @@ export function businessDomain(website: unknown, email: unknown): string | null 
   }
   const match = /@([a-z0-9.-]+\.[a-z]{2,})$/i.exec(String(email ?? "").trim());
   const domain = match?.[1]?.toLowerCase() ?? null;
-  return domain && !FREE_EMAIL.has(domain) ? domain : null;
+  return domain && !FREE_EMAIL.has(domain) && !isFreeEmailDomain(domain) ? domain : null; // BF_SERVER_v856_CRM_UNIFY
 }
 
 function isPrivateIp(ip: string): boolean {
@@ -95,7 +96,9 @@ export async function companyBackground(domain: string | null): Promise<string |
     return { rows: [] as { summary: string | null; fresh: boolean }[] };
   });
   if (cached.rows[0]?.fresh) return cached.rows[0].summary;
-  const text = await fetchHomepage(domain);
+  // BF_SERVER_v856_CRM_UNIFY - http/https only, private/loopback/link-local refused after DNS and on every redirect,
+  // size/time/redirect limits (modules/crmUnify/webSource.ts). fetchHomepage below is no longer used.
+  const text = (await fetchSiteText(domain))?.text ?? null;
   let summary: string | null = null;
   if (text && text.length > 200) {
     summary = (await askAI([
