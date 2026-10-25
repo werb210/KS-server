@@ -137,6 +137,7 @@ import licenseeRoutes from "./licensee.js"; // KS_SERVER_v1_LICENSEE
 import planRoutes from "./plan.js"; // KS_SERVER_v6_PLANS
 import provisionRoutes from "./provision.js"; // KS_SERVER_v15_PROVISION
 import dataExportRoutes from "./dataExport.js"; // KS_SERVER_v8_DATA_EXPORT
+import dataImportRoutes from "./dataImport.js"; // KS_SERVER_v16_DATA_IMPORT
 import fraudRoutes from "./fraud.js"; // KS_SERVER_v9_FRAUD
 import retentionRoutes from "./retention.js"; // KS_SERVER_v14_RETENTION
 import pgiRoutes from "./pgi.js"; // KS_SERVER_v11_PGI
@@ -356,6 +357,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/plan", router: planRoutes }, // KS_SERVER_v6_PLANS
   { path: "/provision", router: provisionRoutes }, // KS_SERVER_v15_PROVISION - KS-Ops automatic provisioning (ops key)
   { path: "/export", router: dataExportRoutes }, // KS_SERVER_v8_DATA_EXPORT - Admin
+  { path: "/data-import", router: dataImportRoutes }, // KS_SERVER_v16_DATA_IMPORT - Admin: the Import data wizard
   { path: "/fraud", router: fraudRoutes }, // KS_SERVER_v9_FRAUD - staff; individual checks gated per route
   { path: "/retention", router: retentionRoutes }, // KS_SERVER_v14_RETENTION - staff status; Admin holds and report
   { path: "/pgi", router: pgiRoutes }, // KS_SERVER_v11_PGI - PGI referrals to the insurance partner (every plan)
