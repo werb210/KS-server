@@ -1,6 +1,8 @@
 // KS_SERVER_v8_SUPPORT_TICKETS - support tickets from the licensee's staff to Keystone operations.
 // Each ticket is stored here first (support_tickets) and then relayed to KS-Ops (POST /api/licensees/{id}/tickets).
 // A relay that fails is kept with its error; the ticket still exists locally and the caller is told it was not sent.
+// KS_SERVER_v17_TICKET_FOLLOW_UPS - follow-up replies (support_ticket_messages) are relayed to
+// POST /api/licensees/{id}/tickets/{ops_ticket_id}/messages the same way.
 import { brandName } from "../licensee/brand.js";
 import { opsConfig, postToOps, type OpsFetch } from "./opsLink.js";
 import type { Q } from "./state.js";
@@ -48,6 +50,9 @@ export async function createTicket(
     priority: input.priority,
     company_name: brandName(),
     created_by: { id: by.id || null, email: by.email ?? null, name: by.name ?? null, role: by.role ?? null },
+    // KS-Ops reads the requester from these.
+    ...(by.name ? { requester_name: by.name } : {}),
+    ...(by.email ? { requester_email: by.email } : {}),
     created_at: new Date(ticket.created_at ?? Date.now()).toISOString(),
   }, opts);
   if (!r.ok) {
@@ -66,4 +71,63 @@ export async function createTicket(
 export async function listTickets(db: Q, limit = 200): Promise<Record<string, any>[]> {
   const r = await db.query(`SELECT ${COLS} FROM support_tickets ORDER BY created_at DESC LIMIT $1`, [limit]);
   return r.rows;
+}
+
+// ---- KS_SERVER_v17_TICKET_FOLLOW_UPS ----
+
+const MSG_COLS = "id, ticket_id, created_by, body, ops_message_id, relayed_at, relay_error, created_at";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function checkMessage(raw: any): { ok: true; value: { body: string } } | { ok: false; errors: Record<string, string> } {
+  const body = String(raw?.body ?? raw?.message ?? "").trim();
+  if (!body) return { ok: false, errors: { body: "required" } };
+  if (body.length > 10_000) return { ok: false, errors: { body: "10,000 characters at most" } };
+  return { ok: true, value: { body } };
+}
+
+/** One ticket with its follow-up messages, oldest first; null when there is no such ticket. */
+export async function getTicket(db: Q, id: string): Promise<{ ticket: Record<string, any>; messages: Record<string, any>[] } | null> {
+  if (!UUID_RE.test(id)) return null;
+  const t = await db.query(`SELECT ${COLS} FROM support_tickets WHERE id = $1`, [id]);
+  if (!t.rows[0]) return null;
+  const m = await db.query(`SELECT ${MSG_COLS} FROM support_ticket_messages WHERE ticket_id = $1 ORDER BY created_at`, [id]);
+  return { ticket: t.rows[0], messages: m.rows };
+}
+
+/**
+ * A follow-up reply on a ticket: stored, then relayed to KS-Ops on the ticket's operations id. A ticket that never
+ * reached operations keeps the reply locally with relay_error "ticket_not_relayed". Null when there is no such ticket.
+ */
+export async function addTicketMessage(
+  db: Q, ticketId: string, body: string, by: Author, opts: { env?: NodeJS.ProcessEnv; fetchImpl?: OpsFetch } = {},
+): Promise<{ message: Record<string, any>; relayed: boolean; relay_error: string | null } | null> {
+  if (!UUID_RE.test(ticketId)) return null;
+  const t = await db.query(`SELECT ${COLS} FROM support_tickets WHERE id = $1`, [ticketId]);
+  const ticket = t.rows[0];
+  if (!ticket) return null;
+  const ins = await db.query(
+    `INSERT INTO support_ticket_messages (ticket_id, created_by, body) VALUES ($1, $2, $3) RETURNING ${MSG_COLS}`,
+    [ticketId, by.id || null, body],
+  );
+  const message = ins.rows[0];
+  const fail = async (error: string) => {
+    console.warn("[support-tickets] follow-up not relayed", { ticket: ticketId, message: message.id, error });
+    const u = await db.query(`UPDATE support_ticket_messages SET relay_error = $2 WHERE id = $1 RETURNING ${MSG_COLS}`, [message.id, error.slice(0, 500)]);
+    return { message: u.rows[0] ?? { ...message, relay_error: error }, relayed: false, relay_error: error };
+  };
+  if (!opsConfig(opts.env)) return fail("ops_not_configured");
+  if (!ticket.ops_ticket_id) return fail("ticket_not_relayed");
+  const r = await postToOps(`tickets/${encodeURIComponent(String(ticket.ops_ticket_id))}/messages`, {
+    body,
+    local_message_id: message.id,
+    ...(by.name ? { requester_name: by.name } : {}),
+    ...(by.email ? { requester_email: by.email } : {}),
+  }, opts);
+  if (!r.ok) return fail(r.error);
+  const opsId = r.body?.message_id ?? r.body?.id ?? null;
+  const u = await db.query(
+    `UPDATE support_ticket_messages SET ops_message_id = $2, relayed_at = now(), relay_error = NULL WHERE id = $1 RETURNING ${MSG_COLS}`,
+    [message.id, opsId == null ? null : String(opsId)],
+  );
+  return { message: u.rows[0] ?? message, relayed: true, relay_error: null };
 }

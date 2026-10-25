@@ -27,7 +27,8 @@ export async function postToOps(
   path: "usage-reports" | "requests" | "tickets" | "watchlist/report" | "watchlist/withdraw" | "watchlist/check" | "watchlist/opt-in"
     // KS_STAFF_DIRECTORY_v1 - the staff list (hashes only, see src/staffDirectory/sync.ts).
     | "staff-directory"
-    | "beta/enrolment" | "beta/feedback", // KS_SERVER_BETA_v1
+    | "beta/enrolment" | "beta/feedback" // KS_SERVER_BETA_v1
+    | `tickets/${string}/messages`, // KS_SERVER_v17_TICKET_FOLLOW_UPS
   body: unknown,
   opts: { env?: NodeJS.ProcessEnv; fetchImpl?: OpsFetch } = {},
 ): Promise<OpsResult> {
