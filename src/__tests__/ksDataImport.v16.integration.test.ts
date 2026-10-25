@@ -1,4 +1,4 @@
-// KS_SERVER_v14_DATA_IMPORT - the import wizard against real Postgres: the migration (twice), uploads through the
+// KS_SERVER_v16_DATA_IMPORT - the import wizard against real Postgres: the migration (twice), uploads through the
 // routes, preview, dry run (nothing written), the run with dedupe and cross-file links, documents, the error CSV,
 // undo (created rows removed, changed fields restored unless edited since), a Keystone export zip, a resumed job
 // and admin-only access. Only blob storage is an in-memory fake.
@@ -33,7 +33,7 @@ import { pool } from "../db.js";
 import dataImportRoutes from "../routes/dataImport.js";
 import { claimNextJob, runQueuedJobs, CHUNK } from "../import/engine.js";
 
-const MIGRATION = "migrations/2026_10_28_ks_v14_data_import.sql";
+const MIGRATION = "migrations/2026_10_30_ks_v16_data_import.sql";
 const ADMIN = randomUUID();
 const STAFF = randomUUID();
 const TAG = randomUUID().slice(0, 8);
@@ -71,7 +71,7 @@ async function dryRunAndRun(id: string) {
 }
 
 // Real jobs over real rows: generous timeouts, since CI runs the integration files in parallel.
-describe("KS v14 data import (real Postgres)", { timeout: 180_000 }, () => {
+describe("KS v16 data import (real Postgres)", { timeout: 180_000 }, () => {
   beforeAll(async () => {
     await pool.query(readFileSync(MIGRATION, "utf8"));
     await pool.query(readFileSync(MIGRATION, "utf8")); // safe to run again
@@ -89,6 +89,9 @@ describe("KS v14 data import (real Postgres)", { timeout: 180_000 }, () => {
       const items = await pool.query(`SELECT entity_table, entity_id FROM import_batch_items WHERE batch_id = $1 AND action = 'created' AND undone_at IS NULL ORDER BY id DESC`, [id]);
       for (const it of items.rows) await pool.query(`DELETE FROM ${it.entity_table} WHERE id::text = $1`, [it.entity_id]);
     }
+    await pool.query(`DELETE FROM crm_notes WHERE body LIKE $1`, [`%${TAG}%`]);
+    await pool.query(`DELETE FROM applications WHERE name LIKE $1`, [`%${TAG}%`]);
+    await pool.query(`DELETE FROM companies WHERE name LIKE $1`, [`%${TAG}%`]);
     await pool.query(`DELETE FROM import_batches WHERE id = ANY($1::uuid[])`, [batches]);
     await pool.query(`DELETE FROM import_external_ids WHERE external_id LIKE $1 OR batch_id IS NULL AND entity_id NOT IN (SELECT id::text FROM contacts UNION ALL SELECT id::text FROM companies UNION ALL SELECT id::text FROM applications)`, [`%${TAG}%`]);
     await pool.query(`DELETE FROM import_mappings WHERE name LIKE $1`, [`%${TAG}%`]);
@@ -247,6 +250,15 @@ describe("KS v14 data import (real Postgres)", { timeout: 180_000 }, () => {
         (SELECT count(*)::int FROM crm_notes n WHERE n.application_id = a.id) AS notes
         FROM applications a JOIN contacts c ON c.id = a.contact_id JOIN companies co ON co.id = a.company_id WHERE a.name = $1`, [`Export deal ${TAG}`])).rows[0];
     expect(row).toEqual({ pipeline_state: "Off to Lender", email: email("export"), company: `Export Co ${TAG}`, owner: ADMIN, notes: 1 });
+    // A legal hold on the imported deal keeps it, its note, its contact and its company through an undo.
+    const deal = (await pool.query(`SELECT id FROM applications WHERE name = $1`, [`Export deal ${TAG}`])).rows[0].id;
+    await pool.query(`INSERT INTO legal_holds (target_type, target_id, reason) VALUES ('application', $1, 'Litigation')`, [deal]);
+    await auth(request(app()).post(`/api/data-import/batches/${up.batch.id}/undo`));
+    await runQueuedJobs(pool, deps);
+    const undone = (await auth(request(app()).get(`/api/data-import/batches/${up.batch.id}`))).body.batch;
+    expect(undone.undo_summary).toMatchObject({ removed: 0, held: 4 });
+    expect((await pool.query(`SELECT count(*)::int AS n FROM applications WHERE id = $1`, [deal])).rows[0].n).toBe(1);
+    await pool.query(`UPDATE legal_holds SET released_at = now(), release_reason = 'test' WHERE target_id = $1`, [deal]);
   });
 
   it("only a finished dry run can be run, and a job whose worker stopped is picked up again", async () => {

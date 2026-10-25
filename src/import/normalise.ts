@@ -1,4 +1,4 @@
-// KS_SERVER_v14_DATA_IMPORT - turning one mapped source row into the values Keystone stores, with the problems found
+// KS_SERVER_v16_DATA_IMPORT - turning one mapped source row into the values Keystone stores, with the problems found
 // in it. Pure: no database. Used by the preview (row errors), the dry run and the run.
 import { FIELDS, type RecordType } from "./fields.js";
 

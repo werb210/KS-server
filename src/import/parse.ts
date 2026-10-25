@@ -1,4 +1,4 @@
-// KS_SERVER_v14_DATA_IMPORT - reading the files a licensee brings: CSV (comma, semicolon or tab), XLSX (first sheet),
+// KS_SERVER_v16_DATA_IMPORT - reading the files a licensee brings: CSV (comma, semicolon or tab), XLSX (first sheet),
 // and zips (a Keystone export, or documents plus a mapping CSV). Rows are produced one at a time by generators, so a
 // job walks a file of tens of thousands of rows without building a second copy of it in memory.
 import JSZip from "jszip";

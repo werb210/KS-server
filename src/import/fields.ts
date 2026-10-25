@@ -1,4 +1,4 @@
-// KS_SERVER_v14_DATA_IMPORT - what can be imported: the record types, the Keystone fields of each, the column names
+// KS_SERVER_v16_DATA_IMPORT - what can be imported: the record types, the Keystone fields of each, the column names
 // HubSpot / Salesforce / Pipedrive / a plain spreadsheet use for them, auto-matching and the downloadable templates.
 
 export const RECORD_TYPES = ["contacts", "companies", "lenders", "lender_products", "applications", "notes", "documents"] as const;

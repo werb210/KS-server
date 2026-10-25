@@ -2,7 +2,7 @@
 
 Admins bring their records from another system with **Settings > Import data** in the portal. The server side is
 `/api/data-import` (`src/routes/dataImport.ts`), the code in `src/import/`, and the background worker
-`src/workers/dataImportWorker.ts`. Tables come from `migrations/2026_10_28_ks_v14_data_import.sql`.
+`src/workers/dataImportWorker.ts`. Tables come from `migrations/2026_10_30_ks_v16_data_import.sql`.
 
 ## What can be imported
 
@@ -55,7 +55,8 @@ in `metadata.import`. Imported documents skip OCR and the tamper scan (they were
 6. **Undo** (`POST /batches/:id/undo`). Newest change first: rows the import created are deleted (with their stored
    files and anything that cascades from them, such as notes and documents added to an imported deal later), and fields
    it changed are put back to their earlier values - except a field someone has edited since, which is left as it is
-   and counted as "kept".
+   and counted as "kept". A record under an active legal hold (a held deal, its notes and documents, and its
+   contact and company) is never deleted by undo; it is counted as "held".
 
 Every upload, dry run, run and undo is written to the audit log (`audit_events`, `event_type = 'data_import'`).
 

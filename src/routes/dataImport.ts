@@ -1,4 +1,4 @@
-// KS_SERVER_v14_DATA_IMPORT - /api/data-import (Admin): the "Import data" wizard in Settings.
+// KS_SERVER_v16_DATA_IMPORT - /api/data-import (Admin): the "Import data" wizard in Settings.
 //   GET    /presets                     record types, fields, sources, Keystone stages, limits
 //   GET    /templates/:type             template CSV for a record type
 //   GET    /mappings  POST /mappings  DELETE /mappings/:id      saved column mappings

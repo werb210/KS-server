@@ -1,4 +1,4 @@
-// KS_SERVER_v14_DATA_IMPORT - an uploaded file as a sequence of import items. Three shapes:
+// KS_SERVER_v16_DATA_IMPORT - an uploaded file as a sequence of import items. Three shapes:
 //   table     a CSV or XLSX of one record type; the admin's column mapping turns each row into Keystone fields
 //   documents a zip of files plus a CSV/XLSX saying which deal or contact (and category) each file belongs to
 //   keystone  a Keystone export zip (GET /api/export): tables/<table>.jsonl in dependency order, ids kept as the

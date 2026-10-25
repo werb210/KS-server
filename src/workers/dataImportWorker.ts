@@ -1,4 +1,4 @@
-// KS_SERVER_v14_DATA_IMPORT - runs the import wizard's background jobs (dry run, run, undo), one at a time across
+// KS_SERVER_v16_DATA_IMPORT - runs the import wizard's background jobs (dry run, run, undo), one at a time across
 // every instance (claimedTick). Polls every 10 seconds; the routes also kick it the moment a job is queued. A job
 // whose instance stopped mid-way is picked up again after a few minutes and resumes where its last chunk ended.
 import type { Pool } from "pg";

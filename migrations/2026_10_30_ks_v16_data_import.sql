@@ -1,4 +1,4 @@
--- KS_SERVER_v14_DATA_IMPORT - the admin "Import data" wizard (src/import/, src/routes/dataImport.ts): a licensee moving
+-- KS_SERVER_v16_DATA_IMPORT - the admin "Import data" wizard (src/import/, src/routes/dataImport.ts): a licensee moving
 -- in from HubSpot, Salesforce, Pipedrive, a spreadsheet or a Keystone export zip. Safe to run again.
 --
 -- import_batches: one upload and everything done with it (dry run, run, undo). The uploaded file lives in blob

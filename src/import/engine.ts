@@ -1,4 +1,4 @@
-// KS_SERVER_v14_DATA_IMPORT - writing imported rows, the dry run, the background run and undo.
+// KS_SERVER_v16_DATA_IMPORT - writing imported rows, the dry run, the background run and undo.
 //
 // Every row goes through normalise() (pure) and then the writer for its record type inside a SAVEPOINT, so a bad row
 // is recorded as an error and the rest carry on. Matching an existing record (all within the batch's silo, like the
@@ -743,13 +743,38 @@ export async function runImport(pool: PoolLike, batchId: string, deps: JobDeps):
   });
 }
 
+const HOLD_TARGET: Record<string, string> = { applications: "application", contacts: "contact", companies: "company" };
+
+/** A record under an active legal hold (or a document or note of a held deal or contact) is never deleted by undo. */
+async function underLegalHold(db: Db, table: string, id: string): Promise<boolean> {
+  let target: [string, string] | null = HOLD_TARGET[table] ? [HOLD_TARGET[table], id] : null;
+  if (!target && (table === "documents" || table === "crm_notes" || table === "contact_documents")) {
+    const col = table === "contact_documents" ? "contact_id" : "application_id";
+    const r = await db.query(`SELECT ${col}::text AS ref FROM ${table} WHERE id::text = $1`, [id]);
+    const ref = r.rows[0]?.ref;
+    if (ref) target = [table === "contact_documents" ? "contact" : "application", String(ref)];
+  }
+  if (!target) return false;
+  // The contact or company of a held deal stays too.
+  if (target[0] === "contact" || target[0] === "company") {
+    const col = target[0] === "contact" ? "contact_id" : "company_id";
+    const viaDeal = await db.query(
+      `SELECT 1 FROM legal_holds h JOIN applications a ON a.id::text = h.target_id
+        WHERE h.target_type = 'application' AND h.released_at IS NULL AND a.${col}::text = $1 LIMIT 1`, [target[1]]);
+    if (viaDeal.rows.length) return true;
+  }
+  const h = await db.query(`SELECT 1 FROM legal_holds WHERE target_type = $1 AND target_id = $2 AND released_at IS NULL LIMIT 1`, target);
+  return h.rows.length > 0;
+}
+
 /** Undo: newest change first. Created rows are deleted (and their stored files); changed fields are put back while
- *  they still hold the imported value - a field someone has edited since is left as it is. */
+ *  they still hold the imported value - a field someone has edited since is left as it is. Records under a legal
+ *  hold are kept (counted as held). */
 export async function runUndo(pool: PoolLike, batchId: string, deps: JobDeps): Promise<void> {
   const batch = await loadBatch(pool, batchId);
   if (!batch) return;
   const prev = ((batch as any).undo_summary ?? {}) as Record<string, number>;
-  const summary = { removed: prev.removed ?? 0, restored: prev.restored ?? 0, kept: prev.kept ?? 0, failed: prev.failed ?? 0 };
+  const summary = { removed: prev.removed ?? 0, restored: prev.restored ?? 0, kept: prev.kept ?? 0, held: prev.held ?? 0, failed: prev.failed ?? 0 };
   const types = new Map<string, Map<string, string>>();
   const colTypes = async (db: Db, table: string) => {
     let t = types.get(table);
@@ -776,7 +801,9 @@ export async function runUndo(pool: PoolLike, batchId: string, deps: JobDeps): P
           if (!UNDO_TABLES.has(table)) { await client.query(`UPDATE import_batch_items SET undone_at = now() WHERE id = $1`, [it.id]); continue; }
           await client.query("SAVEPOINT undo_item");
           try {
-            if (it.action === "created") {
+            if (it.action === "created" && (await underLegalHold(client, table, String(it.entity_id)))) {
+              summary.held++;
+            } else if (it.action === "created") {
               const del = await client.query(`DELETE FROM ${table} WHERE id::text = $1`, [String(it.entity_id)]);
               if (del.rowCount) summary.removed++;
               if (it.blob_name) blobs.push(String(it.blob_name));
