@@ -70,7 +70,8 @@ async function dryRunAndRun(id: string) {
   return { dry: ready.dry_run, done };
 }
 
-describe("KS v14 data import (real Postgres)", () => {
+// Real jobs over real rows: generous timeouts, since CI runs the integration files in parallel.
+describe("KS v14 data import (real Postgres)", { timeout: 180_000 }, () => {
   beforeAll(async () => {
     await pool.query(readFileSync(MIGRATION, "utf8"));
     await pool.query(readFileSync(MIGRATION, "utf8")); // safe to run again
@@ -81,7 +82,7 @@ describe("KS v14 data import (real Postgres)", () => {
       ($1, 'Old Jane', 'Old', 'Jane', $2, '403-555-0100', 'Clerk', 'BF', now(), now()),
       ($3, 'Phone Only', 'Phone', 'Only', NULL, '+1 (587) 555-0199', NULL, 'BF', now(), now())`,
       [randomUUID(), email("jane"), randomUUID()]);
-  });
+  }, 60_000);
 
   afterAll(async () => {
     for (const id of batches) {
@@ -93,7 +94,7 @@ describe("KS v14 data import (real Postgres)", () => {
     await pool.query(`DELETE FROM import_mappings WHERE name LIKE $1`, [`%${TAG}%`]);
     await pool.query(`DELETE FROM contacts WHERE email LIKE $1 OR phone = '+1 (587) 555-0199'`, [`%-${TAG}@example.com`]);
     await pool.query(`DELETE FROM users WHERE id = ANY($1::uuid[])`, [[ADMIN, STAFF]]);
-  });
+  }, 120_000);
 
   it("is for admins only", async () => {
     const r = await request(app()).get("/api/data-import/presets").set("Authorization", `Bearer ${staffToken}`);
