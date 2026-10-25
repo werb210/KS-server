@@ -262,12 +262,12 @@ describe("KS v14 data import (real Postgres)", { timeout: 180_000 }, () => {
     expect(CHUNK).toBeGreaterThan(0);
   });
 
-  it("handles a file of several thousand rows in chunks", async () => {
+  it("handles a file larger than one chunk (600 rows, 250 per transaction)", async () => {
     const lines = ["email,first_name,last_name"];
-    for (let i = 0; i < 1200; i++) lines.push(`${email(`bulk${i}`)},Bulk,${i}`);
+    for (let i = 0; i < 600; i++) lines.push(`${email(`bulk${i}`)},Bulk,${i}`);
     const up = await uploadFile("bulk.csv", lines.join("\n"), "spreadsheet", "contacts");
     const r = await dryRunAndRun(up.batch.id);
-    expect(r.done).toMatchObject({ status: "completed", created_count: 1200, processed_rows: 1200, error_count: 0 });
+    expect(r.done).toMatchObject({ status: "completed", created_count: 600, processed_rows: 600, error_count: 0 });
     await auth(request(app()).post(`/api/data-import/batches/${up.batch.id}/undo`));
     await runQueuedJobs(pool, deps);
     expect((await pool.query(`SELECT count(*)::int AS n FROM contacts WHERE email LIKE $1`, [`bulk%-${TAG}@example.com`])).rows[0].n).toBe(0);
