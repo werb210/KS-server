@@ -75,7 +75,9 @@ describe("KS v16 data import (real Postgres)", { timeout: 180_000 }, () => {
   beforeAll(async () => {
     await pool.query(readFileSync(MIGRATION, "utf8"));
     await pool.query(readFileSync(MIGRATION, "utf8")); // safe to run again
-    await pool.query(`INSERT INTO users (id, email, active, role, first_name, last_name) VALUES ($1, $2, true, 'Admin', 'Pat', 'Admin'), ($3, $4, true, 'Staff', 'Sam', 'Staff')`,
+    // Inactive on purpose: other integration files run alongside this one and notify every active Admin.
+    // (Signing in is not affected: the test auth loader builds the user from the token.)
+    await pool.query(`INSERT INTO users (id, email, active, role, first_name, last_name) VALUES ($1, $2, false, 'Admin', 'Pat', 'Admin'), ($3, $4, false, 'Staff', 'Sam', 'Staff')`,
       [ADMIN, email("admin"), STAFF, email("staff")]);
     // An existing contact the import will match by email, and one it will match by phone.
     await pool.query(`INSERT INTO contacts (id, name, first_name, last_name, email, phone, job_title, silo, created_at, updated_at) VALUES
