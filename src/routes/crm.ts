@@ -27,6 +27,7 @@ import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILE
 import { logWarn } from "../observability/logger.js"; // BF_SERVER_v789_WAITLIST_NO_TAKEOVER
 import { emitAutomationEvent } from "../modules/automation/automationEngine.js"; // BF_SERVER_v786_WORKFLOW_GRAPH
 import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
+import { lockedAmong, refuseIfLocked } from "../retention/retention.js"; // KS_SERVER_v14_RETENTION
 
 const router = Router();
 
@@ -1199,6 +1200,7 @@ router.delete("/contacts/:id", requireAdmin, safeHandler(async (req: any, res: a
   const id = String(req.params.id);
   if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ error: "invalid_id" });
   const silo = String(getSilo(res) ?? req.user?.silo ?? "BF").toUpperCase();
+  if (await refuseIfLocked(req, res, "contact", id)) return; // KS_SERVER_v14_RETENTION
   const { rowCount } = await pool.query(
     `DELETE FROM contacts WHERE id = $1 AND silo = $2`, [id, silo],
   );
@@ -1210,6 +1212,7 @@ router.delete("/companies/:id", requireAdmin, safeHandler(async (req: any, res: 
   const id = String(req.params.id);
   if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({ error: "invalid_id" });
   const silo = String(getSilo(res) ?? req.user?.silo ?? "BF").toUpperCase();
+  if (await refuseIfLocked(req, res, "company", id)) return; // KS_SERVER_v14_RETENTION
   const { rowCount } = await pool.query(
     `DELETE FROM companies WHERE id = $1 AND silo = $2`, [id, silo],
   );
@@ -1537,6 +1540,9 @@ router.post('/contacts/bulk-delete', requireCrmWrite, safeHandler(async (req: an
   );
   const protectedIds = protectedRes.rows.map((r:any)=>r.id);
   if (protectedIds.length) return res.status(409).json({ error: 'fk_protected', protectedIds });
+  // KS_SERVER_v14_RETENTION - a legal hold (on the contact or its company) blocks the whole batch.
+  const locked = await lockedAmong('contact', selected);
+  if (locked.length) return res.status(423).json({ error: 'retention_locked', code: 'retention_locked', message: locked[0].message, locked, protectedIds: locked.map((l) => l.id) });
   const out = await pool.query(`DELETE FROM contacts WHERE id = ANY($1::uuid[]) AND silo = $2`, [selected, silo]);
   res.json({ deleted: out.rowCount ?? 0, protectedIds: [] });
 }));
@@ -1560,6 +1566,8 @@ router.post('/companies/bulk-delete', safeHandler(async (req: any, res: any) => 
   const selected = ids(req.body?.ids); const silo = getSilo(res);
   const prot = await pool.query(`SELECT id FROM companies WHERE id = ANY($1::uuid[]) AND silo = $2 AND (EXISTS (SELECT 1 FROM contacts c WHERE c.company_id = companies.id) OR EXISTS (SELECT 1 FROM applications a WHERE a.company_id = companies.id))`, [selected, silo]);
   const protectedIds = prot.rows.map((r:any)=>r.id); if (protectedIds.length) return res.status(409).json({ error:'fk_protected', protectedIds });
+  const locked = await lockedAmong('company', selected); // KS_SERVER_v14_RETENTION - a legal hold blocks the whole batch
+  if (locked.length) return res.status(423).json({ error: 'retention_locked', code: 'retention_locked', message: locked[0].message, locked, protectedIds: locked.map((l) => l.id) });
   const out = await pool.query(`DELETE FROM companies WHERE id = ANY($1::uuid[]) AND silo = $2`, [selected, silo]); res.json({ deleted: out.rowCount ?? 0, protectedIds: [] });
 }));
 

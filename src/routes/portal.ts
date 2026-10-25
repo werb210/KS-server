@@ -69,6 +69,7 @@ import { bankCoverageForApplication, type Coverage } from "../services/documents
 import { loadNamingContext, sanitizeDisplayName, uniqueDisplayName } from "../services/documents/documentNaming.js"; // BF_SERVER_RENAME_ON_ACCEPT_v264
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
 import { clientUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { refuseIfLocked } from "../retention/retention.js"; // KS_SERVER_v14_RETENTION
 // BF_APP_ID_CAST_v39 — Block 39-A — applications.id comparisons cast to text
 
 const router = Router();
@@ -833,6 +834,8 @@ router.post(
           AND (name IS NULL OR name = '' OR name IN ('Draft application', 'Untitled Application'))
           AND created_at < NOW() - ($2 || ' days')::interval
           AND (silo IS NULL OR UPPER(silo) = UPPER($1))
+          AND NOT EXISTS (SELECT 1 FROM retention_applications ra
+                           WHERE ra.application_id = applications.id::text AND (ra.is_record OR ra.held))
         ORDER BY created_at ASC
         LIMIT 200`,
       [silo, String(days)]
@@ -880,6 +883,7 @@ router.delete(
       res.status(404).json({ code: "not_found", message: "Application not found." });
       return;
     }
+    if (await refuseIfLocked(req, res, "application", applicationId)) return; // KS_SERVER_v14_RETENTION
     // BF_SERVER_BLOCK_v691_DELETE_FK_DISCOVERY_v1
     // The hand-maintained childTables list (v189) kept missing tables that
     // carry an FK to applications without ON DELETE CASCADE (call_logs,

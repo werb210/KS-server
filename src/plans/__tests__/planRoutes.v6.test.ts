@@ -33,7 +33,7 @@ function fakeDb(sql: string, params: unknown[] = []): { rows: any[]; rowCount: n
     return ok([]);
   }
   if (/UPDATE licensee_plan\s+SET trial_started_at/.test(sql)) {
-    if (!row || row.plan !== "starter" || row.trial_started_at) return ok([]);
+    if (!row || !["starter", "growth"].includes(row.plan) || row.trial_started_at) return ok([]);
     Object.assign(row, { trial_started_at: new Date(String(params[0])), trial_ends_at: new Date(String(params[1])), trial_started_by: params[2] });
     return ok([{ ...row }]);
   }
@@ -42,7 +42,7 @@ function fakeDb(sql: string, params: unknown[] = []): { rows: any[]; rowCount: n
     const blocksIdx = sql.match(/extra_storage_blocks = \$(\d+)/);
     if (planIdx) row!.plan = params[Number(planIdx[1]) - 1];
     if (blocksIdx) row!.extra_storage_blocks = params[Number(blocksIdx[1]) - 1];
-    if (planIdx && row!.plan !== "starter" && row!.trial_ends_at && row!.trial_ends_at > new Date()) row!.trial_ends_at = new Date();
+    if (planIdx && row!.plan === "pro" && row!.trial_ends_at && row!.trial_ends_at > new Date()) row!.trial_ends_at = new Date();
     return ok([]);
   }
   const marker = sql.match(/UPDATE licensee_plan SET (\w+_sent_at) = (now\(\)|NULL)/);
@@ -133,11 +133,17 @@ describe("POST /api/plan/trial", () => {
     expect(again.body).toEqual({ ok: false, error: "trial_not_available", reason: "active" });
   });
 
-  it("is not offered on growth", async () => {
+  it("is offered on growth too (KS_SERVER_v14_TRIAL_GROWTH), but not on pro", async () => {
     row!.plan = "growth";
     const r = await request(app()).post("/api/plan/trial").set("Authorization", `Bearer ${token("Admin")}`);
-    expect(r.status).toBe(409);
-    expect(r.body.reason).toBe("not_offered");
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ plan: "growth", effective_plan: "pro", trial: { status: "active" } });
+    row!.plan = "pro";
+    row!.trial_started_at = null;
+    clearPlanCache();
+    const p = await request(app()).post("/api/plan/trial").set("Authorization", `Bearer ${token("Admin")}`);
+    expect(p.status).toBe(409);
+    expect(p.body.reason).toBe("not_offered");
   });
 });
 
@@ -150,15 +156,20 @@ describe("PUT /api/plan (operations)", () => {
     expect(row!.plan).toBe("starter");
   });
 
-  it("sets the plan and extra storage blocks, and moving off starter ends a running trial", async () => {
+  it("sets the plan and extra storage blocks; moving to growth keeps a running trial, moving to pro ends it", async () => {
     process.env.KS_OPS_KEY = "ops-secret-123";
     await request(app()).post("/api/plan/trial").set("Authorization", `Bearer ${token("Admin")}`);
     expect((await request(app()).put("/api/plan").set("X-KS-Ops-Key", "ops-secret-123").send({ plan: "gold" })).status).toBe(400);
     const r = await request(app()).put("/api/plan").set("X-KS-Ops-Key", "ops-secret-123").send({ plan: "growth", extra_storage_blocks: 2 });
     expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({ plan: "growth", effective_plan: "growth", trial: { status: "not_offered" } });
-    expect(r.body.storage).toMatchObject({ extra_blocks: 2, allowance_bytes: (2 * 25 + 2 * 50) * GB });
+    expect(r.body).toMatchObject({ plan: "growth", effective_plan: "pro", trial: { status: "active" } });
+    expect(row!.trial_ends_at.getTime()).toBeGreaterThan(Date.now());
+    const p = await request(app()).put("/api/plan").set("X-KS-Ops-Key", "ops-secret-123").send({ plan: "pro" });
+    expect(p.body).toMatchObject({ plan: "pro", effective_plan: "pro", trial: { status: "not_offered" } });
     expect(row!.trial_ends_at.getTime()).toBeLessThanOrEqual(Date.now());
+    const back = await request(app()).put("/api/plan").set("X-KS-Ops-Key", "ops-secret-123").send({ plan: "growth" });
+    expect(back.body).toMatchObject({ plan: "growth", effective_plan: "growth", trial: { status: "used" } });
+    expect(back.body.storage).toMatchObject({ extra_blocks: 2, allowance_bytes: (2 * 25 + 2 * 50) * GB });
   });
 });
 

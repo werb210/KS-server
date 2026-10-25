@@ -6,7 +6,7 @@
 // instances never both send and a failed send is retried on the next run. Uploads are never blocked.
 import { brandName, supportEmail } from "../licensee/brand.js";
 import {
-  STORAGE_BLOCK_GB, STORAGE_BLOCK_PRICE, TRIAL_WARNING_DAYS, featureDef, storageNoticeDue, trialActive,
+  STORAGE_BLOCK_GB, STORAGE_BLOCK_PRICE, TRIAL_WARNING_DAYS, featureDef, storageNoticeDue, trialActive, trialOffered,
 } from "./catalogue.js";
 import { bodies, salesEmail, sendPlanMail, type PlanMailer } from "./email.js";
 import { storageFor } from "./overview.js";
@@ -42,25 +42,27 @@ function keepLine(): string {
   return `To keep them, an admin can press "Request upgrade" on the Plan page in the staff portal, or email ${salesEmail()}.`;
 }
 
-export function trialWarningMail(company: string, daysLeft: number, used: string[]) {
+const PLAN_TITLE: Record<string, string> = { starter: "Starter", growth: "Growth", pro: "Pro" };
+
+export function trialWarningMail(company: string, daysLeft: number, used: string[], plan: string = "starter") {
   const usedLine = used.length
     ? `During the trial your team used: ${used.join(", ")}.`
     : "Your team has not used the trial features yet - there is still time to try call recording, AI call summaries, templates and the rest.";
   return {
     subject: `${company}: your free trial ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`,
     ...bodies([
-      `Your free trial of every feature ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"}. After that ${company} goes back to the Starter plan.`,
+      `Your free trial of every feature ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"}. After that ${company} goes back to the ${PLAN_TITLE[plan] ?? "Starter"} plan.`,
       usedLine,
       keepLine(),
     ]),
   };
 }
 
-export function trialEndedMail(company: string, used: string[]) {
+export function trialEndedMail(company: string, used: string[], plan: string = "starter") {
   return {
     subject: `${company}: your free trial has ended`,
     ...bodies([
-      `Your free trial has ended and ${company} is back on the Starter plan. Your data is all still there.`,
+      `Your free trial has ended and ${company} is back on the ${PLAN_TITLE[plan] ?? "Starter"} plan. Your data is all still there.`,
       used.length ? `During the trial your team used: ${used.join(", ")}. These are now switched off.` : "The trial features are now switched off.",
       keepLine(),
     ]),
@@ -100,14 +102,14 @@ export async function runPlanNotices(db: Q, now: Date = new Date(), send: PlanMa
     await release(db, marker);
   };
 
-  // Trial: 3 days left, then ended (only if still on starter - an upgrade ends a trial without this email).
-  if (state.plan === "starter" && state.trial_started_at && state.trial_ends_at) {
+  // Trial: 3 days left, then ended (only if still on starter or growth - moving to pro ends a trial without this email).
+  if (trialOffered(state.plan) && state.trial_started_at && state.trial_ends_at) {
     const msLeft = state.trial_ends_at.getTime() - now.getTime();
     if (trialActive(state, now) && msLeft <= TRIAL_WARNING_DAYS * 86_400_000 && !row.trial_warning_sent_at) {
-      await deliver("trial_warning_sent_at", trialWarningMail(company, Math.max(1, Math.ceil(msLeft / 86_400_000)), await usedFeatureLabels(db)));
+      await deliver("trial_warning_sent_at", trialWarningMail(company, Math.max(1, Math.ceil(msLeft / 86_400_000)), await usedFeatureLabels(db), state.plan));
     }
     if (!trialActive(state, now) && !row.trial_ended_sent_at) {
-      await deliver("trial_ended_sent_at", trialEndedMail(company, await usedFeatureLabels(db)));
+      await deliver("trial_ended_sent_at", trialEndedMail(company, await usedFeatureLabels(db), state.plan));
     }
   }
 

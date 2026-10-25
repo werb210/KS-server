@@ -73,9 +73,13 @@ describe("KS v6 plans and trial (real Postgres)", () => {
 
     process.env.KS_OPS_KEY = "integration-ops-key";
     expect((await request(app()).put("/api/plan").send({ plan: "pro" })).status).toBe(401);
-    const p = await request(app()).put("/api/plan").set("X-KS-Ops-Key", "integration-ops-key").send({ plan: "growth", extra_storage_blocks: 1 });
+    // KS_SERVER_v14_TRIAL_GROWTH - the trial runs on growth too, so moving starter -> growth keeps it; pro ends it.
+    const g = await request(app()).put("/api/plan").set("X-KS-Ops-Key", "integration-ops-key").send({ plan: "growth", extra_storage_blocks: 1 });
+    expect(g.body).toMatchObject({ plan: "growth", effective_plan: "pro", trial: { status: "active" }, storage: { extra_blocks: 1 } });
+    const p = await request(app()).put("/api/plan").set("X-KS-Ops-Key", "integration-ops-key").send({ plan: "pro" });
     expect(p.status).toBe(200);
-    expect(p.body).toMatchObject({ plan: "growth", effective_plan: "growth", trial: { status: "not_offered" }, storage: { extra_blocks: 1 } });
+    expect(p.body).toMatchObject({ plan: "pro", effective_plan: "pro", trial: { status: "not_offered" } });
+    await request(app()).put("/api/plan").set("X-KS-Ops-Key", "integration-ops-key").send({ plan: "growth" });
     const row = (await pool.query(`SELECT trial_ends_at, trial_ended_sent_at, updated_by FROM licensee_plan WHERE id = 1`)).rows[0];
     expect(new Date(row.trial_ends_at).getTime()).toBeLessThanOrEqual(Date.now());
     expect(row.trial_ended_sent_at).not.toBeNull();
