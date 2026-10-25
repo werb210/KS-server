@@ -135,6 +135,7 @@ import { createMountTracker } from "./_canonicalMount.js";
 import { siloMiddleware } from "../middleware/silo.js";
 import licenseeRoutes from "./licensee.js"; // KS_SERVER_v1_LICENSEE
 import planRoutes from "./plan.js"; // KS_SERVER_v6_PLANS
+import provisionRoutes from "./provision.js"; // KS_SERVER_v15_PROVISION
 import dataExportRoutes from "./dataExport.js"; // KS_SERVER_v8_DATA_EXPORT
 import fraudRoutes from "./fraud.js"; // KS_SERVER_v9_FRAUD
 import retentionRoutes from "./retention.js"; // KS_SERVER_v14_RETENTION
@@ -353,6 +354,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/templates", router: templatesRoutes, feature: "templates" }, // v693 // KS_SERVER_v6_PLANS
   { path: "/licensee", router: licenseeRoutes }, // KS_SERVER_v1_LICENSEE
   { path: "/plan", router: planRoutes }, // KS_SERVER_v6_PLANS
+  { path: "/provision", router: provisionRoutes }, // KS_SERVER_v15_PROVISION - KS-Ops automatic provisioning (ops key)
   { path: "/export", router: dataExportRoutes }, // KS_SERVER_v8_DATA_EXPORT - Admin
   { path: "/fraud", router: fraudRoutes }, // KS_SERVER_v9_FRAUD - staff; individual checks gated per route
   { path: "/retention", router: retentionRoutes }, // KS_SERVER_v14_RETENTION - staff status; Admin holds and report

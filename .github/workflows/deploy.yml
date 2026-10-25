@@ -126,6 +126,7 @@ jobs:
       count: ${{ steps.plan.outputs.count }}
       repo_credentials: ${{ steps.repo.outputs.credentials }}
       repo_webapp_name: ${{ steps.repo.outputs.webapp_name }}
+      repo_client_id: ${{ steps.repo.outputs.client_id }}
       repo_qbo_client_id: ${{ steps.repo.outputs.qbo_client_id }}
     steps:
       - uses: actions/checkout@v5
@@ -145,11 +146,13 @@ jobs:
         env:
           REPO_AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
           REPO_AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+          REPO_AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           REPO_QBO_CLIENT_ID: ${{ secrets.QBO_CLIENT_ID }}
         run: |
           {
             echo "credentials=$(printf '%s' "$REPO_AZURE_CREDENTIALS" | sha256sum | cut -d' ' -f1)"
             echo "webapp_name=$REPO_AZURE_WEBAPP_NAME"
+            echo "client_id=$REPO_AZURE_CLIENT_ID"
             echo "qbo_client_id=$(printf '%s' "$REPO_QBO_CLIENT_ID" | sha256sum | cut -d' ' -f1)"
           } >> "$GITHUB_OUTPUT"
 
@@ -212,6 +215,11 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.licensee-plan.outputs.matrix) }}
     environment: ${{ matrix.environment }}
+    # KS_OPS_AUTO_PROVISION_v1 - id-token lets the job sign in with the licensee's federated deploy identity.
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
     concurrency:
       group: deploy-ks-server-${{ matrix.code }}
       cancel-in-progress: false
@@ -223,12 +231,25 @@ jobs:
           ENVIRONMENT: ${{ matrix.environment }}
           AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
           AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           REPO_CREDENTIALS: ${{ needs.licensee-plan.outputs.repo_credentials }}
           REPO_WEBAPP_NAME: ${{ needs.licensee-plan.outputs.repo_webapp_name }}
+          REPO_CLIENT_ID: ${{ needs.licensee-plan.outputs.repo_client_id }}
+        # KS_OPS_AUTO_PROVISION_v1 - two ways to sign in, both from the licensee's own environment (a value inherited
+        # from the repository, i.e. the development copy's, never counts):
+        #   variables AZURE_CLIENT_ID + AZURE_TENANT_ID + AZURE_SUBSCRIPTION_ID  the managed identity ks-<code>-deploy
+        #             with a federated credential for this environment (automatic provisioning; no secret)
+        #   secret    AZURE_CREDENTIALS                                          a service principal's JSON (by hand)
         run: |
-          if [ -z "$AZURE_CREDENTIALS" ] ||
-             [ "$(printf '%s' "$AZURE_CREDENTIALS" | sha256sum | cut -d' ' -f1)" = "$REPO_CREDENTIALS" ]; then
-            echo "::error title=$CODE::Add the secret AZURE_CREDENTIALS (the licensee's deploy service principal) to the GitHub environment '$ENVIRONMENT'."
+          if [ -n "$AZURE_CLIENT_ID" ] && [ "$AZURE_CLIENT_ID" != "$REPO_CLIENT_ID" ] && [ -n "$AZURE_TENANT_ID" ] && [ -n "$AZURE_SUBSCRIPTION_ID" ]; then
+            echo "login=oidc" >> "$GITHUB_OUTPUT"
+          elif [ -n "$AZURE_CREDENTIALS" ] &&
+               [ "$(printf '%s' "$AZURE_CREDENTIALS" | sha256sum | cut -d' ' -f1)" != "$REPO_CREDENTIALS" ]; then
+            echo "login=creds" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error title=$CODE::Add to the GitHub environment '$ENVIRONMENT' the variables AZURE_CLIENT_ID, AZURE_TENANT_ID and AZURE_SUBSCRIPTION_ID (the licensee's deploy identity) or the secret AZURE_CREDENTIALS (its deploy service principal)."
             exit 1
           fi
           app="$AZURE_WEBAPP_NAME"
@@ -240,7 +261,16 @@ jobs:
         with:
           name: ks-server-release
 
+      - name: Azure Login (federated deploy identity)
+        if: steps.settings.outputs.login == 'oidc'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - name: Azure Login
+        if: steps.settings.outputs.login == 'creds'
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
