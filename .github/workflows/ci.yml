@@ -142,6 +142,20 @@ jobs:
         continue-on-error: true
         run: npm run test:integration -- --reporter=json --outputFile=/tmp/integration-report.json
 
+      - name: TEMP debug - failing integration tests as annotations
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json
+          r = json.load(open('/tmp/integration-report.json'))
+          for f in r.get('testResults', []):
+              if f.get('status') != 'passed':
+                  print('::error::FILE ' + f['name'].split('/')[-1] + ' ' + (f.get('message') or '')[:300].replace('\n', ' '))
+                  for a in f.get('assertionResults', []):
+                      if a.get('status') == 'failed':
+                          print('::error::' + a['title'][:120] + ' :: ' + ((a.get('failureMessages') or [''])[0])[:500].replace('\n', ' '))
+          PY
+
       - name: Integration ratchet
         # BF_SERVER_INTEGRATION_RATCHET_v221 - no continue-on-error here. A green
         # badge on a suite with 39 failing files is worse than a red one.
