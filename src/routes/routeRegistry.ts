@@ -142,6 +142,9 @@ import fraudRoutes from "./fraud.js"; // KS_SERVER_v9_FRAUD
 import retentionRoutes from "./retention.js"; // KS_SERVER_v14_RETENTION
 import pgiRoutes from "./pgi.js"; // KS_SERVER_v11_PGI
 import betaRoutes from "./beta.js"; // KS_SERVER_BETA_v1
+import ssoSettingsRoutes from "./ssoSettings.js"; // KS_SERVER_SSO_API_KEYS
+import apiKeysRoutes from "./apiKeys.js"; // KS_SERVER_SSO_API_KEYS
+import publicApiRoutes from "../publicApi/router.js"; // KS_SERVER_SSO_API_KEYS
 import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
 import { requireAuth, requireAuthAllowClient } from "../middleware/auth.js";
 import watchAuthRoutes from "../watch/authRoutes.js";
@@ -362,6 +365,11 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/retention", router: retentionRoutes }, // KS_SERVER_v14_RETENTION - staff status; Admin holds and report
   { path: "/pgi", router: pgiRoutes }, // KS_SERVER_v11_PGI - PGI referrals to the insurance partner (every plan)
   { path: "/beta", router: betaRoutes }, // KS_SERVER_BETA_v1 - beta feature flags and Labs (flags public, rest staff/Admin)
+  // KS_SERVER_SSO_API_KEYS - Pro: SSO settings and API keys (Admin), and the public REST API (API key; the plan is
+  // checked per request inside the router so a refused key answers in the API's own JSON error shape).
+  { path: "/sso-settings", router: ssoSettingsRoutes, feature: "sso" },
+  { path: "/api-keys", router: apiKeysRoutes, feature: "api_access" },
+  { path: "/open/v1", router: publicApiRoutes },
 ];
 
 export const PORTAL_ROUTE_REQUIREMENTS: Pick<ApiRoute, "method" | "path">[] = [

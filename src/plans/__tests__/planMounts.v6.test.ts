@@ -22,6 +22,8 @@ describe("plan-gated mounts", () => {
       "/broker-imports": "broker_portal",
       "/templates": "templates",
       "/reporting": "full_reports", // KS_SERVER_v7_NO_REPORTS_ON_STARTER
+      "/sso-settings": "sso", // KS_SERVER_SSO_API_KEYS
+      "/api-keys": "api_access", // KS_SERVER_SSO_API_KEYS
     });
     const api = Router();
     registerApiRouteMounts(api);
@@ -36,7 +38,7 @@ describe("plan-gated mounts", () => {
   });
 
   it("answers 402 on a starter copy", async () => {
-    for (const [path, feature] of [["/api/templates", "templates"], ["/api/admin/referrers", "referrer_portal"], ["/api/referrer/me", "referrer_portal"], ["/api/broker/me", "broker_portal"], ["/api/broker-imports", "broker_portal"], ["/api/watch/face", "watch_ipad_apps"], ["/api/reporting", "full_reports"]]) {
+    for (const [path, feature] of [["/api/templates", "templates"], ["/api/admin/referrers", "referrer_portal"], ["/api/referrer/me", "referrer_portal"], ["/api/broker/me", "broker_portal"], ["/api/broker-imports", "broker_portal"], ["/api/watch/face", "watch_ipad_apps"], ["/api/reporting", "full_reports"], ["/api/sso-settings", "sso"], ["/api/api-keys", "api_access"]]) {
       const r = await request(app).get(path);
       expect(r.status, path).toBe(402);
       expect(r.body).toMatchObject({ ok: false, error: "feature_not_in_plan", feature });
