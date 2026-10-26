@@ -1,4 +1,4 @@
-import { ALBERTA_TZ } from "../lib/albertaTime.js"; // BF_SERVER_ALBERTA_TIME_v743 - Alberta is UTC-6 all year
+import { brokerageTimeZone, zoneLabel } from "../lib/brokerageTime.js"; // KS_SETTINGS_PACK_v1_TIME_ZONE - the brokerage's zone (Settings > Company)
 // BF_SERVER_MEETING_ROOMS_v736 - dial-in conference rooms with access codes and join links.
 // A room opens 15 minutes before its start and stays open for its length plus 2 hours, so a
 // code can't be reused to get into someone else's meeting days later.
@@ -43,10 +43,10 @@ export function joinUrl(slug: string): string {
 }
 
 export function inviteText(room: Pick<MeetingRoom, "title" | "code" | "slug" | "starts_at">): string {
-  const when = new Date(room.starts_at).toLocaleString("en-CA", { timeZone: ALBERTA_TZ, dateStyle: "full", timeStyle: "short" });
+  const when = new Date(room.starts_at).toLocaleString("en-CA", { timeZone: brokerageTimeZone(), dateStyle: "full", timeStyle: "short" });
   return [
     room.title,
-    when + " (Alberta time)",
+    when + " (" + zoneLabel() + ")",
     "",
     "Join by phone: call " + dialInDisplay() + ", press 3, then enter access code " + room.code + " and press #.",
     "Meeting page: " + joinUrl(room.slug),

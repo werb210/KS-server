@@ -1,7 +1,7 @@
 // BF_SERVER_v786_WORKFLOW_GRAPH - workflow graph format (schema_version 2), shared with BF-portal v786.
 // Pure: no SQL. Types, condition evaluation, validation, v1 -> v2 conversion and the time helpers
 // the engine uses for delays and quiet hours.
-import { ALBERTA_TZ } from "../../lib/albertaTime.js";
+import { brokerageZoneName, computeZone } from "../../lib/brokerageTime.js"; // KS_SETTINGS_PACK_v1_TIME_ZONE
 import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export type Condition = { field: string; op: string; value?: unknown };
@@ -45,7 +45,7 @@ export function normalizeSettings(raw: unknown): Settings {
       enabled: typeof q.enabled === "boolean" ? q.enabled : true,
       start: /^\d{2}:\d{2}$/.test(String(q.start)) ? String(q.start) : "09:00",
       end: /^\d{2}:\d{2}$/.test(String(q.end)) ? String(q.end) : "20:00",
-      tz: typeof q.tz === "string" && q.tz ? q.tz : DEFAULT_TZ,
+      tz: typeof q.tz === "string" && q.tz ? q.tz : brokerageZoneName(), // KS_SETTINGS_PACK_v1_TIME_ZONE
     },
     unenrollOnGoal: typeof s.unenrollOnGoal === "boolean" ? s.unenrollOnGoal : true,
     testMode: s.testMode === true,
@@ -109,7 +109,8 @@ export function renderTokens(text: unknown, ctx: Record<string, unknown>): strin
 // ---- time ---------------------------------------------------------------------
 // BF_SERVER_ALBERTA_TIME_v743 - "America/Edmonton" is stored (it is what staff pick) but computed as
 // ALBERTA_TZ, since Alberta is UTC-6 all year and older tz data still falls back an hour.
-export const effectiveTz = (tz: string | null | undefined) => (!tz || tz === "America/Edmonton" ? ALBERTA_TZ : tz);
+// KS_SETTINGS_PACK_v1_TIME_ZONE - no zone means the brokerage's own (Settings > Company), not Alberta.
+export const effectiveTz = (tz: string | null | undefined) => computeZone(tz || brokerageZoneName());
 function zoneParts(at: Date, tz: string) {
   const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: effectiveTz(tz), hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", weekday: "short" })
     .formatToParts(at).map((x) => [x.type, x.value]));
@@ -134,7 +135,7 @@ export function durationMs(amount: unknown, unit: unknown): number {
 }
 
 /** Next instant at HH:MM in tz, strictly after now, on one of the weekdays (0 = Sunday; null = any day). */
-export function nextTimeOfDay(now: Date, time: string, weekdays: number[] | null | undefined, tz = DEFAULT_TZ): Date {
+export function nextTimeOfDay(now: Date, time: string, weekdays: number[] | null | undefined, tz: string = brokerageZoneName()): Date {
   const { h, m } = hm(time);
   const days = Array.isArray(weekdays) && weekdays.length ? weekdays.map(Number) : null;
   for (let i = 0; i <= 8; i += 1) {
@@ -150,7 +151,7 @@ export function nextTimeOfDay(now: Date, time: string, weekdays: number[] | null
 /** null when now is inside the allowed window; otherwise the next start of the window. */
 export function quietHoursRelease(now: Date, q: Settings["quietHours"] | null | undefined): Date | null {
   if (!q || !q.enabled) return null;
-  const tz = q.tz || DEFAULT_TZ;
+  const tz = q.tz || brokerageZoneName();
   const p = zoneParts(now, tz);
   const cur = p.h * 60 + p.min;
   const s = hm(q.start), e = hm(q.end);

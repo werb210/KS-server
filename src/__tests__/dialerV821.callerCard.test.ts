@@ -132,18 +132,19 @@ describe("<Client> custom parameters on inbound calls", () => {
     expect(xml).toMatch(new RegExp(`<Client[^>]*>${OWNER}</Client>`));
   });
 
-  it("reception engagement group: every member's <Client> carries the card", async () => {
+  it("phone menu group (KS_SETTINGS_PACK_v1_PHONE_MENU): every member's <Client> carries the card", async () => {
+    const S2 = "55555555-5555-4555-8555-555555555555";
+    const OPTS = [{ digit: "1", label: "sales", keywords: [], target: { type: "group", userIds: [OWNER, S2], strategy: "simultaneous" } }];
     h.query.mockImplementation(answerBySql([
       [CARD_SQL, { rows: [cardRow()] }],
-      [/FROM users u JOIN staff_presence sp ON sp\.user_id = u\.id\s+WHERE \(u\.first_name ILIKE \$1/, (_sql: string, params?: unknown[]) => ({
-        rows: String(params?.[0]).includes("todd")
-          ? [{ status: "available", twilio_identity: "todd-client", on_call: false, fresh: true, ringable: true, phone: null, standalone_watch: false, user_id: OWNER }]
-          : [],
-      })],
-      [/SELECT DISTINCT sp\.twilio_identity/, { rows: [{ twilio_identity: "staff-2" }] }],
+      [/FROM phone_menu_config/, { rows: [({ config: { greeting: { mode: "tts", text: "Hi.", audioId: null }, announceOptions: true,
+      hours: { enabled: false, weekly: { sun: [], mon: [], tue: [], wed: [], thu: [], fri: [], sat: [] } },
+      afterHoursGreeting: { mode: "tts", text: "Closed.", audioId: null }, afterHours: { type: "voicemail", userId: null }, options: OPTS,
+      noAnswer: { ringSeconds: 25, target: { type: "voicemail", userId: null } }, holidays: [] }, updated_at: null })] }],
+      [/WHERE u\.id::text = ANY\(\$1::text\[\]\)/, { rows: [{ user_id: OWNER, twilio_identity: "todd-client" }, { user_id: S2, twilio_identity: "staff-2" }] }],
     ]));
     const app = mountRouter((await import("../routes/reception.js")).default, "/api/webhooks/twilio/reception");
-    const res = await request(app).post("/api/webhooks/twilio/reception/intent?company=BF").type("form").send({ Digits: "1", From: CALLER, CallSid: "CA-card-2" });
+    const res = await request(app).post("/api/webhooks/twilio/reception/choice").type("form").send({ Digits: "1", From: CALLER, CallSid: "CA-card-2" });
     expect(res.text).toContain("<Identity>todd-client</Identity>");
     expect(res.text).toContain("<Identity>staff-2</Identity>");
     expect(res.text.match(/<Parameter name="callerName" value="Jane Client"\/>/g)).toHaveLength(2);

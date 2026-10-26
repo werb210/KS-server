@@ -4,6 +4,7 @@
 // repliedSince() already reads inbound rows, so sequences stop on email reply
 // with no engine change. Requires that reply mailbox to be O365-connected
 // (server-side OAuth flow already grants Mail.Read + a stored refresh token).
+import { isNeverLogged } from "../neverLog/neverLog.js"; // KS_SETTINGS_PACK_v1_NEVER_LOG
 import type { Pool } from "pg";
 import { getGraphForUser } from "../modules/o365/graphClient.js";
 import { claimedTick } from "./claim.js"; // BF_SERVER_v789_WORKER_CLAIM
@@ -62,6 +63,7 @@ async function pollOnce(pool: Pool): Promise<void> {
       const sender = String(m.from?.emailAddress?.address || "").toLowerCase();
       const msgId = String(m.internetMessageId || m.id || "");
       if (!sender || sender === mailbox || !msgId) continue;
+      if (await isNeverLogged(pool as any, sender)) continue; // KS_SETTINGS_PACK_v1_NEVER_LOG
 
       const c = await pool.query<{ id: string; silo: string }>(
         `SELECT id, silo FROM contacts WHERE lower(email) = $1 ORDER BY created_at LIMIT 1`,

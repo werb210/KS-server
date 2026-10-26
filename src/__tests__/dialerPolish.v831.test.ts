@@ -232,15 +232,13 @@ describe("caller ID directory", () => {
   });
 });
 
-describe("reception targets", () => {
-  it("matches the exact first name, or the user id set in the environment", async () => {
-    const { receptionFirstName, receptionUserId } = await import("../routes/reception.js");
-    expect(receptionFirstName("sales")).toBe("todd");
-    expect(receptionFirstName("underwriting")).toBe("andrew");
-    vi.stubEnv("RECEPTION_SALES_USER_ID", "44444444-4444-4444-8444-444444444444");
-    expect(receptionUserId("sales")).toBe("44444444-4444-4444-8444-444444444444");
-    vi.stubEnv("RECEPTION_SALES_USER_ID", "not-an-id");
-    expect(receptionUserId("sales")).toBeNull();
-    vi.unstubAllEnvs();
+describe("reception targets (KS_SETTINGS_PACK_v1_PHONE_MENU)", () => {
+  it("come from the brokerage's phone menu, not first names or environment settings", async () => {
+    const mod = await import("../routes/reception.js") as Record<string, unknown>;
+    expect(mod.receptionFirstName).toBeUndefined();
+    expect(mod.receptionUserId).toBeUndefined();
+    const { defaultMenu } = await import("../phoneMenu/menu.js");
+    const menu = defaultMenu("Acme Capital", [{ id: "44444444-4444-4444-8444-444444444444", first_name: "Sam", last_name: "Lee" }]);
+    expect(menu.options).toEqual([{ digit: "1", label: "Sam Lee", keywords: [], target: { type: "user", userId: "44444444-4444-4444-8444-444444444444" } }]);
   });
 });

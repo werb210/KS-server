@@ -146,13 +146,16 @@ export async function submitCreditReadiness(req: Request, res: Response) {
     const readinessFullName = String(fullName);
     const [readinessFirstName, ...readinessLastNameParts] = readinessFullName.trim().split(/\s+/);
     try {
-      await createContact(pool, {
+      const readinessContact = await createContact(pool, {
         first_name: readinessFirstName || readinessFullName,
         last_name: readinessLastNameParts.join(" "),
         email: String(email),
         phone: normalizedPhone,
         silo: "BF",
       });
+      // KS_SETTINGS_PACK_v1_LEAD_ROTATION - a new website lead gets an owner in turn (when the Admin turned it on).
+      const { assignRotatingOwner } = await import("../../leads/leadRotation.js");
+      await assignRotatingOwner(pool as any, (readinessContact as { id?: string } | undefined)?.id ?? null, "website");
       // #6 — tag the contact (not just the lead) so readiness leads are filterable in CRM.
       await pool.query(
         `UPDATE contacts

@@ -6,6 +6,7 @@
 // This is NOT presenceService's business-hours window, which is America/Regina on purpose (see albertaTime.ts).
 // Each person picks their own IANA zone here, and local wall-clock time comes from Intl, so DST is Intl's problem.
 type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[] }> };
+import { brokerageZoneName, computeZoneAt, DEFAULT_BROKERAGE_TIME_ZONE } from "../lib/brokerageTime.js"; // KS_SETTINGS_PACK_v1_TIME_ZONE
 
 export const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 export type DayKey = typeof DAY_KEYS[number];
@@ -21,7 +22,9 @@ export type CallHours = {
 };
 
 export const MAX_RANGES_PER_DAY = 3;
-export const DEFAULT_TIMEZONE = "America/Edmonton";
+// KS_SETTINGS_PACK_v1_TIME_ZONE - a person's hours default to the brokerage's zone (Settings > Company).
+export const DEFAULT_TIMEZONE = DEFAULT_BROKERAGE_TIME_ZONE;
+const defaultZone = (): string => brokerageZoneName();
 
 export function defaultWeekly(): WeeklyHours {
   const work: TimeRange[] = [["08:00", "18:00"]];
@@ -29,7 +32,7 @@ export function defaultWeekly(): WeeklyHours {
 }
 
 export function defaultCallHours(): CallHours {
-  return { enabled: false, timezone: DEFAULT_TIMEZONE, weekly: defaultWeekly(), urgentPassthrough: true, updatedAt: null };
+  return { enabled: false, timezone: defaultZone(), weekly: defaultWeekly(), urgentPassthrough: true, updatedAt: null };
 }
 
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -55,7 +58,7 @@ export function validateCallHoursInput(body: unknown):
   | { ok: false; error: string; message: string } {
   const b = (body ?? {}) as Record<string, unknown>;
   if (typeof b.enabled !== "boolean") return { ok: false, error: "invalid_enabled", message: "enabled must be true or false" };
-  const timezone = b.timezone === undefined ? DEFAULT_TIMEZONE : b.timezone;
+  const timezone = b.timezone === undefined ? defaultZone() : b.timezone;
   if (!isValidTimeZone(timezone)) return { ok: false, error: "invalid_timezone", message: "timezone must be an IANA time zone, e.g. America/Edmonton" };
   const urgentPassthrough = b.urgentPassthrough === undefined ? true : b.urgentPassthrough;
   if (typeof urgentPassthrough !== "boolean") return { ok: false, error: "invalid_urgent_passthrough", message: "urgentPassthrough must be true or false" };
@@ -99,7 +102,8 @@ export function localDayAndMinutes(now: Date, timeZone: string): { day: DayKey; 
 /** True when the person takes calls now: DND off, or now falls in one of today's ranges ([start, end)). */
 export function isWithinCallHours(hours: Pick<CallHours, "enabled" | "timezone" | "weekly">, now: Date = new Date()): boolean {
   if (!hours.enabled) return true;
-  const tz = isValidTimeZone(hours.timezone) ? hours.timezone : DEFAULT_TIMEZONE;
+  // KS_SETTINGS_PACK_v1_TIME_ZONE - Edmonton is UTC-6 all year from 2026-03-08 (older tz data says otherwise).
+  const tz = computeZoneAt(isValidTimeZone(hours.timezone) ? hours.timezone : defaultZone(), now);
   const { day, minutes: m } = localDayAndMinutes(now, tz);
   const ranges = Array.isArray(hours.weekly?.[day]) ? hours.weekly[day] : [];
   return ranges.some((r) => Array.isArray(r) && m >= minutes(r[0]) && m < minutes(r[1]));
@@ -122,7 +126,7 @@ export function rowToCallHours(row: any): CallHours {
   if (!row) return defaultCallHours();
   return {
     enabled: row.enabled === true,
-    timezone: isValidTimeZone(row.timezone) ? row.timezone : DEFAULT_TIMEZONE,
+    timezone: isValidTimeZone(row.timezone) ? row.timezone : defaultZone(),
     weekly: normalizeWeekly(typeof row.weekly === "string" ? safeJson(row.weekly) : row.weekly),
     urgentPassthrough: row.urgent_passthrough !== false,
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,

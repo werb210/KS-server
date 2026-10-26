@@ -1,7 +1,7 @@
 // BF_SERVER_REPORTS15_18_v786 - pipeline snapshots, issues, and the custom report builder. Boreal Financial silo.
 import { pool } from "../../db.js";
 import type { Ctx } from "./data2.js";
-import { ALBERTA_TZ } from "../../lib/albertaTime.js";
+import { brokerageTimeZone } from "../../lib/brokerageTime.js"; // KS_SETTINGS_PACK_v1_TIME_ZONE - the brokerage's zone (Settings > Company)
 
 function days(v: unknown, fallback: number): number {
   const n = Math.round(Number(v));
@@ -19,7 +19,7 @@ export async function takePipelineSnapshot(): Promise<number> {
       WHERE a.silo = 'BF' AND a.funded_at IS NULL AND COALESCE(a.status, '') <> 'DECLINED'
         AND COALESCE(a.pipeline_state, '') NOT ILIKE 'reject%' AND COALESCE(a.is_completed, false) = false
       GROUP BY 2
-     ON CONFLICT (snapshot_date, stage) DO UPDATE SET files = EXCLUDED.files, amount = EXCLUDED.amount, taken_at = now()`, [ALBERTA_TZ]); // Alberta is UTC-6 all year
+     ON CONFLICT (snapshot_date, stage) DO UPDATE SET files = EXCLUDED.files, amount = EXCLUDED.amount, taken_at = now()`, [brokerageTimeZone()]); // KS_SETTINGS_PACK_v1_TIME_ZONE
   return r.rowCount ?? 0;
 }
 

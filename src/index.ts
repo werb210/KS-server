@@ -210,6 +210,17 @@ export async function start(): Promise<void> {
     const { startDemoWorkers } = await import("./demo/index.js");
     startDemoWorkers(pool);
   }
+  // KS_SETTINGS_PACK_v1_SECURITY - every instance (workers or not) enforces the Admin's "require a passkey or two-step
+  // sign-in" switch; it is re-read every minute.
+  if (process.env.NODE_ENV !== "test") {
+    try {
+      const { pool } = await import("./db.js");
+      const { startSecuritySettingsRefresh } = await import("./security/sessions.js");
+      startSecuritySettingsRefresh(pool as any);
+    } catch (err) {
+      console.error("[startup] security settings refresh failed to start:", err);
+    }
+  }
   if (process.env.NODE_ENV !== "test" && !bfWorkersEnabled()) {
     console.warn("[startup] BF workers NOT started: BF_WORKERS_ENABLED=false (staging slot) - this instance sends no texts, emails or lender packages");
   }
@@ -440,6 +451,18 @@ export async function start(): Promise<void> {
     await workerStagger();
     try { const w = startTaskRemindersWorker(pool); workerStops.push(w.stop); console.log("[startup] task-reminders worker started"); }
     catch (err) { console.error("[startup] task-reminders worker failed to start:", err); }
+
+    // KS_SETTINGS_PACK_v1_NPS - post-funding surveys (Growth and Pro).
+    const { startNpsSurveyWorker } = await import("./workers/npsSurveyWorker.js");
+    await workerStagger();
+    try { const w = startNpsSurveyWorker(pool); workerStops.push(w.stop); console.log("[startup] nps-survey worker started"); }
+    catch (err) { console.error("[startup] nps-survey worker failed to start:", err); }
+
+    // KS_SETTINGS_PACK_v1_BOOKING - booking reminders 24 h and 1 h before.
+    const { startBookingRemindersWorker } = await import("./workers/bookingRemindersWorker.js");
+    await workerStagger();
+    try { const w = startBookingRemindersWorker(pool); workerStops.push(w.stop); console.log("[startup] booking-reminders worker started"); }
+    catch (err) { console.error("[startup] booking-reminders worker failed to start:", err); }
 
     // KS_SERVER_v11_PGI - PGI referrals to the insurance partner: send, forward documents, sync, resend replies.
     const { startPgiReferralWorker } = await import("./workers/pgiReferralWorker.js");

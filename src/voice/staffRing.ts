@@ -44,7 +44,8 @@ export function staffVoicemail(v: any, userId: string | null, prompt = "Please l
  * Outside call hours. urgentPassthrough: "{Name} is away right now... press 1" <Gather numDigits=1 timeout=6>, then
  * (no key) their voicemail; 1 -> ringUrl. Without passthrough: straight to their voicemail.
  */
-export function awayTwiml(v: any, args: { name: string; userId: string; urgentPassthrough: boolean; ring: "direct" | "sales" | "underwriting" }): void {
+// KS_SETTINGS_PACK_v1_PHONE_MENU - ring "menu": the person was chosen in the phone menu (their no-answer follows the menu).
+export function awayTwiml(v: any, args: { name: string; userId: string; urgentPassthrough: boolean; ring: "direct" | "menu" }): void {
   if (!args.urgentPassthrough) {
     v.say({ voice: VOICE }, `${args.name} is away right now.`);
     staffVoicemail(v, args.userId);
@@ -64,15 +65,18 @@ export async function ringDirectLine(v: any, q: Q, args: {
   owner: { userId: string; identity: string };
   from: string;
   callSid: string | null | undefined;
+  /** KS_SETTINGS_PACK_v1_PHONE_MENU - ring time (default 25 s) and a marker for the no-answer callback. */
+  ringSeconds?: number;
+  fromMenu?: boolean;
 }): Promise<{ watchCell: boolean; recorded: boolean }> {
   const watchCell = await verifiedWatchCell(q, args.owner.userId);
   const card = await callerCardForCall(q, args.from);
   const rec = await openInboundRecord(q, { callSid: args.callSid, from: args.from, card });
   // Canada is two-party consent: the caller hears the notice before anyone can answer a recorded call.
   if (rec) v.say({ voice: VOICE }, RECORDING_NOTICE);
-  const dlAction = `${getPublicBaseUrl()}${RECEPTION_BASE}/direct-unavailable?user=${encodeURIComponent(args.owner.userId)}${watchCell ? "&cell=1" : ""}`;
+  const dlAction = `${getPublicBaseUrl()}${RECEPTION_BASE}/direct-unavailable?user=${encodeURIComponent(args.owner.userId)}${watchCell ? "&cell=1" : ""}${args.fromMenu ? "&menu=1" : ""}`;
   const dial = v.dial({
-    answerOnBridge: true, timeout: watchCell ? CLIENT_FIRST_TIMEOUT_SECONDS : 25, callerId: args.from, action: dlAction, method: "POST",
+    answerOnBridge: true, timeout: watchCell ? CLIENT_FIRST_TIMEOUT_SECONDS : (args.ringSeconds ?? 25), callerId: args.from || undefined, action: dlAction, method: "POST",
     ...recordingDialAttrs(rec),
   } as any);
   // BF_SERVER_v829_DIALER_RELIABILITY - the leg callback also records who answered, so set it even with recording off.

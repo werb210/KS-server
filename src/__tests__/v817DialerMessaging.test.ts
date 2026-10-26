@@ -232,16 +232,23 @@ describe("5. incoming calls ring a registered dialler with a stale heartbeat", (
       const pass = (_req: unknown, _res: unknown, next: () => void) => next();
       return { twilioWebhookValidation: pass, validateTwilioWebhook: pass };
     });
+    const OPTIONS = [{ digit: "1", label: "sales", keywords: [], target: { type: "group", userIds: ["11111111-1111-4111-8111-111111111111"], strategy: "simultaneous" } }];
+    const MENU = { greeting: { mode: "tts", text: "Thank you for calling.", audioId: null }, announceOptions: true,
+  hours: { enabled: false, weekly: { sun: [], mon: [], tue: [], wed: [], thu: [], fri: [], sat: [] } },
+  afterHoursGreeting: { mode: "tts", text: "Closed.", audioId: null }, afterHours: { type: "voicemail", userId: null },
+  options: OPTIONS,
+  noAnswer: { ringSeconds: 25, target: { type: "voicemail", userId: null } }, holidays: [] };
     h.query.mockImplementation(answerBySql([
-      [/SELECT DISTINCT sp\.twilio_identity/, (sql: string) => ({ rows: /voice_token_at/.test(sql) && !/WHERE sp\.status = 'available'/.test(sql) ? [{ twilio_identity: "closed-ios-app" }] : [] })],
+      [/FROM phone_menu_config/, { rows: [{ config: MENU, updated_at: null }] }],
+      [/WHERE u\.id::text = ANY\(\$1::text\[\]\)/, (sql: string) => ({ rows: /voice_token_at/.test(sql) && !/WHERE sp\.status = 'available'/.test(sql) ? [{ user_id: "11111111-1111-4111-8111-111111111111", twilio_identity: "closed-ios-app" }] : [] })],
     ]));
     const router = (await import("../routes/reception.js")).default;
     const a = express();
     a.use(express.urlencoded({ extended: false }));
     a.use("/api/webhooks/twilio/reception", router);
-    const res = await request(a).post("/api/webhooks/twilio/reception/intent").type("form").send({ Digits: "1", From: "+14035550142" });
+    const res = await request(a).post("/api/webhooks/twilio/reception/choice").type("form").send({ Digits: "1", From: "+14035550142" });
     expect(res.status).toBe(200);
-    expect(res.text).toContain("<Client>closed-ios-app</Client>");
+    expect(res.text).toMatch(/<Client[^>]*>closed-ios-app<\/Client>/);
     vi.doUnmock("../middleware/twilioWebhookValidation.js");
   });
 

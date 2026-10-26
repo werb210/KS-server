@@ -134,6 +134,15 @@ import diagnosticsRoutes from "./diagnostics.js";
 import { createMountTracker } from "./_canonicalMount.js";
 import { siloMiddleware } from "../middleware/silo.js";
 import licenseeRoutes from "./licensee.js"; // KS_SERVER_v1_LICENSEE
+import phoneMenuRoutes from "./phoneMenu.js"; // KS_SETTINGS_PACK_v1_PHONE_MENU
+import bookingSettingsRoutes from "./bookingSettings.js"; // KS_SETTINGS_PACK_v1_BOOKING
+import privacyRoutes from "./privacy.js"; // KS_SETTINGS_PACK_v1_PRIVACY
+import securityRoutes from "./security.js"; // KS_SETTINGS_PACK_v1_SECURITY
+import neverLogRoutes from "./neverLog.js"; // KS_SETTINGS_PACK_v1_NEVER_LOG
+import leadRotationRoutes from "./leadRotation.js"; // KS_SETTINGS_PACK_v1_LEAD_ROTATION
+import blockedNumbersRoutes from "./blockedNumbers.js"; // KS_SETTINGS_PACK_v1_BLOCKED_NUMBERS
+import surveysRoutes from "./surveys.js"; // KS_SETTINGS_PACK_v1_NPS
+import taskDefaultsRoutes from "./taskDefaults.js"; // KS_SETTINGS_PACK_v1_TASK_DEFAULTS
 import planRoutes from "./plan.js"; // KS_SERVER_v6_PLANS
 import provisionRoutes from "./provision.js"; // KS_SERVER_v15_PROVISION
 import phoneNumbersRoutes from "./phoneNumbers.js"; // KS_SERVER_PHONE_PROVISIONING
@@ -372,6 +381,16 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/sso-settings", router: ssoSettingsRoutes, feature: "sso" },
   { path: "/api-keys", router: apiKeysRoutes, feature: "api_access" },
   { path: "/open/v1", router: publicApiRoutes },
+  // KS_SETTINGS_PACK_v1 - HubSpot-parity settings (each router checks its own roles).
+  { path: "/phone-menu", router: phoneMenuRoutes }, // Admin: Settings > Phone menu
+  { path: "/booking-settings", router: bookingSettingsRoutes }, // Admin: Settings > Booking pages; staff: own link
+  { path: "/privacy", router: privacyRoutes }, // public: cookie consent; Admin: privacy requests
+  { path: "/security", router: securityRoutes }, // staff: own sessions; Admin: anyone's, and the two-step switch
+  { path: "/never-log", router: neverLogRoutes }, // Admin: addresses and domains never logged to the CRM
+  { path: "/lead-rotation", router: leadRotationRoutes }, // Admin: round-robin owners for new leads; staff: away
+  { path: "/blocked-numbers", router: blockedNumbersRoutes }, // Admin: blocked callers and texters
+  { path: "/surveys", router: surveysRoutes }, // public answers; Admin settings and report gated per route (nps_survey)
+  { path: "/task-defaults", router: taskDefaultsRoutes }, // staff: follow-up task defaults and the prompt
 ];
 
 export const PORTAL_ROUTE_REQUIREMENTS: Pick<ApiRoute, "method" | "path">[] = [
@@ -425,7 +444,11 @@ export const ROUTES: ApiRoute[] = [
   { method: "POST", path: "/api/webhooks/twilio/reception/greeting", roles: [] },
   { method: "POST", path: "/api/webhooks/twilio/reception/company", roles: [] },
   { method: "POST", path: "/api/webhooks/twilio/reception/intent", roles: [] },
-  { method: "POST", path: "/api/webhooks/twilio/reception/unavailable", roles: [] },
+  { method: "POST", path: "/api/webhooks/twilio/reception/choice", roles: [] }, // KS_SETTINGS_PACK_v1_PHONE_MENU
+  { method: "POST", path: "/api/webhooks/twilio/reception/no-answer", roles: [] }, // KS_SETTINGS_PACK_v1_PHONE_MENU
+  { method: "POST", path: "/api/webhooks/twilio/reception/group-next", roles: [] }, // KS_SETTINGS_PACK_v1_PHONE_MENU
+  { method: "POST", path: "/api/webhooks/twilio/reception/ai", roles: [] }, // KS_SETTINGS_PACK_v1_PHONE_MENU
+  { method: "GET", path: "/api/webhooks/twilio/reception/audio/:id", roles: [] }, // KS_SETTINGS_PACK_v1_PHONE_MENU
   { method: "POST", path: "/api/webhooks/twilio/reception/fallback", roles: [] },
   { method: "POST", path: "/api/webhooks/twilio/reception/screen", roles: [] }, // BF_SERVER_v820_WATCH_CALLS
   { method: "POST", path: "/api/webhooks/twilio/reception/screen-result", roles: [] }, // BF_SERVER_v820_WATCH_CALLS

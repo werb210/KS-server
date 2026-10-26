@@ -171,14 +171,17 @@ describe("reception and direct-line calls answered in the app are recorded into 
     expect(callsMatching(h.query, OPEN_RECORD)).toHaveLength(0);
   });
 
-  it("reception named target: the <Dial> to the app records under rx_<CallSid>", async () => {
+  it("phone menu person (KS_SETTINGS_PACK_v1_PHONE_MENU): the <Dial> to the app records under rx_<CallSid>", async () => {
+    const OPTS = [{ digit: "2", label: "credit", keywords: [], target: { type: "user", userId: OWNER } }];
     h.query.mockImplementation(answerBySql([
-      [/FROM users u JOIN staff_presence sp ON sp\.user_id = u\.id\s+WHERE \(u\.first_name ILIKE \$1/, { rows: [{
-        status: "available", twilio_identity: OWNER, on_call: false, fresh: true, ringable: true, phone: null, standalone_watch: false, user_id: OWNER,
-      }] }],
+      [/FROM phone_menu_config/, { rows: [({ config: { greeting: { mode: "tts", text: "Hi.", audioId: null }, announceOptions: true,
+      hours: { enabled: false, weekly: { sun: [], mon: [], tue: [], wed: [], thu: [], fri: [], sat: [] } },
+      afterHoursGreeting: { mode: "tts", text: "Closed.", audioId: null }, afterHours: { type: "voicemail", userId: null }, options: OPTS,
+      noAnswer: { ringSeconds: 25, target: { type: "voicemail", userId: null } }, holidays: [] }, updated_at: null })] }],
+      [/SELECT sp\.twilio_identity, u\.first_name FROM users u LEFT JOIN staff_presence sp/, { rows: [{ twilio_identity: OWNER, first_name: "Pat" }] }],
       [OPEN_RECORD, recordOpened],
     ]));
-    const xml = await postWebhook("../routes/reception.js", "/api/webhooks/twilio/reception", "/intent?company=BF", { Digits: "2", From: CALLER, CallSid: CALL_SID });
+    const xml = await postWebhook("../routes/reception.js", "/api/webhooks/twilio/reception", "/choice", { Digits: "2", From: CALLER, CallSid: CALL_SID });
     expect(xml).toContain('record="record-from-answer-dual"');
     expect(xml).toContain(`conf=rx_${CALL_SID}`);
     expect(xml).toContain(`identity=${OWNER}`);

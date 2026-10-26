@@ -14,6 +14,16 @@ vi.mock("../db", async () => {
 });
 vi.mock("twilio", async () => await vi.importActual<typeof import("twilio")>("twilio"));
 
+// KS_SETTINGS_PACK_v1_PHONE_MENU - the brokerage's menu: 1 rings a person, 3 is the meeting dial-in.
+const MENU = { greeting: { mode: "tts", text: "Thank you for calling.", audioId: null }, announceOptions: true,
+  hours: { enabled: false, weekly: { sun: [], mon: [], tue: [], wed: [], thu: [], fri: [], sat: [] } },
+  afterHoursGreeting: { mode: "tts", text: "Closed.", audioId: null }, afterHours: { type: "voicemail", userId: null },
+  options: [{ digit: "1", label: "sales", keywords: [], target: { type: "user", userId: "11111111-1111-4111-8111-111111111111" } },
+    { digit: "3", label: "a scheduled meeting", keywords: ["meeting", "conference"], target: { type: "meeting" } }],
+  noAnswer: { ringSeconds: 25, target: { type: "voicemail", userId: null } }, holidays: [] };
+const menuRows = (sql: string) => (/FROM phone_menu_config/.test(sql) ? [{ config: MENU, updated_at: null }] : []);
+h.query.mockImplementation(async (sql: string) => ({ rows: menuRows(sql) }));
+
 const room: any = { id: "22222222-2222-4222-8222-222222222222", code: "957630", slug: "ad075f314eeb", title: "test", host_user_id: null, application_id: null, contact_id: null, starts_at: new Date().toISOString(), duration_min: 30, status: "scheduled" };
 
 async function reception(path: string, params: Record<string, string>) {
@@ -38,7 +48,7 @@ describe("conference dial-in", () => {
   it("3 followed by the code goes straight to that meeting", async () => {
     const company = await reception("/company", { Digits: "3957630" });
     expect(company.text).toContain("/api/webhooks/twilio/reception/meeting-code?try=0&amp;code=957630");
-    h.query.mockImplementation(async (sql: string, p?: unknown[]) => ({ rows: /FROM meeting_rooms WHERE code = \$1/.test(sql) && p?.[0] === "957630" ? [room] : [] }));
+    h.query.mockImplementation(async (sql: string, p?: unknown[]) => ({ rows: /FROM meeting_rooms WHERE code = \$1/.test(sql) && p?.[0] === "957630" ? [room] : menuRows(sql) }));
     const joined = await reception("/meeting-code?try=0&code=957630", {});
     expect(joined.text).toContain(">" + conferenceName(room.id) + "</Conference>");
   });
@@ -50,9 +60,9 @@ describe("conference dial-in", () => {
 
   it("ignores the greeting heard back through a speakerphone, once", async () => {
     expect(looksLikeEcho("to join a scheduled meeting press 3")).toBe(true);
-    expect(looksLikeEcho("Thank you for calling the Boreal Group of Companies")).toBe(true);
+    expect(looksLikeEcho("Thank you for calling Acme Capital")).toBe(true);
     expect(looksLikeEcho("meeting")).toBe(false);
-    expect(looksLikeEcho("Boreal Financial please")).toBe(false);
+    expect(looksLikeEcho("Acme Capital please")).toBe(false);
     const first = await reception("/company", { SpeechResult: "to join a scheduled meeting press 3" });
     expect(first.text).toContain("/api/webhooks/twilio/reception/greeting?again=1");
     const second = await reception("/company?again=1", { SpeechResult: "to join a scheduled meeting press 3" });

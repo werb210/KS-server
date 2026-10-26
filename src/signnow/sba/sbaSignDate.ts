@@ -2,6 +2,7 @@
 // The signed SBA forms came back with every Date box empty: SignNow fills only the signature and initials it
 // was told about. After signing, the date is written into each form's own Date box, located from the blank
 // template (the signed copy is flattened, so it has no fields left to look up).
+import { brokerageTimeZone } from "../../lib/brokerageTime.js"; // KS_SETTINGS_PACK_v1_TIME_ZONE
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { dbQuery } from "../../db.js";
 import { loadSbaTemplate, type SbaFormKey } from "./templates.js";
@@ -14,9 +15,9 @@ const DATE_FIELDS: Array<{ match: RegExp; key: SbaFormKey; field: string }> = [
   { match: /4506c/, key: "form_4506c", field: SBA_4506C_FIELDS.signatureDate },
 ];
 
-/** MM/DD/YYYY in Alberta time (UTC-6 all year), the format the SBA and IRS forms use. */
+/** MM/DD/YYYY in the brokerage's time zone (KS_SETTINGS_PACK_v1_TIME_ZONE), the format the SBA and IRS forms use. */
 export function formatSbaDate(d: Date): string {
-  const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/Regina", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(d);
+  const p = new Intl.DateTimeFormat("en-US", { timeZone: brokerageTimeZone(), year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(d);
   const v = (t: string) => p.find((x) => x.type === t)?.value ?? "";
   return `${v("month")}/${v("day")}/${v("year")}`;
 }

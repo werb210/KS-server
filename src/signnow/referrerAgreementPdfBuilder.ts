@@ -12,6 +12,7 @@
 //   w:/h: size in pt
 // The date field is t:t with l:"Date" on purpose. A real date field (t:d) breaks this
 // account's fieldextract with error 65656; dates are stamped server-side instead.
+import { brokerageTimeZone } from "../lib/brokerageTime.js"; // KS_SETTINGS_PACK_v1_TIME_ZONE
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from "pdf-lib";
 import { brandName, legalName, mailingAddress, supportEmail, winAnsi } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
@@ -217,7 +218,7 @@ export async function buildReferrerAgreementPdf(data?: ReferrerAgreementData): P
   ctx.y += 14;
   text(ctx, "Per: Authorized signatory", 8.5, F, BLACK);
   ctx.y += 12;
-  para(ctx, "Signed electronically for " + LN + " on " + new Intl.DateTimeFormat("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "America/Regina" }).format(new Date()) + ".", 8, 0, GREY);
+  para(ctx, "Signed electronically for " + LN + " on " + new Intl.DateTimeFormat("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: brokerageTimeZone() }).format(new Date()) + ".", 8, 0, GREY);
   ctx.y += 10;
   text(ctx, [LN, winAnsi(mailingAddress()), winAnsi(supportEmail())].filter(Boolean).join(" | "), 7.5, F, GREY);
 

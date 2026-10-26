@@ -1,6 +1,6 @@
 // BF_SERVER_PRESENCE_AUTO_BUSY_v1
 // Presence is computed, not set directly. 'available' only when: signed in
-// (recent heartbeat), inside 08:00-18:00 Alberta time, and no
+// (recent heartbeat), inside 08:00-18:00 in the brokerage's time zone, and no
 // busy reason active (manual / on a call / in a meeting). Else 'busy'; stale
 // heartbeat -> 'offline'.
 //
@@ -11,6 +11,7 @@
 // 7pm, and inbound calls answered "no agents are available". The named zone
 // tracks DST.
 import { pool } from "../../db.js";
+import { sqlZoneLiteral } from "../../lib/brokerageTime.js"; // KS_SETTINGS_PACK_v1_TIME_ZONE
 // BF_SERVER_v817_DIALER_MESSAGING - business hours deliberately stay on ALBERTA_TZ (America/Regina):
 // Alberta is on UTC-6 all year from 2026 and older tzdata still moves the Edmonton zone to UTC-7 in
 // November (see src/lib/albertaTime.ts, enforced by albertaTime.v743.test.ts).
@@ -24,8 +25,13 @@ import { pool } from "../../db.js";
 //   - presence went 'offline' only because the heartbeat is stale, it is business hours, and the
 //     device is still registered (an unrevoked dialler credential or a voice token in the last 7 days).
 // 'busy' (manual / on call / meeting / after hours with the app open) is never rung.
-export const BUSINESS_HOURS_SQL = `(extract(hour from (now() AT TIME ZONE 'America/Regina')) >= 8
-      AND extract(hour from (now() AT TIME ZONE 'America/Regina')) < 18)`;
+// KS_SETTINGS_PACK_v1_TIME_ZONE - 08:00-18:00 in the brokerage's own zone (Settings > Company); Edmonton is computed
+// as America/Regina (UTC-6 all year). The zone is validated before it is inlined (sqlZoneLiteral).
+export function businessHoursSql(): string {
+  const z = sqlZoneLiteral();
+  return `(extract(hour from (now() AT TIME ZONE ${z})) >= 8
+      AND extract(hour from (now() AT TIME ZONE ${z})) < 18)`;
+}
 export function ringableStaffSql(sp = "sp", u = "u"): string {
   return `(${sp}.twilio_identity IS NOT NULL
     AND coalesce(${sp}.manual_busy, false) = false
@@ -33,7 +39,7 @@ export function ringableStaffSql(sp = "sp", u = "u"): string {
     AND coalesce(${sp}.in_meeting, false) = false
     AND (
       (${sp}.status = 'available' AND ${sp}.last_heartbeat > now() - interval '5 minutes')
-      OR (${sp}.status = 'offline' AND ${BUSINESS_HOURS_SQL}
+      OR (${sp}.status = 'offline' AND ${businessHoursSql()}
           AND (${sp}.voice_token_at > now() - interval '7 days'
                OR EXISTS (SELECT 1 FROM staff_device_credentials dc
                            WHERE dc.user_id = ${u}.id AND dc.revoked_at IS NULL AND dc.expires_at > now())))
@@ -59,13 +65,12 @@ export async function recordVoiceTokenIssued(userId: string, identity: string): 
   }
 }
 
-const RECOMPUTE_SQL = `
+const recomputeSql = () => `
   UPDATE staff_presence SET
     status = CASE
       WHEN last_heartbeat < now() - interval '5 minutes' THEN 'offline'
       WHEN manual_busy OR on_call OR in_meeting THEN 'busy'
-      WHEN extract(hour from (now() AT TIME ZONE 'America/Regina')) < 8
-        OR extract(hour from (now() AT TIME ZONE 'America/Regina')) >= 18 THEN 'busy'
+      WHEN NOT ${businessHoursSql()} THEN 'busy'
       ELSE 'available'
     END,
     updated_at = now()
@@ -73,8 +78,8 @@ const RECOMPUTE_SQL = `
 
 export async function recomputePresence(userId?: string): Promise<void> {
   try {
-    if (userId) await pool.query(`${RECOMPUTE_SQL} WHERE user_id = $1`, [userId]);
-    else await pool.query(RECOMPUTE_SQL);
+    if (userId) await pool.query(`${recomputeSql()} WHERE user_id = $1`, [userId]);
+    else await pool.query(recomputeSql());
   } catch {
     /* non-fatal */
   }

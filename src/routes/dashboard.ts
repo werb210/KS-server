@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { sqlZoneLiteral } from "../lib/brokerageTime.js"; // KS_SETTINGS_PACK_v1_TIME_ZONE - reports in the brokerage's zone
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { safeHandler } from "../middleware/safeHandler.js";
@@ -73,7 +74,7 @@ router.get("/metrics", requireAuth, safeHandler(async (req: any, res: any) => { 
                (SELECT MAX(h.created_at) FROM application_stage_history h
                  WHERE h.application_id = applications.id AND h.to_stage = $1),
                applications.updated_at)
-             >= (date_trunc('month', now() AT TIME ZONE 'America/Regina') AT TIME ZONE 'America/Regina')
+             >= (date_trunc('month', now() AT TIME ZONE ${sqlZoneLiteral()}) AT TIME ZONE ${sqlZoneLiteral()})
          ${liveStageFilter()}`,
       [ApplicationStage.ACCEPTED, silo]
     ),
@@ -159,7 +160,7 @@ router.get("/metrics", requireAuth, safeHandler(async (req: any, res: any) => { 
     const nl = await pool.query<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM contacts
         WHERE UPPER(COALESCE(silo, 'BF')) = UPPER($1)
-          AND created_at >= (date_trunc('day', now() AT TIME ZONE 'America/Regina') AT TIME ZONE 'America/Regina')`,
+          AND created_at >= (date_trunc('day', now() AT TIME ZONE ${sqlZoneLiteral()}) AT TIME ZONE ${sqlZoneLiteral()})`,
       [silo],
     );
     newLeadsToday = parseInt(nl.rows[0]?.count ?? "0", 10) || 0;

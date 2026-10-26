@@ -121,21 +121,26 @@ describe("v688b: caller ID and receptionist reach", () => {
     for (const c of h.dialPstn.mock.calls as any[][]) expect(c[0].participantId).toBeTruthy();
   });
 
-  it("the receptionist counts the dialler app as signed in", async () => {
+  it("the phone menu's group ring counts the dialler app as signed in", async () => {
     h.queryMock.mockReset();
+    const OPTIONS = [{ digit: "1", label: "sales", keywords: [], target: { type: "group", userIds: ["11111111-1111-4111-8111-111111111111"], strategy: "simultaneous" } }];
+    const MENU = { greeting: { mode: "tts", text: "Thank you for calling.", audioId: null }, announceOptions: true,
+  hours: { enabled: false, weekly: { sun: [], mon: [], tue: [], wed: [], thu: [], fri: [], sat: [] } },
+  afterHoursGreeting: { mode: "tts", text: "Closed.", audioId: null }, afterHours: { type: "voicemail", userId: null },
+  options: OPTIONS,
+  noAnswer: { ringSeconds: 25, target: { type: "voicemail", userId: null } }, holidays: [] };
     h.queryMock.mockImplementation(answerBySql([
-      [/FROM staff_device_credentials dc WHERE dc\.user_id = u\.id/, (sql: string) => sql.includes("sp.status, sp.twilio_identity")
-        ? { rows: [{ status: "available", twilio_identity: "andrew-device", on_call: false, fresh: true, phone: null, standalone_watch: false, user_id: "u-andrew" }] }
+      [/FROM phone_menu_config/, { rows: [{ config: MENU, updated_at: null }] }],
+      [/WHERE u\.id::text = ANY\(\$1::text\[\]\)/, (sql: string) => /FROM staff_device_credentials dc\s+WHERE dc\.user_id = u\.id/.test(sql)
+        ? { rows: [{ user_id: "11111111-1111-4111-8111-111111111111", twilio_identity: "andrew-device" }] }
         : { rows: [] }],
     ]));
     const { default: reception } = await import("../routes/reception.js");
     const app = express();
     app.use("/api/webhooks/twilio/reception", reception);
-    const res = await request(app).post("/api/webhooks/twilio/reception/intent?company=BF").type("form").send({ Digits: "2", CallSid: "CA1", From: "+15875550100" });
+    const res = await request(app).post("/api/webhooks/twilio/reception/choice").type("form").send({ Digits: "1", CallSid: "CA1", From: "+15875550100" });
     expect(res.status).toBe(200);
     expect(res.text).toMatch(/<Client[^>]*>andrew-device<\/Client>/);
-    const lookup = callsMatching(h.queryMock, /sp\.status, sp\.twilio_identity/);
-    expect(String(lookup[0]![0])).toMatch(/last_heartbeat > now\(\) - interval '90 seconds'\) OR EXISTS \(\s*SELECT 1 FROM staff_device_credentials dc/);
   });
 
   it("rejection emails give the licensee's support phone (KS_SERVER_v4_BRANDING - was Boreal's 866)", async () => {

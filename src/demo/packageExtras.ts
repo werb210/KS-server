@@ -19,7 +19,7 @@ import {
 } from "./fixture.js";
 import { ASSUMED_RATE_PCT } from "./creditSummary.js";
 import type { ApplicationRow, DocumentRow } from "./repo.js";
-import { ALBERTA_TZ } from "../lib/albertaTime.js";
+import { brokerageTimeZone } from "../lib/brokerageTime.js"; // KS_SETTINGS_PACK_v1_TIME_ZONE - the brokerage's zone (Settings > Company)
 
 export const DEMO_FOOTER = "SAMPLE - fictional business and lenders, made in the Keystone demo. Not a real application.";
 
@@ -197,7 +197,7 @@ export async function callNotePdf(input: { app: Pick<ApplicationRow, "contact" |
   const c = input.app.contact ?? {};
   const call = input.app.call ?? {};
   const when = new Date(call.completed_at ?? call.answered_at ?? input.at);
-  const date = when.toLocaleString("en-CA", { timeZone: ALBERTA_TZ, year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const date = when.toLocaleString("en-CA", { timeZone: brokerageTimeZone(), year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" });
   const secs = Number(call.duration_seconds ?? DEMO_DURATION_SECONDS);
   const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
   const summary = call.summary ?? CALL_SUMMARY;
