@@ -13,6 +13,7 @@
 //     same message is never logged twice by two different paths.
 import type { Pool } from "pg";
 import { logWarnSwallowed } from "../../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
+import { addressDomain, neverLogMatcher } from "../../neverLog/neverLog.js"; // KS_SETTINGS_PACK_v1_NEVER_LOG
 
 export const SENT_LOGGED_HEADER = "X-Boreal-Logged";
 
@@ -40,15 +41,30 @@ export function addressesOf(list: { emailAddress?: { address?: string } }[] | un
     .filter(Boolean);
 }
 
+// KS_SETTINGS_PACK_v1_NEVER_LOG - colleagues are people at the sender's own domain (or KS_STAFF_EMAIL_DOMAIN); this
+// used to be one brokerage's domains written into the code. Free-mail domains never count as "the office".
+const FREE_MAIL = new Set(["gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "yahoo.com", "yahoo.ca", "icloud.com", "me.com", "aol.com", "shaw.ca", "telus.net", "rogers.com", "proton.me", "protonmail.com"]);
+function officeDomains(message: SentMessage): Set<string> {
+  const out = new Set<string>();
+  const from = addressDomain(String(message.from?.emailAddress?.address ?? ""));
+  if (from && !FREE_MAIL.has(from)) out.add(from);
+  const staff = String(process.env.KS_STAFF_EMAIL_DOMAIN ?? "").trim().toLowerCase().replace(/^@/, "");
+  if (staff) out.add(staff);
+  return out;
+}
+
 export function externalRecipients(message: SentMessage): string[] {
   const all = [...addressesOf(message.toRecipients), ...addressesOf(message.ccRecipients)];
-  return [...new Set(all)].filter((address) => !/@boreal\.(financial|insure)$/i.test(address));
+  const office = officeDomains(message);
+  return [...new Set(all)].filter((address) => !office.has(addressDomain(address)));
 }
 
 export async function logSentMessage(pool: Pool, userId: string, message: SentMessage): Promise<number> {
   if (!message?.id) return 0;
   if (wasLoggedAtSendTime(message)) return 0;
-  const recipients = externalRecipients(message);
+  // KS_SETTINGS_PACK_v1_NEVER_LOG - addresses and domains on the never-log list are left out.
+  const never = await neverLogMatcher(pool as any);
+  const recipients = externalRecipients(message).filter((a) => !never(a));
   if (!recipients.length) return 0;
 
   const owner = await pool.query<{ silo: string | null }>(

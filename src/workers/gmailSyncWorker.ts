@@ -11,6 +11,7 @@
 //     "New email" notification the Graph mail subscription raises;
 //   - mail the user sent from Gmail itself (not the portal) to a CRM contact -> crm_email_log, as the Outlook
 //     Sent Items subscription does (sentItemsLog.ts). Portal sends carry the logged-at-send header and are skipped.
+import { isNeverLogged, neverLogMatcher } from "../neverLog/neverLog.js"; // KS_SETTINGS_PACK_v1_NEVER_LOG
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { claimedTick } from "./claim.js";
@@ -71,6 +72,7 @@ async function logInbound(pool: Pool, userId: string, own: string, m: GmailMessa
   const sender = addresses(header(m, "From"))[0] ?? "";
   const msgId = header(m, "Message-ID") || (m.id ? `gmail:${m.id}` : "");
   if (!sender || sender === own || !msgId) return false;
+  if (await isNeverLogged(pool as any, sender)) return false; // KS_SETTINGS_PACK_v1_NEVER_LOG
   const received = m.internalDate ? new Date(Number(m.internalDate)) : new Date();
   const c = await pool.query<{ id: string; silo: string }>(`SELECT id, silo FROM contacts WHERE lower(email) = $1 ORDER BY created_at LIMIT 1`, [sender]);
   const contact = c.rows[0];
@@ -94,7 +96,8 @@ async function logSent(pool: Pool, userId: string, own: string, m: GmailMessage)
   if (!m.id || header(m, SENT_LOGGED_HEADER)) return 0; // portal sends were logged when they were sent
   const to = addresses(header(m, "To"));
   const cc = addresses(header(m, "Cc"));
-  const recipients = Array.from(new Set([...to, ...cc])).filter((a) => a !== own);
+  const never = await neverLogMatcher(pool as any); // KS_SETTINGS_PACK_v1_NEVER_LOG
+  const recipients = Array.from(new Set([...to, ...cc])).filter((a) => a !== own && !never(a));
   if (!recipients.length) return 0;
   const owner = await pool.query<{ silo: string | null }>(`SELECT silo FROM users WHERE id = $1 LIMIT 1`, [userId]);
   const silo = owner.rows[0]?.silo || "BF";

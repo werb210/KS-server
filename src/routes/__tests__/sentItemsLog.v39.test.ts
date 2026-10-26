@@ -54,9 +54,10 @@ describe("the same email is never logged twice", () => {
 });
 
 describe("only real, external contacts are logged", () => {
-  it("drops internal colleagues", () => {
+  it("drops internal colleagues (the sender's own domain)", () => {
     expect(externalRecipients({
-      toRecipients: [{ emailAddress: { address: "andrew.p@boreal.financial" } }],
+      from: { emailAddress: { address: "jane@acme-capital.ca" } },
+      toRecipients: [{ emailAddress: { address: "raj@acme-capital.ca" } }],
       ccRecipients: [{ emailAddress: { address: "client@example.com" } }],
     })).toEqual(["client@example.com"]);
   });
