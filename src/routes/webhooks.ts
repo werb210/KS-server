@@ -367,6 +367,14 @@ router.post("/twilio/voice/twiml", twilioWebhookValidation, safeHandler(async (r
   // ── v503: PSTN inbound -> conference + ring-all staff
   const looksLikePhoneFrom = /^\+?\d{8,15}$/.test(from);
   if (looksLikePhoneFrom && !from.startsWith("client:")) {
+    // KS_SETTINGS_PACK_v1_BLOCKED_NUMBERS - a blocked caller never rings anyone (polite message or voicemail).
+    {
+      const { pool: blockPool } = await import("../db.js");
+      const { handleBlockedCall } = await import("../voice/blockedNumbers.js");
+      const { default: BlockVR } = await import("twilio/lib/twiml/VoiceResponse.js");
+      const vb = new BlockVR();
+      if (await handleBlockedCall(blockPool as any, vb, from, callSid || null)) return res.send(vb.toString());
+    }
     // BF_SERVER_INBOUND_CALL_LOG_v1 — record every inbound PSTN call up front so
     // the later /twilio/voice status callback can find it. Without this the
     // callback logs voice_webhook_call_not_found and the call never lands in
@@ -725,6 +733,12 @@ async function persistInboundSms(req: any): Promise<void> {
   const toNum = typeof To === "string" ? To : null;
   const body = Body ? String(Body) : "[media]";
   const sid = typeof MessageSid === "string" ? MessageSid : null;
+  // KS_SETTINGS_PACK_v1_BLOCKED_NUMBERS - a text from a blocked number is ignored (and logged).
+  {
+    const { pool: blockPool } = await import("../db.js");
+    const { ignoreBlockedText } = await import("../voice/blockedNumbers.js");
+    if (await ignoreBlockedText(blockPool as any, fromNum, body, sid)) return;
+  }
 
   // BF_SERVER_BLOCK_v637_MOBILE_PHONE_AND_BACKFILL_v1 — contacts.mobile_phone does not exist.
   const contact = await pool.query<{ id: string; silo: string | null; name: string | null }>(

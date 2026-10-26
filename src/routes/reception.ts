@@ -34,6 +34,7 @@ import { awayTwiml, openInboundRecord, ringDirectLine, staffVoicemail } from "..
 import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 import { greetingText, matchSpeech, officeOpen, optionsPrompt, type MenuOption, type MenuTarget, type PhoneMenu, type Prompt } from "../phoneMenu/menu.js";
 import { loadMenu, readAudio } from "../phoneMenu/store.js";
+import { handleBlockedCall } from "../voice/blockedNumbers.js"; // KS_SETTINGS_PACK_v1_BLOCKED_NUMBERS
 
 const router = Router();
 
@@ -326,8 +327,10 @@ router.get("/audio/:id", safeHandler(async (req: Request, res: Response) => {
 // The greeting. Open: greeting + options in one <Gather> (up to 8 keys ending with # so "meeting key + access code"
 // joins in one step). Closed or a holiday: the after-hours greeting, then the after-hours choice.
 router.post("/greeting", twilioWebhookValidation, safeHandler(async (req: Request, res: Response) => {
-  const { menu } = await loadMenu(pool);
   const v = await newVR();
+  // KS_SETTINGS_PACK_v1_BLOCKED_NUMBERS - also here, for a number pointed straight at the menu.
+  if (String(req.query.again ?? "") !== "1" && await handleBlockedCall(pool as any, v, callerFrom(req), callSidOf(req) || null)) return send(res, v);
+  const { menu } = await loadMenu(pool);
   const again = String(req.query.again ?? "") === "1";
   const status = officeOpen(menu, new Date());
   console.log(JSON.stringify({ event: "phone_menu_greeting", callSid: callSidOf(req) || null, open: status.open, holiday: status.holiday, again }));

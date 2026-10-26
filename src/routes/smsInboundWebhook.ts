@@ -158,6 +158,13 @@ router.post("/webhooks/twilio/sms-inbound", express.urlencoded({ extended: false
     }
   }
 
+  // KS_SETTINGS_PACK_v1_BLOCKED_NUMBERS - a text from a blocked number is ignored and logged (a STOP above is still
+  // honoured: it only ever reduces what we send).
+  {
+    const { ignoreBlockedText } = await import("../voice/blockedNumbers.js");
+    if (await ignoreBlockedText(pool as any, from, body, messageSid || null)) return res.type("text/xml").send("<Response/>");
+  }
+
   try {
     const conv = await pool.query<{ id: string }>(
       `SELECT id
