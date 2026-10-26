@@ -47,7 +47,7 @@ export async function listDefinitions(db: Q, object: ObjectType, opts: { include
           ORDER BY COALESCE(group_name, ''), sort_order, created_at`,
         [object],
       );
-      defs = r.rows.map(rowToDef);
+      defs = (r?.rows ?? []).map(rowToDef);
     } catch (err) {
       if (!isMissingRelation(err)) throw err;
       console.warn("[custom-fields] definitions table missing; treating as no fields");

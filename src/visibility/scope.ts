@@ -79,7 +79,7 @@ export async function resolveScope(db: Q, userId: string | null | undefined, rol
       `SELECT u.record_visibility, (SELECT visibility FROM role_record_visibility WHERE role = $2) AS role_visibility, u.id IS NOT NULL AS found
          FROM (SELECT $1::uuid AS want) w LEFT JOIN users u ON u.id = w.want`,
       [userId, r],
-    )).rows[0];
+    ))?.rows?.[0];
     const v: Visibility = isVisibility(row?.record_visibility) ? row.record_visibility
       : isVisibility(row?.role_visibility) ? row.role_visibility : "all";
     if (v === "all") scope = { mode: "all", visibility: "all", userId };
@@ -93,7 +93,7 @@ export async function resolveScope(db: Q, userId: string | null | undefined, rol
           WHERE m1.user_id = $1`,
         [userId],
       );
-      const ids = new Set<string>([userId, ...members.rows.map((x: any) => String(x.id))]);
+      const ids = new Set<string>([userId, ...(members?.rows ?? []).map((x: any) => String(x.id))]);
       scope = { mode: "restricted", visibility: "team", userId, ownerIds: [...ids] };
     }
   } catch (err) {
@@ -111,10 +111,10 @@ export async function resolveRoleOnlyScope(db: Q, role: unknown): Promise<Record
   if (r === "Admin") return ALL_SCOPE;
   if (!(await teamsInPlan(db))) return ALL_SCOPE;
   try {
-    const row = (await db.query(`SELECT visibility FROM role_record_visibility WHERE role = $1`, [r])).rows[0];
+    const row = (await db.query(`SELECT visibility FROM role_record_visibility WHERE role = $1`, [r]))?.rows?.[0];
     const anyUserOverride = (await db.query(
       `SELECT EXISTS (SELECT 1 FROM users WHERE record_visibility IN ('team', 'own') AND lower(COALESCE(role, '')) = lower($1)) AS x`, [r],
-    )).rows[0]?.x === true;
+    ))?.rows?.[0]?.x === true;
     const v = isVisibility(row?.visibility) ? row.visibility : "all";
     return v === "all" && !anyUserOverride ? ALL_SCOPE : NOTHING_SCOPE;
   } catch (err) {
