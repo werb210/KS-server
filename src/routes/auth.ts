@@ -22,6 +22,8 @@ import { pool } from "../db.js";
 import { notifyAllStaff } from "../services/notifications/notifyAllStaff.js";
 import { isReviewPhone, reviewCodeMatches } from "../services/reviewLogin.js"; // BF_SERVER_REVIEW_LOGIN_v710
 import microsoftRoutes from "./authMicrosoft.js";
+import ssoRoutes from "./authSso.js"; // KS_SERVER_SSO_API_KEYS
+import { SSO_REQUIRED_MESSAGE, ssoRequiredFor } from "../sso/settings.js"; // KS_SERVER_SSO_API_KEYS
 
 import { checkTextable, NOT_TEXTABLE_MESSAGES } from "../lib/phoneLineType.js"; // BF_SERVER_PHONE_LINE_TYPE_v771
 import { checkOtpSend, OTP_GUARD_MESSAGES, OTP_GUARD_STATUS } from "../lib/otpGuard.js"; // BF_SERVER_OTP_ABUSE_GUARD_v772
@@ -535,6 +537,12 @@ router.post("/otp/verify", otpVerifyLimiter, async (req, res) => {
     let token: string;
     if (isActiveStaff && user && !wantsClient) {
       const role = normalizeRole(user.role ?? "") ?? ROLES.STAFF;
+      // KS_SERVER_SSO_API_KEYS - "Require SSO for staff": a text code no longer signs staff in (Admins still can, as
+      // break-glass). Only while SSO is actually offered - a plan change or missing settings never lock anyone out.
+      if (await ssoRequiredFor(pool as any, role)) {
+        console.log("[otp_verify] sso_required", { phone: maskPhoneLast4(phone) });
+        return res.status(403).json({ error: "sso_required", message: SSO_REQUIRED_MESSAGE });
+      }
       // v620: include silos[] + silo from user row so BF-portal can
       // render the silo selector without an extra round-trip.
       const userSilos = Array.isArray((user as any).silos) ? ((user as any).silos as string[]) : [];
@@ -743,6 +751,8 @@ router.post("/url-ticket", requireStaffAuth, async (req: any, res: any) => {
 });
 
 router.get("/me", requireAuthAllowClient, authMeHandler); // BF_SERVER_v784_STAFF_ONLY_AUTH - client app reads its own identity
+// KS_SERVER_SSO_API_KEYS - before microsoftRoutes: that router puts requireAuth in front of everything it sees.
+router.use("/sso", ssoRoutes);
 router.use(microsoftRoutes);
 
 export default router;

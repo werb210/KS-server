@@ -16,6 +16,7 @@ import { logWarnSwallowed } from "../lib/logWarnSwallowed.js";
 import { safeHandler } from "../middleware/safeHandler.js"; // BF_SERVER_v789_SAFE_HANDLERS // BF_SERVER_SILENT_QUERIES_v678
 import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 import { portalUrl, hostOf } from "../licensee/urls.js"; // KS_SERVER_v4_BRANDING
+import { SSO_REQUIRED_MESSAGE, ssoRequiredFor } from "../sso/settings.js"; // KS_SERVER_SSO_API_KEYS
 
 const router = Router();
 const RP_ID = process.env.WEBAUTHN_RP_ID || hostOf(portalUrl()); // KS_SERVER_v4_BRANDING - this copy's portal, not Boreal's
@@ -139,6 +140,10 @@ router.post("/login/verify", safeHandler(async (req: any, res) => {
   await pool.query(`DELETE FROM webauthn_challenges WHERE challenge = $1`, [issuedChallenge]);
   const user = await findAuthUserById(cred.user_id);
   if (!user || (user as any).disabled || !(user as any).active) return res.status(403).json({ error: "user_inactive" });
+  // KS_SERVER_SSO_API_KEYS - with "Require SSO for staff" on, passkeys stay open for Admins only (break-glass).
+  if (await ssoRequiredFor(pool as any, normalizeRole(String(user.role ?? "")))) {
+    return res.status(403).json({ error: "sso_required", message: SSO_REQUIRED_MESSAGE });
+  }
   return res.json({ status: "ok", data: { token: mintStaffToken(user) } });
 }));
 

@@ -245,6 +245,14 @@ export const EnvSchema = z
     QBO_ENVIRONMENT: z.string().optional(), // sandbox|production (default sandbox); read in services/quickbooks/qboConfig.ts
     QBO_TOKEN_ENCRYPTION_KEY: z.string().optional(), // credential (secret), 32 bytes base64; read in services/workspace/tokenCrypto.ts
     KS_WORKSPACE_PROVIDER: z.string().optional(), // setting m365|google|both (default m365); read in licensee/settings.ts
+    // KS_SERVER_SSO_API_KEYS - staff SSO (reuses MSAL_CLIENT_ID/SECRET and GOOGLE_OAUTH_CLIENT_ID/SECRET; unset = buttons hidden)
+    SSO_MICROSOFT_TENANT: z.string().optional(), // Entra tenant GUID to pin SSO to (default MSAL_TENANT_ID when it is a GUID, else any work account); read in sso/oidc.ts
+    SSO_MICROSOFT_REDIRECT_URI: z.string().optional(), // URL (default {KS_SERVER_URL}/api/auth/sso/microsoft/callback); read in sso/oidc.ts
+    SSO_GOOGLE_REDIRECT_URI: z.string().optional(), // URL (default {KS_SERVER_URL}/api/auth/sso/google/callback); read in sso/oidc.ts
+    SSO_RETURN_URL: z.string().optional(), // URL (default {KS_PORTAL_URL}/login); read in sso/oidc.ts
+    KS_SSO_CALLBACK_RATE_LIMIT: z.string().optional(), // number per 15 min per address (default 60); read in routes/authSso.ts
+    KS_API_KEY_PEPPER: z.string().optional(), // credential (secret), 10+ chars, HMAC key for API key hashes (default JWT_SECRET); read in apiKeys/keys.ts
+    KS_API_RATE_LIMIT_PER_MINUTE: z.string().optional(), // number per API key (default 120); read in publicApi/router.ts
     O365_OAUTH_RETURN_URL: z.string().optional(), // URL; read in routes/o365OAuth.ts
     O365_SHARED_INBOX_EMAIL: z.string().optional(), // email address(es); read in routes/email.ts
     PUBLIC_SERVER_URL: z.string().optional(), // URL; read in routes/crm/emails.ts
