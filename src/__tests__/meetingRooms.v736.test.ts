@@ -13,6 +13,15 @@ vi.mock("../db", async () => {
 });
 vi.mock("twilio", async () => await vi.importActual<typeof import("twilio")>("twilio"));
 
+// KS_SETTINGS_PACK_v1_PHONE_MENU - a brokerage menu whose option 3 is the meeting dial-in.
+const MENU = { greeting: { mode: "tts", text: "Thank you for calling.", audioId: null }, announceOptions: true,
+  hours: { enabled: false, weekly: { sun: [], mon: [], tue: [], wed: [], thu: [], fri: [], sat: [] } },
+  afterHoursGreeting: { mode: "tts", text: "Closed.", audioId: null }, afterHours: { type: "voicemail", userId: null },
+  options: [{ digit: "1", label: "sales", keywords: [], target: { type: "voicemail", userId: null } },
+    { digit: "3", label: "a scheduled meeting", keywords: ["meeting", "conference"], target: { type: "meeting" } }],
+  noAnswer: { ringSeconds: 25, target: { type: "voicemail", userId: null } }, holidays: [] };
+const menuRows = (sql: string) => (/FROM phone_menu_config/.test(sql) ? [{ config: MENU, updated_at: null }] : []);
+
 const room: any = { id: "11111111-1111-4111-8111-111111111111", code: "482913", slug: "abc123def456", title: "Desklinx <review>", host_user_id: null, application_id: null, contact_id: null, starts_at: "2026-10-06T16:00:00Z", duration_min: 60, status: "scheduled" };
 
 describe("meeting rooms", () => {
@@ -40,9 +49,10 @@ describe("meeting rooms", () => {
     expect(ics).toContain("DTSTART:20261006T160000Z");
     expect(ics).toContain("code 482913");
   });
-  it("the 866 greeting offers option 3 and the code steps join the conference", async () => {
+  it("the main-line greeting offers the meeting option and the code steps join the conference", async () => {
+    h.query.mockImplementation(async (sql: string) => ({ rows: menuRows(sql) }));
     const greeting = await reception("/greeting", {});
-    expect(greeting.text).toContain("To join a scheduled meeting, press 3.");
+    expect(greeting.text).toContain("For a scheduled meeting, press 3.");
 
     for (const params of [{ Digits: "3" }, { SpeechResult: "I have a meeting" }, { SpeechResult: "the conference call" }]) {
       const company = await reception("/company", params);
@@ -55,7 +65,7 @@ describe("meeting rooms", () => {
     expect(prompt.text).toContain("/api/webhooks/twilio/reception/meeting-code?try=0");
 
     const live = { ...room, starts_at: new Date().toISOString() };
-    h.query.mockImplementation(async (sql: string, p?: unknown[]) => ({ rows: /FROM meeting_rooms WHERE code = \$1/.test(sql) && p?.[0] === "482913" ? [live] : [] }));
+    h.query.mockImplementation(async (sql: string, p?: unknown[]) => ({ rows: /FROM meeting_rooms WHERE code = \$1/.test(sql) && p?.[0] === "482913" ? [live] : menuRows(sql) }));
     const joined = await reception("/meeting-code", { Digits: "482913", From: "+17805551212" });
     // BF_SERVER_v786_ROOM_RECORDINGS - the attributes (record-from-start + status/recording callbacks) are shared.
     expect(joined.text).toContain(">" + conferenceName(room.id) + "</Conference>");

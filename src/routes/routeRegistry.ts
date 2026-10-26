@@ -134,6 +134,7 @@ import diagnosticsRoutes from "./diagnostics.js";
 import { createMountTracker } from "./_canonicalMount.js";
 import { siloMiddleware } from "../middleware/silo.js";
 import licenseeRoutes from "./licensee.js"; // KS_SERVER_v1_LICENSEE
+import phoneMenuRoutes from "./phoneMenu.js"; // KS_SETTINGS_PACK_v1_PHONE_MENU
 import planRoutes from "./plan.js"; // KS_SERVER_v6_PLANS
 import provisionRoutes from "./provision.js"; // KS_SERVER_v15_PROVISION
 import phoneNumbersRoutes from "./phoneNumbers.js"; // KS_SERVER_PHONE_PROVISIONING
@@ -372,6 +373,8 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/sso-settings", router: ssoSettingsRoutes, feature: "sso" },
   { path: "/api-keys", router: apiKeysRoutes, feature: "api_access" },
   { path: "/open/v1", router: publicApiRoutes },
+  // KS_SETTINGS_PACK_v1 - HubSpot-parity settings (each router checks its own roles).
+  { path: "/phone-menu", router: phoneMenuRoutes }, // Admin: Settings > Phone menu
 ];
 
 export const PORTAL_ROUTE_REQUIREMENTS: Pick<ApiRoute, "method" | "path">[] = [
@@ -425,7 +428,11 @@ export const ROUTES: ApiRoute[] = [
   { method: "POST", path: "/api/webhooks/twilio/reception/greeting", roles: [] },
   { method: "POST", path: "/api/webhooks/twilio/reception/company", roles: [] },
   { method: "POST", path: "/api/webhooks/twilio/reception/intent", roles: [] },
-  { method: "POST", path: "/api/webhooks/twilio/reception/unavailable", roles: [] },
+  { method: "POST", path: "/api/webhooks/twilio/reception/choice", roles: [] }, // KS_SETTINGS_PACK_v1_PHONE_MENU
+  { method: "POST", path: "/api/webhooks/twilio/reception/no-answer", roles: [] }, // KS_SETTINGS_PACK_v1_PHONE_MENU
+  { method: "POST", path: "/api/webhooks/twilio/reception/group-next", roles: [] }, // KS_SETTINGS_PACK_v1_PHONE_MENU
+  { method: "POST", path: "/api/webhooks/twilio/reception/ai", roles: [] }, // KS_SETTINGS_PACK_v1_PHONE_MENU
+  { method: "GET", path: "/api/webhooks/twilio/reception/audio/:id", roles: [] }, // KS_SETTINGS_PACK_v1_PHONE_MENU
   { method: "POST", path: "/api/webhooks/twilio/reception/fallback", roles: [] },
   { method: "POST", path: "/api/webhooks/twilio/reception/screen", roles: [] }, // BF_SERVER_v820_WATCH_CALLS
   { method: "POST", path: "/api/webhooks/twilio/reception/screen-result", roles: [] }, // BF_SERVER_v820_WATCH_CALLS

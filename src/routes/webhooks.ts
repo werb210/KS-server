@@ -19,6 +19,18 @@ import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILE
 import { serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 void twilio;
+// KS_SETTINGS_PACK_v1_PHONE_MENU - has an Admin saved a phone menu? (A lookup failure keeps ring-all, logged.)
+async function phoneMenuSaved(): Promise<boolean> {
+  try {
+    const { pool } = await import("../db.js");
+    const r = await pool.query(`SELECT 1 FROM phone_menu_config WHERE id = 1`);
+    return (r.rows ?? []).length > 0;
+  } catch (err: any) {
+    console.warn("phone_menu_lookup_failed", { message: err?.message });
+    return false;
+  }
+}
+
 const router = Router();
 
 // BF_SERVER_BLOCK_v324_TWILIO_WEBHOOKS_URLENCODED_BODY_v1
@@ -412,9 +424,10 @@ router.post("/twilio/voice/twiml", twilioWebhookValidation, safeHandler(async (r
     } catch (err: any) {
       console.warn("direct_line_lookup_failed", { callSid, message: err?.message });
     }
-    // BF_SERVER_RECEPTION_v1 — when enabled, hand PSTN callers to the Maya
-    // receptionist instead of ring-all. Inert unless RECEPTION_ENABLED=true.
-    if (process.env.RECEPTION_ENABLED === "true") {
+    // BF_SERVER_RECEPTION_v1 — hand PSTN callers to the phone menu instead of ring-all.
+    // KS_SETTINGS_PACK_v1_PHONE_MENU - on when RECEPTION_ENABLED=true or once an Admin has saved a phone menu
+    // (Settings > Phone menu); RECEPTION_ENABLED=false keeps ring-all.
+    if (process.env.RECEPTION_ENABLED === "true" || (process.env.RECEPTION_ENABLED !== "false" && await phoneMenuSaved())) {
       const vredir = new VoiceResponse();
       vredir.redirect({ method: "POST" }, "/api/webhooks/twilio/reception/greeting");
       return res.send(vredir.toString());

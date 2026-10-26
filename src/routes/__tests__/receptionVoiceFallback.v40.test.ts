@@ -78,20 +78,20 @@ describe("a cold cache can no longer point a live call at a 503", () => {
 describe("emit routes through that decision", () => {
   it("a cached line is played; everything else is spoken by Polly", async () => {
     process.env.RECEPTION_NOVA_VOICE = "true";
-    cache.set("greeting", Buffer.from("fake-mp3"));
-    const greeting = await post("/greeting");
-    expect(greeting).toContain(`<Play>${BASE}/voice?key=greeting</Play>`);
-    expect(greeting).not.toContain("<Say");
-    // intent_prompt is not rendered: Polly, and no Play anywhere.
-    const company = await post("/company", { Digits: "1" });
-    expect(company).toContain('<Say voice="Polly.Joanna">Thank you for contacting Keystone Demo Brokerage.');
-    expect(company).not.toContain("<Play>");
+    cache.set("meeting_prompt", Buffer.from("fake-mp3"));
+    const prompt = await post("/meeting");
+    expect(prompt).toContain(`<Play>${BASE}/voice?key=meeting_prompt</Play>`);
+    expect(prompt).not.toContain("<Say");
+    // meeting_retry is not rendered: Polly, and no Play anywhere.
+    const retry = await post("/meeting?try=1");
+    expect(retry).toContain('<Say voice="Polly.Joanna">Sorry, that code isn');
+    expect(retry).not.toContain("<Play>");
   });
 
   it("with the nova voice off nothing is played", async () => {
     process.env.RECEPTION_NOVA_VOICE = "false";
-    cache.set("greeting", Buffer.from("fake-mp3"));
-    const greeting = await post("/greeting");
+    cache.set("meeting_prompt", Buffer.from("fake-mp3"));
+    const greeting = await post("/meeting");
     expect(greeting).not.toContain("<Play>");
     expect(greeting).toContain('<Say voice="Polly.Joanna">');
   });
@@ -100,7 +100,7 @@ describe("emit routes through that decision", () => {
 describe("a render failure is legible instead of silent", () => {
   it("says why: no key", async () => {
     delete process.env.OPENAI_API_KEY;
-    const res = await request(await app()).get(`${BASE}/voice?key=greeting`);
+    const res = await request(await app()).get(`${BASE}/voice?key=meeting_prompt`);
     expect(res.status).toBe(503);
     expect(warn).toHaveBeenCalledWith("reception_voice_render_failed", { reason: "no_openai_api_key" });
   });
@@ -108,7 +108,7 @@ describe("a render failure is legible instead of silent", () => {
   it("says why: the provider's own error, rather than swallowing every cause alike", async () => {
     process.env.OPENAI_API_KEY = "sk-test";
     h.speech.mockRejectedValue(new Error("model tts-1 has been retired"));
-    const res = await request(await app()).get(`${BASE}/voice?key=greeting`);
+    const res = await request(await app()).get(`${BASE}/voice?key=meeting_prompt`);
     expect(res.status).toBe(503);
     expect(warn).toHaveBeenCalledWith("reception_voice_render_failed", { reason: "model tts-1 has been retired" });
   });
@@ -133,13 +133,17 @@ describe("a render failure is legible instead of silent", () => {
   });
 });
 
-describe("the greeting itself is untouched", () => {
-  it("keeps the keypad fallback and the handoff to the company step", async () => {
+describe("the greeting comes from the brokerage's phone menu (KS_SETTINGS_PACK_v1_PHONE_MENU)", () => {
+  it("keeps the keypad and speech fallback and the handoff to the choice step", async () => {
     process.env.RECEPTION_NOVA_VOICE = "false";
+    h.query.mockImplementation(async (sql: string) => (/FROM users\s+WHERE COALESCE\(active/.test(String(sql))
+      ? { rows: [{ id: "11111111-1111-4111-8111-111111111111", first_name: "Jane", last_name: "Smith", role: "Admin" }] }
+      : { rows: [] }) as any);
     const xml = await post("/greeting");
     expect(xml).toContain('input="speech dtmf"');
-    expect(xml).toContain("press 1 for Financial, 2 for Risk Management");
-    expect(xml).toContain(`action="${BASE}/company"`);
-    expect(xml).toContain(`<Redirect method="POST">${BASE}/company</Redirect>`);
+    expect(xml).toContain("Thank you for calling Keystone Demo Brokerage. For Jane Smith, press 1.");
+    expect(xml).toContain(`action="${BASE}/choice"`);
+    expect(xml).toContain(`<Redirect method="POST">${BASE}/choice</Redirect>`);
+    h.query.mockImplementation(async () => ({ rows: [] }));
   });
 });

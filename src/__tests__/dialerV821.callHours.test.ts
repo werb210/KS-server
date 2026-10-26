@@ -155,7 +155,7 @@ describe("TwiML outside call hours", () => {
 
   it("away-choice 1 rings the direct-line owner as normal (app first; v820 cell fallback still applies)", async () => {
     const xml = await awayChoice(`user=${OWNER}&ring=direct`, { Digits: "1", From: CALLER, CallSid: "CA-dnd-2" }, [
-      [/SELECT sp\.twilio_identity FROM users u LEFT JOIN staff_presence sp/, { rows: [{ twilio_identity: OWNER }] }],
+      [/SELECT sp\.twilio_identity, u\.first_name FROM users u LEFT JOIN staff_presence sp/, { rows: [{ twilio_identity: OWNER, first_name: "Pat" }] }],
       [/WHERE u\.id::text = \$1\s+AND u\.callback_verified_at IS NOT NULL/, { rows: [{ phone: "4035550103" }] }],
     ]);
     expect(xml).toMatch(new RegExp(`<Client[^>]*>${OWNER}</Client>`));
@@ -169,45 +169,47 @@ describe("TwiML outside call hours", () => {
     expect(xml).not.toContain("<Dial");
   });
 
-  it("away-choice 1 for a named reception target rings that person", async () => {
-    const xml = await awayChoice(`user=${ANDREW}&ring=underwriting`, { Digits: "1", From: CALLER }, [
-      [/FROM users u JOIN staff_presence sp ON sp\.user_id = u\.id\s+WHERE \(u\.first_name ILIKE \$1/, { rows: [{
-        status: "available", twilio_identity: "andrew-client", on_call: false, fresh: true, ringable: true, phone: null, standalone_watch: false, user_id: ANDREW,
-      }] }],
+  // KS_SETTINGS_PACK_v1_PHONE_MENU - people reached through the brokerage's phone menu.
+  const PERSON_SQL = /SELECT sp\.twilio_identity, u\.first_name FROM users u LEFT JOIN staff_presence sp/;
+  const menuWith = (options: unknown[]) => ({ config: { greeting: { mode: "tts", text: "Hi.", audioId: null }, announceOptions: true,
+    hours: { enabled: false, weekly: { sun: [], mon: [], tue: [], wed: [], thu: [], fri: [], sat: [] } },
+    afterHoursGreeting: { mode: "tts", text: "Closed.", audioId: null }, afterHours: { type: "voicemail", userId: null }, options,
+    noAnswer: { ringSeconds: 25, target: { type: "voicemail", userId: null } }, holidays: [] }, updated_at: null });
+
+  it("away-choice 1 for someone chosen in the phone menu rings that person (unanswered follows the menu)", async () => {
+    const xml = await awayChoice(`user=${ANDREW}&ring=menu`, { Digits: "1", From: CALLER }, [
+      [PERSON_SQL, { rows: [{ twilio_identity: "andrew-client", first_name: "Andrew" }] }],
     ]);
     expect(xml).toMatch(/<Client[^>]*>andrew-client<\/Client>/);
+    expect(xml).toContain(`direct-unavailable?user=${ANDREW}&amp;menu=1`);
   });
 
-  it("reception: a named target outside their hours gets the away prompt instead of ringing", async () => {
+  it("phone menu: a person outside their hours gets the away prompt instead of ringing", async () => {
     h.query.mockImplementation(answerBySql([
-      [/FROM users u JOIN staff_presence sp ON sp\.user_id = u\.id\s+WHERE \(u\.first_name ILIKE \$1/, { rows: [{
-        status: "available", twilio_identity: "andrew-client", on_call: false, fresh: true, ringable: true, phone: null, standalone_watch: false, user_id: ANDREW,
-      }] }],
+      [/FROM phone_menu_config/, { rows: [menuWith([{ digit: "2", label: "credit", keywords: [], target: { type: "user", userId: ANDREW } }])] }],
+      [PERSON_SQL, { rows: [{ twilio_identity: "andrew-client", first_name: "Andrew" }] }],
       [HOURS_SQL, { rows: [awayRow({ user_id: ANDREW })] }],
     ]));
     const app = mountRouter((await import("../routes/reception.js")).default, "/api/webhooks/twilio/reception");
-    const xml = (await request(app).post("/api/webhooks/twilio/reception/intent?company=BF").type("form").send({ Digits: "2", From: CALLER })).text;
+    const xml = (await request(app).post("/api/webhooks/twilio/reception/choice").type("form").send({ Digits: "2", From: CALLER })).text;
     expect(xml).toContain("Andrew is away right now. To leave a voicemail, stay on the line. If this is urgent, press 1.");
-    expect(xml).toContain(`away-choice?user=${ANDREW}&amp;ring=underwriting`);
+    expect(xml).toContain(`away-choice?user=${ANDREW}&amp;ring=menu`);
     expect(xml).not.toContain("<Dial");
   });
 
-  it("reception engagement group: members outside their hours are skipped, the rest ring", async () => {
+  it("phone menu group: members outside their hours are skipped, the rest ring", async () => {
+    const S2 = "55555555-5555-4555-8555-555555555555", S3 = "66666666-6666-4666-8666-666666666666";
     h.query.mockImplementation(answerBySql([
-      [/FROM users u JOIN staff_presence sp ON sp\.user_id = u\.id\s+WHERE \(u\.first_name ILIKE \$1/, (_s: string, p?: unknown[]) => ({
-        rows: String(p?.[0]).includes("todd")
-          ? [{ status: "available", twilio_identity: "todd-client", on_call: false, fresh: true, ringable: true, phone: null, standalone_watch: false, user_id: OWNER }]
-          : [],
-      })],
-      [/SELECT DISTINCT sp\.twilio_identity/, { rows: [{ twilio_identity: "staff-2" }, { twilio_identity: "staff-3" }] }],
+      [/FROM phone_menu_config/, { rows: [menuWith([{ digit: "1", label: "sales", keywords: [], target: { type: "group", userIds: [OWNER, S2, S3], strategy: "simultaneous" } }])] }],
+      [/WHERE u\.id::text = ANY\(\$1::text\[\]\)/, { rows: [{ user_id: OWNER, twilio_identity: "owner-client" }, { user_id: S2, twilio_identity: "staff-2" }, { user_id: S3, twilio_identity: "staff-3" }] }],
       [GROUP_HOURS_SQL, { rows: [{ twilio_identity: "staff-2", enabled: true, timezone: EDMONTON, weekly: { mon: [], tue: [], wed: [], thu: [], fri: [], sat: [], sun: [] } }] }],
     ]));
     const app = mountRouter((await import("../routes/reception.js")).default, "/api/webhooks/twilio/reception");
-    const xml = (await request(app).post("/api/webhooks/twilio/reception/intent?company=BF").type("form").send({ Digits: "1", From: CALLER })).text;
-    expect(xml).toMatch(/<Client[^>]*>todd-client<\/Client>/);
+    const xml = (await request(app).post("/api/webhooks/twilio/reception/choice").type("form").send({ Digits: "1", From: CALLER })).text;
+    expect(xml).toMatch(/<Client[^>]*>owner-client<\/Client>/);
     expect(xml).toMatch(/<Client[^>]*>staff-3<\/Client>/);
     expect(xml).not.toContain("staff-2");
-    expect(callsMatching(h.query, GROUP_HOURS_SQL)[0]![1]).toEqual([["todd-client", "staff-2", "staff-3"]]);
+    expect(callsMatching(h.query, GROUP_HOURS_SQL)[0]![1]).toEqual([["owner-client", "staff-2", "staff-3"]]);
   });
 
   it("a broken call-hours lookup never stops a call from ringing", async () => {
