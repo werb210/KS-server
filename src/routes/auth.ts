@@ -45,6 +45,12 @@ async function isStaffPhone(phone: string): Promise<boolean> {
     return false;
   }
 }
+// KS_SETTINGS_PACK_v1_SECURITY - the caller's address for the Security page's session list.
+function clientIpOf(req: any): string | null {
+  const fwd = String(req?.headers?.["x-forwarded-for"] ?? "").split(",")[0]?.trim();
+  return (fwd || String(req?.ip ?? "")).replace(/:\d+$/, "").slice(0, 64) || null;
+}
+
 const router = Router();
 
 const isValidPhone = (phone: unknown): phone is string => typeof phone === "string" && phone.trim().length > 0;
@@ -547,6 +553,9 @@ router.post("/otp/verify", otpVerifyLimiter, async (req, res) => {
       // render the silo selector without an extra round-trip.
       const userSilos = Array.isArray((user as any).silos) ? ((user as any).silos as string[]) : [];
       const userSilo = (user as any).silo as string | undefined;
+      // KS_SETTINGS_PACK_v1_SECURITY - a text-code sign-in opens a session (listed under Security; one step).
+      const { openSession } = await import("../security/sessions.js");
+      const ksid = await openSession(pool as any, { userId: String(user.id), method: "otp", ip: clientIpOf(req), userAgent: String(req.headers["user-agent"] ?? "") });
       token = signAccessToken({
         sub: String(user.id),
         role,
@@ -555,6 +564,7 @@ router.post("/otp/verify", otpVerifyLimiter, async (req, res) => {
         capabilities: fetchCapabilitiesForRole(role),
         ...(userSilo ? { silo: userSilo } : {}),
         ...(userSilos.length ? { silos: userSilos } : {}),
+        ...(ksid ? { ksid } : {}),
       });
     } else {
       // BF_SERVER_CLIENT_USERTYPE_v334 - log which of the two reasons applied, so
@@ -660,7 +670,11 @@ router.post("/device-sign-in", otpVerifyLimiter, async (req: any, res: any) => {
     const user: any = await findAuthUserById(result.userId);
     const role = normalizeRole(user.role ?? "") ?? ROLES.STAFF;
     const userSilos = Array.isArray(user.silos) ? (user.silos as string[]) : [];
+    // KS_SETTINGS_PACK_v1_SECURITY - Face ID on an enrolled dialler: device + biometric, a strong session.
+    const { openSession } = await import("../security/sessions.js");
+    const ksid = await openSession(pool as any, { userId: String(user.id), method: "device", ip: clientIpOf(req), userAgent: String(req.headers?.["user-agent"] ?? "") });
     const token = signAccessToken({
+      ...(ksid ? { ksid } : {}),
       sub: String(user.id),
       role,
       tokenVersion: user.tokenVersion ?? 0,
@@ -698,7 +712,9 @@ router.post("/session/renew", requireStaffAuth, safeHandler(async (req: any, res
     return res.status(401).json({ error: "session_not_renewable", message: "Your account can't be signed in. Ask an admin." });
   }
   const userSilos = Array.isArray(user.silos) ? (user.silos as string[]) : [];
+  const ksid = typeof req.user?.ksid === "string" ? req.user.ksid : undefined; // KS_SETTINGS_PACK_v1_SECURITY - same session
   const token = signAccessToken({
+    ...(ksid ? { ksid } : {}),
     sub: String(user.id),
     role,
     tokenVersion: user.tokenVersion ?? 0,

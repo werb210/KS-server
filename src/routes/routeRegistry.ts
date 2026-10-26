@@ -137,6 +137,7 @@ import licenseeRoutes from "./licensee.js"; // KS_SERVER_v1_LICENSEE
 import phoneMenuRoutes from "./phoneMenu.js"; // KS_SETTINGS_PACK_v1_PHONE_MENU
 import bookingSettingsRoutes from "./bookingSettings.js"; // KS_SETTINGS_PACK_v1_BOOKING
 import privacyRoutes from "./privacy.js"; // KS_SETTINGS_PACK_v1_PRIVACY
+import securityRoutes from "./security.js"; // KS_SETTINGS_PACK_v1_SECURITY
 import planRoutes from "./plan.js"; // KS_SERVER_v6_PLANS
 import provisionRoutes from "./provision.js"; // KS_SERVER_v15_PROVISION
 import phoneNumbersRoutes from "./phoneNumbers.js"; // KS_SERVER_PHONE_PROVISIONING
@@ -379,6 +380,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/phone-menu", router: phoneMenuRoutes }, // Admin: Settings > Phone menu
   { path: "/booking-settings", router: bookingSettingsRoutes }, // Admin: Settings > Booking pages; staff: own link
   { path: "/privacy", router: privacyRoutes }, // public: cookie consent; Admin: privacy requests
+  { path: "/security", router: securityRoutes }, // staff: own sessions; Admin: anyone's, and the two-step switch
 ];
 
 export const PORTAL_ROUTE_REQUIREMENTS: Pick<ApiRoute, "method" | "path">[] = [

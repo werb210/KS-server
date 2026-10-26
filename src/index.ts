@@ -210,6 +210,17 @@ export async function start(): Promise<void> {
     const { startDemoWorkers } = await import("./demo/index.js");
     startDemoWorkers(pool);
   }
+  // KS_SETTINGS_PACK_v1_SECURITY - every instance (workers or not) enforces the Admin's "require a passkey or two-step
+  // sign-in" switch; it is re-read every minute.
+  if (process.env.NODE_ENV !== "test") {
+    try {
+      const { pool } = await import("./db.js");
+      const { startSecuritySettingsRefresh } = await import("./security/sessions.js");
+      startSecuritySettingsRefresh(pool as any);
+    } catch (err) {
+      console.error("[startup] security settings refresh failed to start:", err);
+    }
+  }
   if (process.env.NODE_ENV !== "test" && !bfWorkersEnabled()) {
     console.warn("[startup] BF workers NOT started: BF_WORKERS_ENABLED=false (staging slot) - this instance sends no texts, emails or lender packages");
   }
