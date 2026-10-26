@@ -458,6 +458,7 @@ describe("KS merges: legal holds and retention (real Postgres)", () => {
     await clean("DELETE FROM contact_merges WHERE survivor_id = ANY($1::uuid[])", [[keep, held]]);
     await clean("DELETE FROM contacts WHERE id = ANY($1::uuid[])", [[keep, kept, held, plain]]);
     await clean("DELETE FROM companies WHERE id = ANY($1::uuid[])", [[coKeep, coHeld]]);
+    await clean("DELETE FROM users WHERE id = $1", [ADMIN]); // other suites count the Admins
   });
 
   it("a contact under a legal hold is never merged away", async () => {
