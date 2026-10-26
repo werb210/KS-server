@@ -1,6 +1,7 @@
 // KS_SERVER_v16_DATA_IMPORT - turning one mapped source row into the values Keystone stores, with the problems found
 // in it. Pure: no database. Used by the preview (row errors), the dry run and the run.
 import { FIELDS, type RecordType } from "./fields.js";
+import { normalizeTags } from "../modules/crmUnify/tags.js"; // KS_SERVER_v18_CRM_UNIFY
 
 export type RowIssue = { field: string; message: string };
 export type Normalised = { values: Record<string, unknown>; errors: RowIssue[]; warnings: RowIssue[] };
@@ -172,6 +173,8 @@ export function normalise(type: RecordType, input: Record<string, string>, opts:
     v[k] = d.toISOString();
   };
   const list = (k: string) => { const l = splitList(String(input[k] ?? "")); if (l.length) v[k] = l.slice(0, 50).map((x) => cut(x, 100)); };
+  // KS_SERVER_v18_CRM_UNIFY - imported tags join the one tag system (lower case, "_" between words, synonyms folded).
+  const tagList = (k: string) => { list(k); if (Array.isArray(v[k])) { const t = normalizeTags(v[k]); if (t.length) v[k] = t; else delete v[k]; } };
   const bool = (k: string) => {
     const s = String(input[k] ?? "").trim();
     if (!s) return;
@@ -194,7 +197,7 @@ export function normalise(type: RecordType, input: Record<string, string>, opts:
       const e = email("email"); email("secondary_email");
       const p = phone("phone"); phone("secondary_phone");
       if (!e && !p && !first && !last && !full) errors.push({ field: "email", message: "needs a name, an email or a phone number" });
-      text("company_name", 300); text("job_title", 200); text("lead_status", 100); text("lifecycle_stage", 100); list("tags");
+      text("company_name", 300); text("job_title", 200); text("lead_status", 100); text("lifecycle_stage", 100); tagList("tags");
       text("address_street"); text("address_city", 200); text("address_state", 100); text("address_zip", 20); text("address_country", 100);
       email("owner_email"); date("created_at");
       break;
@@ -205,7 +208,7 @@ export function normalise(type: RecordType, input: Record<string, string>, opts:
       text("legal_name", 300); text("dba_name", 300); text("website", 300); text("domain", 200); email("email"); phone("phone");
       text("industry", 200); text("address_street"); text("city", 200); text("province", 100); text("country", 100); text("address_zip", 20);
       num("annual_revenue", { min: 0 }); num("number_of_employees", { int: true, min: 0 });
-      list("types_of_financing"); list("tags"); email("owner_email"); date("created_at");
+      list("types_of_financing"); tagList("tags"); email("owner_email"); date("created_at");
       break;
     }
     case "lenders": {

@@ -29,6 +29,7 @@ export const INTEGRATION_TEST_FILES: string[] = [
   "src/__tests__/ksPgi.v11.integration.test.ts", // KS_SERVER_v11_PGI - needs Postgres
   "src/__tests__/ksRetention.v14.integration.test.ts", // KS_SERVER_v14_RETENTION - needs Postgres
   "src/__tests__/ksDataImport.v16.integration.test.ts", // KS_SERVER_v16_DATA_IMPORT - needs Postgres
+  "src/__tests__/crmUnify.v856.integration.test.ts", // BF_SERVER_v856_CRM_UNIFY - needs Postgres
   "src/__tests__/chatIsChat.v629.integration.test.ts", // BF_SERVER_CHAT_IS_CHAT_v629 - needs Postgres
   "src/watch/__tests__/watchPushLookup.v819.integration.test.ts", // BF_SERVER_v819_PUSH - needs Postgres
   "src/__tests__/dialerV821.integration.test.ts", // BF_SERVER_v821_DIALER - needs Postgres
