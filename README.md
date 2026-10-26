@@ -233,6 +233,36 @@ inbox. Code: `src/pgi/`, `src/routes/pgi.ts`, worker `src/workers/pgiReferralWor
 | `KS_SECRETS_KEY` (optional, 32+ chars) | the stored partner API key and callback secret are encrypted with a key derived from `JWT_SECRET` |
 | `KS_PGI_ALLOWED_HOSTS` (optional, comma separated) | the partner server must be an `https://*.azurewebsites.net` address |
 
+## Phone numbers bought through Twilio (KS_SERVER_PHONE_PROVISIONING)
+
+Numbers are bought into this copy's own Twilio account (`TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN`, which may be a
+subaccount): the account whose auth token signs the webhooks must own the numbers. Each number bought gets this copy's
+webhooks straight away: voice `POST {server}/api/webhooks/twilio/voice/twiml`, call status
+`POST {server}/api/webhooks/twilio/voice`, texts `POST {server}/api/webhooks/twilio/sms-inbound`. Code: `src/phone/`,
+`src/routes/phoneNumbers.ts`, worker `src/workers/phoneNumberWorker.ts` (every 15 minutes, also while cancelled).
+
+- Kinds and plan limits: one local business line on every plan (5 on Pro), the toll-free line on Growth (2 on Pro,
+  `toll_free_number`), and a direct line per person on Pro (`multiple_lines`, one per seat). A running trial counts.
+- Admins: Settings > Phone lines. `GET /api/phone-numbers`, `GET /api/phone-numbers/available?kind=&country=&area_code=&region=`,
+  `POST /api/phone-numbers { kind, phone_number, user_id? }`, `POST /api/phone-numbers/:id/release`,
+  `POST /api/phone-numbers/:id/keep { user_id? }`, `PUT /api/phone-numbers/:id/assign { user_id }`.
+- Keystone operations: `POST /api/provision/phone-numbers { area_code, region, country }` (`KS_OPS_KEY`) buys the
+  business line (and the toll-free line on Growth and Pro) once each during automatic provisioning.
+- Never silent: a removed seat, a cancellation, a plan without the kind, or an admin's Release moves the number to
+  `releasing` for the grace period; the Admins are emailed and notified, direct-line calls go to the main line
+  meanwhile, and "Keep" cancels it. Every step is in `phone_number_events`; every Twilio failure is logged with its code.
+
+| Variable | Without it |
+| --- | --- |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | numbers cannot be searched or bought (the page says so) |
+| `KS_SERVER_URL` (https) | numbers are not bought: the webhooks would have nowhere to point (the dev fallback is never used) |
+| `TWILIO_ADDRESS_SID` (optional, `AD...`) | numbers whose `address_requirements` is not `none` are refused with a plain explanation |
+| `TWILIO_BUNDLE_SID` (optional, `BU...`) | only needed where Twilio asks for a regulatory bundle |
+| `KS_NUMBER_RELEASE_GRACE_DAYS` (optional) | 30 days between "will be released" and the release |
+
+Texting from a toll-free number needs Twilio toll-free verification, and texting US numbers from a local line needs
+A2P 10DLC registration; both are done by hand in Twilio. Calls work straight away.
+
 ## Ops Control Plane
 
 Admin-only ops control plane endpoints live under `/api/admin/ops`:

@@ -12,7 +12,9 @@ export function startAutomationWorker(_pool: Pool, intervalMs = 60_000): { stop:
     if (stopped || running) return;
     running = true;
     try {
-      const { defaultDeps, runDue } = await import("../modules/automation/automationEngine.js");
+      const { defaultDeps, runDue, automationsInPlan } = await import("../modules/automation/automationEngine.js");
+      // KS_SERVER_PLAN_FIXES - automations are growth and up: on a starter copy nothing runs (steps wait, not lost).
+      if (!(await automationsInPlan())) return;
       const deps = await defaultDeps();
       // BF_SERVER_v786_WORKFLOW_GRAPH - on startup, convert every v1 rule to a workflow graph (idempotent),
       // then every 15 minutes evaluate the date.relative and no_reply triggers.

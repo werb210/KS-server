@@ -47,7 +47,7 @@ const PLAN_TITLE: Record<string, string> = { starter: "Starter", growth: "Growth
 export function trialWarningMail(company: string, daysLeft: number, used: string[], plan: string = "starter") {
   const usedLine = used.length
     ? `During the trial your team used: ${used.join(", ")}.`
-    : "Your team has not used the trial features yet - there is still time to try call recording, AI call summaries, templates and the rest.";
+    : "Your team has not used the trial features yet - there is still time to try call recording playback, AI call summaries, templates and the rest.";
   return {
     subject: `${company}: your free trial ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`,
     ...bodies([

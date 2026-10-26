@@ -5,12 +5,18 @@
 //   GET  /api/provision/teardown-check  whether KS-Ops may delete this copy's Azure resources: only when the copy is
 //                                       cancelled, the cancellation purge ran, nothing is left in the retention archive
 //                                       (KS_SERVER_v14_RETENTION) and no legal hold is open. Never deletes anything.
+//   POST /api/provision/phone-numbers   { area_code?, region?, country? } - KS_SERVER_PHONE_PROVISIONING: buys this
+//                                       copy's business line (every plan) and toll-free line (growth and up) through
+//                                       its own Twilio account, once each. 200 { ok, results: [{ kind, status, number?,
+//                                       error?, message? }] }; 503 twilio_not_configured / server_url_not_set.
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { pool } from "../db.js";
 import { ROLES } from "../auth/roles.js";
 import { safeHandler } from "../middleware/safeHandler.js";
 import { opsKeyMatches } from "./plan.js";
+import { provisionMainLines } from "../phone/numbers.js"; // KS_SERVER_PHONE_PROVISIONING
+import { liveTwilioNumbersApi, type TwilioNumbersApi } from "../phone/twilioNumbers.js";
 
 type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[] }> };
 const db = () => pool as unknown as Q;
@@ -98,6 +104,26 @@ router.post("/admin", safeHandler(async (req: any, res) => {
   if (!r.ok) return res.status(r.error === "user_conflict" ? 409 : 400).json({ ok: false, error: r.error });
   console.log(`[provision] first admin ${r.created ? "created" : "already present"} (by ${String(req.headers["x-ks-ops-user"] ?? "ops").slice(0, 80)})`);
   return res.status(r.created ? 201 : 200).json(r);
+}));
+
+// KS_SERVER_PHONE_PROVISIONING - tests swap the Twilio client for a fake.
+let numbersApi: () => TwilioNumbersApi = () => liveTwilioNumbersApi();
+export function setProvisionNumbersApiForTests(f: (() => TwilioNumbersApi) | null): void {
+  numbersApi = f ?? (() => liveTwilioNumbersApi());
+}
+
+router.post("/phone-numbers", safeHandler(async (req: any, res) => {
+  if (!opsAuthorized(req, res)) return;
+  const b = req.body ?? {};
+  const actor = `ks-ops ${String(req.headers["x-ks-ops-user"] ?? "provisioning").slice(0, 80)}`;
+  const r = await provisionMainLines(db(), numbersApi(), { area_code: b.area_code, region: b.region, country: b.country, actor });
+  if (!r.ok) {
+    console.error("[provision] phone numbers not set up", { error: r.error, message: r.message });
+    const { status, ...body } = r;
+    return res.status(status).json(body);
+  }
+  for (const x of r.results.filter((y) => y.status === "failed")) console.error("[provision] phone number not bought", x);
+  return res.json(r);
 }));
 
 router.get("/teardown-check", safeHandler(async (req: any, res) => {

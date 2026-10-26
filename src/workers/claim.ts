@@ -140,7 +140,7 @@ export function withWorkerLock<T>(name: string, fn: () => Promise<T>): Promise<W
 // KS_SERVER_v8_SERVICE_STATUS - while the licensee is suspended or cancelled, background work stops (nothing contacts
 // clients, lenders or staff). index.ts registers the check; without one (tests) nothing is paused. The plan notices,
 // the usage reports to operations and the cancelled-data purge keep running.
-export const WORKERS_WHILE_STOPPED: ReadonlySet<string> = new Set(["plan_notices", "usage_reports", "licensee_purge"]);
+export const WORKERS_WHILE_STOPPED: ReadonlySet<string> = new Set(["plan_notices", "usage_reports", "licensee_purge", "phone_numbers"]); // KS_SERVER_PHONE_PROVISIONING - numbers are released after a cancellation
 let serviceStoppedCheck: (() => Promise<boolean>) | null = null;
 
 export function setServiceStoppedCheck(fn: (() => Promise<boolean>) | null): void {

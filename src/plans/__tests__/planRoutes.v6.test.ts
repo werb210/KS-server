@@ -72,7 +72,7 @@ function app() {
   const a = express();
   a.use(express.json());
   a.use("/api/plan", planRoutes);
-  a.get("/api/gated", requireFeature("call_recording"), (_req, res) => { res.json({ ok: true }); });
+  a.get("/api/gated", requireFeature("call_recording_playback"), (_req, res) => { res.json({ ok: true }); });
   return a;
 }
 
@@ -103,8 +103,8 @@ describe("GET /api/plan", () => {
       trial_usage: {},
     });
     expect(r.body.features.contacts).toBe(true);
-    expect(r.body.features.call_recording).toBe(false);
-    expect(r.body.catalogue).toContainEqual({ key: "lender_portal", label: "Lender portal (lenders can send you deals they can't place)", plan: "starter" }); // KS_SERVER_v9_PORTAL_PLANS
+    expect(r.body.features.call_recording_playback).toBe(false);
+    expect(r.body.catalogue).toContainEqual({ key: "lender_portal", label: "Lender portal (lenders keep their details and products current and send you deals they can't place)", plan: "starter" }); // KS_SERVER_v9_PORTAL_PLANS
     expect(r.body.catalogue).toContainEqual({ key: "broker_portal", label: "Broker portal", plan: "growth" });
     expect(r.body.features.lender_portal).toBe(true);
     expect(r.body.features.broker_portal).toBe(false);
@@ -175,7 +175,7 @@ describe("PUT /api/plan (operations)", () => {
 
 describe("POST /api/plan/upgrade-request", () => {
   it("is Admin only and emails sales with the plan, extra storage and trial usage", async () => {
-    usage = { call_recording: 4 };
+    usage = { call_recording_playback: 4 };
     expect((await request(app()).post("/api/plan/upgrade-request").set("Authorization", `Bearer ${token("Staff")}`).send({ plan: "pro" })).status).toBe(403);
     expect((await request(app()).post("/api/plan/upgrade-request").set("Authorization", `Bearer ${token("Admin")}`).send({ plan: "x" })).status).toBe(400);
     const r = await request(app()).post("/api/plan/upgrade-request").set("Authorization", `Bearer ${token("Admin")}`)
@@ -187,7 +187,7 @@ describe("POST /api/plan/upgrade-request", () => {
     expect(mail.subject).toContain("+ 1 x 50 GB");
     expect(mail.text).toContain("Current plan: starter");
     expect(mail.text).toContain("Extra storage blocks requested: 1");
-    expect(mail.text).toContain("Call recording: 4");
+    expect(mail.text).toContain("Call recording playback: 4");
   });
 
   it("reports a failed send", async () => {
@@ -201,7 +201,7 @@ describe("requireFeature", () => {
   it("answers 402 with the required plan, and offers the trial when it is available", async () => {
     const r = await request(app()).get("/api/gated");
     expect(r.status).toBe(402);
-    expect(r.body).toEqual({ ok: false, error: "feature_not_in_plan", feature: "call_recording", required_plan: "growth", trial_available: true });
+    expect(r.body).toEqual({ ok: false, error: "feature_not_in_plan", feature: "call_recording_playback", required_plan: "growth", trial_available: true });
   });
 
   it("counts uses only while the trial is what opens the feature", async () => {
@@ -213,14 +213,14 @@ describe("requireFeature", () => {
     clearPlanCache();
     expect((await request(app()).get("/api/gated")).status).toBe(200);
     expect((await request(app()).get("/api/gated")).status).toBe(200);
-    expect(usage).toEqual({ call_recording: 2 });
+    expect(usage).toEqual({ call_recording_playback: 2 });
 
     row.trial_ends_at = new Date(Date.now() - 1000);
     clearPlanCache();
     const after = await request(app()).get("/api/gated");
     expect(after.status).toBe(402);
     expect(after.body.trial_available).toBe(false);
-    expect(usage).toEqual({ call_recording: 2 });
+    expect(usage).toEqual({ call_recording_playback: 2 });
   });
 
   it("lets the request through on the default plan when the plan row cannot be read", async () => {
@@ -237,11 +237,11 @@ describe("plan notices", () => {
 
   it("warns once with 3 days left and once when the trial ends, naming the features used", async () => {
     row = { plan: "starter", trial_started_at: new Date(now.getTime() - 11 * 86_400_000), trial_ends_at: new Date(now.getTime() + 3 * 86_400_000), extra_storage_blocks: 0 };
-    usage = { call_recording: 3, broker_portal: 1 };
+    usage = { call_recording_playback: 3, broker_portal: 1 };
     let r = await runPlanNotices({ query: queryMock as any }, now);
     expect(r.sent).toEqual(["trial_warning_sent_at"]);
     expect(sendMock.mock.calls[0][0].subject).toContain("ends in 3 days");
-    expect(sendMock.mock.calls[0][0].text).toContain("Call recording, Broker portal");
+    expect(sendMock.mock.calls[0][0].text).toContain("Call recording playback, Broker portal");
     expect(sendMock.mock.calls[0][0].to).toEqual(["owner@prairie.example"]);
     r = await runPlanNotices({ query: queryMock as any }, now);
     expect(r.sent).toEqual([]);

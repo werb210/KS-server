@@ -747,7 +747,7 @@ router.get("/messages/:id/media", safeHandler(async (req: any, res: any) => {
 // <audio> player. Twilio Recording URLs require Basic auth (browser stalls at
 // 0:00), so proxy by conference id and self-heal raw Twilio URLs into public
 // blob so playback survives Twilio media purge.
-router.get("/recordings/by-conference/:conferenceId/media", requireFeature("call_recording"), safeHandler(async (req: any, res: any) => {
+router.get("/recordings/by-conference/:conferenceId/media", requireFeature("call_recording_playback"), safeHandler(async (req: any, res: any) => {
   if (!req.user) return res.status(401).end(); // BF_SERVER_v789_URL_TICKETS - URL ticket or Authorization header, checked above
   const cid = String(req.params?.conferenceId ?? "");
   if (!/^[0-9a-fA-F-]{8,40}$/.test(cid)) return res.status(400).end();

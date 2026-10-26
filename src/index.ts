@@ -470,6 +470,11 @@ export async function start(): Promise<void> {
     await workerStagger();
     try { const w = startPlanNoticesWorker(pool); workerStops.push(w.stop); console.log("[startup] plan-notices worker started"); }
     catch (err) { console.error("[startup] plan-notices worker failed to start:", err); }
+    // KS_SERVER_PHONE_PROVISIONING - releases phone numbers after their grace period (never silently).
+    const { startPhoneNumberWorker } = await import("./workers/phoneNumberWorker.js");
+    await workerStagger();
+    try { const w = startPhoneNumberWorker(pool); workerStops.push(w.stop); console.log("[startup] phone-number worker started"); }
+    catch (err) { console.error("[startup] phone-number worker failed to start:", err); }
     // KS_SERVER_v8_OPS_LINK - daily usage reports to Keystone operations.
     const { startUsageReportWorker } = await import("./workers/usageReportWorker.js");
     await workerStagger();

@@ -164,9 +164,19 @@ export async function dispatchEvent(deps: EngineDeps, ev: AutomationEvent): Prom
  * emitAutomationEvent(type, { silo, contactId, applicationId?, data }) (or the older single-object form).
  * Never throws into the operation that fired the trigger.
  */
+/** KS_SERVER_PLAN_FIXES - automations are growth and up (or a running trial). A starter copy keeps its workflows but
+ *  none of them run: no new enrollments and no due steps. A plan-read failure falls back to the default plan (logged). */
+export async function automationsInPlan(db?: { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[] }> }, now: Date = new Date()): Promise<boolean> {
+  const { getPlanState } = await import("../../plans/state.js");
+  const { checkFeature } = await import("../../plans/catalogue.js");
+  const q = db ?? ((await import("../../db.js")).pool as any);
+  return checkFeature(await getPlanState(q, now.getTime()), "automations", now).allowed;
+}
+
 export async function emitAutomationEvent(evOrType: AutomationEvent | string, payload: EventPayload = {}): Promise<void> {
   const ev = toEvent(evOrType, payload);
   try {
+    if (!(await automationsInPlan())) return; // KS_SERVER_PLAN_FIXES - not in this plan
     const deps = await defaultDeps();
     await dispatchEvent(deps, ev);
   } catch (err: any) {
