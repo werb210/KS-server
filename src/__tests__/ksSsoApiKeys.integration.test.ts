@@ -29,6 +29,7 @@ const goneEmail = `sso-gone-${tag}@acme.example`;
 const keys = generateKeyPairSync("rsa", { modulusLength: 2048 });
 let emailForToken = staffEmail;
 const realFetch = globalThis.fetch;
+let savedPlan: Record<string, unknown> | null = null;
 
 function ssoApp() {
   const a = express();
@@ -48,6 +49,7 @@ beforeAll(async () => {
   const sql = readFileSync(MIGRATION, "utf8");
   await pool.query(sql);
   await pool.query(sql);
+  savedPlan = (await pool.query(`SELECT * FROM licensee_plan WHERE id = 1`)).rows[0] ?? null;
   await pool.query(`INSERT INTO licensee_plan (id, plan) VALUES (1, 'pro') ON CONFLICT (id) DO UPDATE SET plan = 'pro', trial_started_at = NULL, trial_ends_at = NULL`);
   clearPlanCache();
   await pool.query(`INSERT INTO users (id, email, role, active, silo) VALUES ($1, $2, 'Staff', true, 'BF'), ($3, $4, 'Staff', false, 'BF')`, [STAFF, staffEmail, GONE, goneEmail]);
@@ -84,6 +86,15 @@ afterAll(async () => {
   await pool.query(`DELETE FROM lenders WHERE id = $1`, [LENDER]);
   await pool.query(`DELETE FROM api_keys WHERE name LIKE $1`, [`%${tag}%`]);
   await pool.query(`DELETE FROM sso_settings WHERE id = 1`);
+  await pool.query(`DELETE FROM users WHERE id = ANY($1::uuid[])`, [[STAFF, GONE]]).catch((e) => console.warn("cleanup", String(e)));
+  // Leave the plan row as it was: other suites (planMounts) depend on the default plan.
+  await pool.query(`DELETE FROM licensee_plan`).catch((e) => console.warn("cleanup", String(e)));
+  if (savedPlan) {
+    const cols = Object.keys(savedPlan);
+    await pool.query(`INSERT INTO licensee_plan (${cols.join(", ")}) VALUES (${cols.map((_, i) => "$" + (i + 1)).join(", ")})`, cols.map((c) => savedPlan![c]))
+      .catch((e) => console.warn("restore", String(e)));
+  }
+  clearPlanCache();
 });
 
 async function signIn(agent = ssoApp()) {
