@@ -30,8 +30,10 @@ import { isStaffOrService, principalFromRequest } from "../auth/principal.js";
 import { isApplicationFraud, FRAUD_LOCK_MESSAGE } from "../services/fraud/fraudGuard.js";
 import { isClientUploadableCategory } from "../services/documents/clientUploadCategories.js";
 import { refuseIfLocked } from "../retention/retention.js"; // KS_SERVER_v14_RETENTION
+import { DOCUMENTS_RULES, recordGuard } from "../visibility/recordGuard.js"; // KS_SERVER_v20_TEAMS
 
 const router = express.Router();
+router.use(recordGuard(DOCUMENTS_RULES, { requireFirst: true })); // KS_SERVER_v20_TEAMS
 
 const upload = multer({
   storage: multer.memoryStorage(),

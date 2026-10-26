@@ -50,10 +50,14 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "lender_portal", label: "Lender portal (lenders keep their details and products current and send you deals they can't place)", plan: "starter" },
   // KS_SERVER_v11_PGI - every plan: PGI referrals to the insurance partner, 20% referral fee on bound policies.
   { key: "pgi_referrals", label: "Personal Guarantee Insurance referrals (20% referral fee)", plan: "starter" },
+  // KS_SERVER_v20_CRM_FIELDS - custom fields on contacts, companies and applications, every plan.
+  { key: "custom_fields", label: "Custom fields", plan: "starter" },
   // KS_SERVER_PLAN_FIXES - calls are recorded on every plan; playing recordings back is growth and up.
   { key: "call_recording", label: "Call recording on every plan (playback on Growth and Pro)", plan: "starter" },
   // growth
   { key: "call_recording_playback", label: "Call recording playback", plan: "growth" },
+  // KS_SERVER_v20_TEAMS - teams and record visibility (all / team / own), growth and up.
+  { key: "teams", label: "Teams and record visibility", plan: "growth" },
   { key: "call_summaries", label: "AI call summaries", plan: "growth" },
   { key: "voicemail_transcription", label: "Voicemail transcription", plan: "growth" },
   { key: "watch_app", label: "Apple Watch app", plan: "growth" },
@@ -74,6 +78,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "ad_attribution", label: "Ad attribution", plan: "pro" },
   { key: "api_access", label: "API access", plan: "pro" },
   { key: "sso", label: "Single sign-on", plan: "pro" },
+  // KS_SERVER_v20_WEBHOOKS - outgoing webhooks (and Zapier Catch Hook triggers), pro.
+  { key: "webhooks", label: "Webhooks and Zapier", plan: "pro" },
   // KS_SERVER_v9_FRAUD - the fraud-protection suite (Todd, Oct 23): starter = 1, 2, 4, 5; growth adds 6, 7, 8;
   // pro has all of them except fraud_3. The key number matches the feature list in src/fraud/catalogue.ts.
   // KS_SERVER_BANK_CONNECT_ADDON - bank connect and fraud_3 (statement vs live bank data) are not plan features: they

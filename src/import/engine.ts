@@ -22,6 +22,9 @@ import type { Pool } from "pg";
 import { normalise, phoneKey, splitList, type RowIssue } from "./normalise.js";
 import { openSource, type FileKind, type OpenedSource, type SourceItem } from "./source.js";
 import { isRecordType, type RecordType } from "./fields.js";
+import { CUSTOM_OBJECT_OF, customValuesOf } from "./customFields.js"; // KS_SERVER_v20_CRM_FIELDS
+import { listDefinitions } from "../customFields/service.js"; // KS_SERVER_v20_CRM_FIELDS
+import type { FieldDefinition } from "../customFields/definitions.js";
 import { statusFromPipeline } from "../modules/applications/pipelineState.js";
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js";
 
@@ -124,6 +127,23 @@ export class Importer {
   }
 
   private get importer(): string | null { return isUuid(this.batch.created_by) ? this.batch.created_by : null; }
+
+  // KS_SERVER_v20_CRM_FIELDS - custom field definitions per record type (read once per batch).
+  private customDefs = new Map<RecordType, FieldDefinition[]>();
+  async customDefsFor(type: RecordType): Promise<FieldDefinition[]> {
+    const object = CUSTOM_OBJECT_OF[type];
+    if (!object) return [];
+    let defs = this.customDefs.get(type);
+    if (!defs) { defs = await listDefinitions(this.db as any, object); this.customDefs.set(type, defs); }
+    return defs;
+  }
+
+  /** The record's custom fields with the imported ones merged in, or undefined when the row brings none. */
+  private customFieldsFor(existing: any | null, v: Record<string, any>): Record<string, unknown> | undefined {
+    const imported = v.__custom as Record<string, unknown> | undefined;
+    if (!imported || !Object.keys(imported).length) return undefined;
+    return { ...((existing?.custom_fields as Record<string, unknown>) ?? {}), ...imported };
+  }
 
   private async findById(table: string, id: string): Promise<any | null> {
     if (!id) return null;
@@ -299,13 +319,14 @@ export class Importer {
     };
     const ownerId = await this.owner(v, "owner_email", w);
     if (existing) {
-      const changed = await this.update("contacts", existing, { ...desired, owner_id: ownerId }, { fillOnly: ["owner_id"], mergeArrays: ["tags"] });
+      const changed = await this.update("contacts", existing, { ...desired, owner_id: ownerId, custom_fields: this.customFieldsFor(existing, v) }, { fillOnly: ["owner_id"], mergeArrays: ["tags"] });
       await this.rememberExternal("contacts", v.external_id, "contacts", String(existing.id));
       return changed ? "updated" : "skipped";
     }
     const id = await this.insert("contacts", {
       ...desired, first_name: v.first_name ?? "", last_name: v.last_name ?? "", name: display, lead_status: v.lead_status ?? "New",
       silo: this.batch.silo, owner_id: ownerId, created_at: v.created_at ?? undefined, tags: v.tags ?? undefined,
+      custom_fields: this.customFieldsFor(null, v),
     });
     await this.rememberExternal("contacts", v.external_id, "contacts", id);
     return "created";
@@ -322,13 +343,13 @@ export class Importer {
     };
     const ownerId = await this.owner(v, "owner_email", w);
     if (existing) {
-      const changed = await this.update("companies", existing, { ...desired, owner_id: ownerId }, { fillOnly: ["owner_id"], mergeArrays: ["tags", "types_of_financing"] });
+      const changed = await this.update("companies", existing, { ...desired, owner_id: ownerId, custom_fields: this.customFieldsFor(existing, v) }, { fillOnly: ["owner_id"], mergeArrays: ["tags", "types_of_financing"] });
       await this.rememberExternal("companies", v.external_id, "companies", String(existing.id));
       return changed ? "updated" : "skipped";
     }
     const id = await this.insert("companies", {
       id: randomUUID(), name: v.name, ...desired, types_of_financing: v.types_of_financing ?? [], tags: v.tags ?? [],
-      owner_id: ownerId, silo: this.batch.silo, created_at: v.created_at ?? undefined,
+      owner_id: ownerId, silo: this.batch.silo, created_at: v.created_at ?? undefined, custom_fields: this.customFieldsFor(null, v),
     });
     await this.rememberExternal("companies", v.external_id, "companies", id);
     return "created";
@@ -447,7 +468,7 @@ export class Importer {
     };
     const ownerId = await this.owner(v, "owner_email", w);
     if (existing) {
-      const changed = await this.update("applications", existing, { ...desired, owner_user_id: ownerId }, { fillOnly: ["owner_user_id"] });
+      const changed = await this.update("applications", existing, { ...desired, owner_user_id: ownerId, custom_fields: this.customFieldsFor(existing, v) }, { fillOnly: ["owner_user_id"] });
       await this.rememberExternal("applications", v.external_id, "applications", String(existing.id));
       return changed ? "updated" : "skipped";
     }
@@ -460,6 +481,7 @@ export class Importer {
       parked_reason: stage === "Hold" ? "On hold in the previous system" : undefined,
       metadata: { import: { batch_id: this.batch.id, source: this.batch.source, external_id: v.external_id ?? null, source_stage: v.source_stage ?? null } },
       created_at: created, updated_at: v.updated_at ?? created, last_updated: v.updated_at ?? created,
+      custom_fields: this.customFieldsFor(null, v),
     });
     await this.rememberExternal("applications", v.external_id, "applications", id);
     return "created";
@@ -555,6 +577,10 @@ export class Importer {
   async processItem(item: SourceItem): Promise<RowOutcome> {
     const stageMap = (this.batch.options?.stage_map ?? {}) as Record<string, string>;
     const n = normalise(item.type, item.input, { stageMap });
+    // KS_SERVER_v20_CRM_FIELDS - mapped custom field columns ("cf:<name>"), checked like the portal checks them.
+    const custom = customValuesOf(await this.customDefsFor(item.type), item.input);
+    n.errors.push(...custom.errors);
+    if (Object.keys(custom.values).length) (n.values as Record<string, unknown>).__custom = custom.values;
     const counts = (this.byType[item.type] ??= zero());
     if (n.errors.length) {
       this.counts.errors++; counts.errors++;

@@ -435,8 +435,11 @@ export function presetsSummary() {
   };
 }
 
-/** Problems with a mapping before any row is read: required fields and one-of groups. */
-export function mappingProblems(type: RecordType, mapping: Record<string, string>): string[] {
+/**
+ * Problems with a mapping before any row is read: required fields and one-of groups. customKeys: the "cf:<name>" keys
+ * of this record type's custom fields (KS_SERVER_v20_CRM_FIELDS), which are allowed too.
+ */
+export function mappingProblems(type: RecordType, mapping: Record<string, string>, customKeys: ReadonlySet<string> = new Set()): string[] {
   const problems: string[] = [];
   const mapped = (k: string) => typeof mapping[k] === "string" && mapping[k].trim() !== "";
   for (const f of FIELDS[type]) if (f.required && !mapped(f.key)) problems.push(`Choose a column for "${f.label}".`);
@@ -446,6 +449,9 @@ export function mappingProblems(type: RecordType, mapping: Record<string, string
     if (!fs.some((f) => mapped(f.key))) problems.push(`Choose a column for at least one of: ${fs.map((f) => f.label).join(", ")}.`);
   }
   const known = new Set(FIELDS[type].map((f) => f.key));
-  for (const k of Object.keys(mapping)) if (!known.has(k)) problems.push(`"${k}" is not a ${RECORD_TYPE_LABEL[type]} field.`);
+  for (const k of Object.keys(mapping)) {
+    if (known.has(k) || customKeys.has(k)) continue;
+    problems.push(k.startsWith("cf:") ? `"${k.slice(3)}" is not a custom field of ${RECORD_TYPE_LABEL[type]} (it may be archived).` : `"${k}" is not a ${RECORD_TYPE_LABEL[type]} field.`);
+  }
   return problems;
 }

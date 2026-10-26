@@ -5,6 +5,7 @@ import { CAPABILITIES } from "../auth/capabilities.js";
 import { recordAuditEvent } from "../modules/audit/audit.service.js";
 import { logError } from "../observability/logger.js";
 import { safeHandler } from "../middleware/safeHandler.js";
+import { scopedRequest } from "../visibility/scopedDb.js"; // KS_SERVER_v20_TEAMS
 import { isKillSwitchEnabled } from "../modules/ops/ops.service.js";
 import {
   exportApplicationVolume,
@@ -19,6 +20,7 @@ const router = Router();
 
 router.use(requireAuth);
 router.use(requireCapability([CAPABILITIES.OPS_MANAGE]));
+router.use(scopedRequest); // KS_SERVER_v20_TEAMS - exports carry only the records this user may see
 
 function parseFormat(value: unknown): ExportFormat {
   if (value === "csv") {

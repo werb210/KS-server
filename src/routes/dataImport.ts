@@ -28,6 +28,18 @@ import { importFileStore } from "../import/deps.js";
 import { recordAuditEvent } from "../modules/audit/audit.service.js";
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js";
 import { kickDataImportWorker } from "../workers/dataImportWorker.js";
+import { CUSTOM_OBJECT_OF, customKey, customValuesOf, guessFieldType, matchCustomColumns } from "../import/customFields.js"; // KS_SERVER_v20_CRM_FIELDS
+import { createDefinition, listDefinitions } from "../customFields/service.js"; // KS_SERVER_v20_CRM_FIELDS
+import { FIELD_TYPES, isFieldType, slugifyName, type FieldDefinition } from "../customFields/definitions.js";
+
+// KS_SERVER_v20_CRM_FIELDS - custom fields of an import record type (contacts, companies, applications), and their keys.
+async function customDefs(type: string): Promise<FieldDefinition[]> {
+  const object = CUSTOM_OBJECT_OF[type as RecordType];
+  return object ? listDefinitions(pool as any, object) : [];
+}
+async function customKeySet(type: string): Promise<Set<string>> {
+  return new Set((await customDefs(type)).map((d) => customKey(d.name)));
+}
 
 export const IMPORT_LIMITS = {
   /** CSV / XLSX upload. */
@@ -100,9 +112,12 @@ function stageValues(src: Awaited<ReturnType<typeof openSource>>, mapping: Recor
 
 router.use(...admin);
 
-router.get("/presets", (_req, res) => {
-  res.json({ ok: true, ...presetsSummary(), stages: KEYSTONE_STAGES, limits: IMPORT_LIMITS });
-});
+router.get("/presets", safeHandler(async (_req: any, res: any) => {
+  // KS_SERVER_v20_CRM_FIELDS - each record type's custom fields can be mapped too ("cf:<name>").
+  const custom: Record<string, unknown> = {};
+  for (const t of Object.keys(CUSTOM_OBJECT_OF)) custom[t] = (await customDefs(t)).map((d) => ({ key: customKey(d.name), name: d.name, label: d.label, field_type: d.field_type, required: d.required }));
+  res.json({ ok: true, ...presetsSummary(), stages: KEYSTONE_STAGES, limits: IMPORT_LIMITS, custom_fields: custom, field_types: FIELD_TYPES });
+}));
 
 router.get("/templates/:type", (req, res) => {
   const type = String(req.params.type ?? "").replace(/\.csv$/, "");
@@ -130,7 +145,7 @@ router.post("/mappings", safeHandler(async (req: any, res: any) => {
   if (!name) return res.status(400).json({ error: "Give the mapping a name." });
   if (!isRecordType(type) || !isSource(source) || !mapping) return res.status(400).json({ error: "A record type, a source and a mapping are required." });
   const clean: Record<string, string> = {};
-  const known = new Set(FIELDS[type].map((f) => f.key));
+  const known = new Set([...FIELDS[type].map((f) => f.key), ...(await customKeySet(type))]);
   for (const [k, v] of Object.entries(mapping)) if (known.has(k) && typeof v === "string" && v.trim()) clean[k] = v.slice(0, 300);
   const options = req.body?.options && typeof req.body.options === "object" ? { stage_map: req.body.options.stage_map ?? {} } : {};
   const r = await pool.query(
@@ -176,6 +191,8 @@ router.post("/uploads", uploadLimiter, upload.single("file"), safeHandler(async 
   const put = await importFileStore().put({ buffer: file.buffer, filename: file.originalname.replace(/[^\w.\- ]+/g, "_").slice(0, 120) || `import.${kind}`, contentType: file.mimetype || "application/octet-stream", pathPrefix: `imports/${id}` });
   const type = recordType === "keystone" ? "keystone" : recordType;
   const suggested = recordType === "keystone" ? {} : autoMatch(source, recordType as RecordType, src.columns);
+  // KS_SERVER_v20_CRM_FIELDS - then the custom fields, by internal name or label (a HubSpot custom property's header).
+  if (recordType !== "keystone") Object.assign(suggested, matchCustomColumns(await customDefs(recordType), src.columns, new Set(Object.values(suggested))));
   const email = (await pool.query(`SELECT email FROM users WHERE id::text = $1`, [userId(req) ?? ""])).rows[0]?.email ?? null;
   await pool.query(
     `INSERT INTO import_batches (id, silo, source, record_type, file_name, file_key, file_kind, file_size, status, columns, mapping, options, total_rows, created_by, created_by_email)
@@ -222,7 +239,7 @@ router.put("/batches/:id/mapping", safeHandler(async (req: any, res: any) => {
     for (const [k, v] of Object.entries(raw)) if (typeof v === "string" && v.trim()) mapping[k] = v;
     const cols = new Set<string>(b.columns ?? []);
     const missing = Object.values(mapping).filter((c) => !cols.has(c));
-    const problems = [...mappingProblems(b.record_type as RecordType, mapping), ...missing.map((c) => `The file has no column "${c}".`)];
+    const problems = [...mappingProblems(b.record_type as RecordType, mapping, await customKeySet(b.record_type)), ...missing.map((c) => `The file has no column "${c}".`)];
     if (problems.length) return res.status(400).json({ error: problems[0], problems });
   } else {
     mapping = {};
@@ -233,6 +250,53 @@ router.put("/batches/:id/mapping", safeHandler(async (req: any, res: any) => {
       WHERE id = $1 RETURNING *`, [b.id, JSON.stringify(mapping), JSON.stringify(options)]);
   await pool.query(`DELETE FROM import_batch_errors WHERE batch_id = $1 AND phase = 'dry_run'`, [b.id]);
   return res.json({ ok: true, batch: publicBatch(r.rows[0]) });
+}));
+
+// KS_SERVER_v20_CRM_FIELDS - POST /batches/:id/custom-fields { columns: [{ column, label?, field_type? }] }
+// Creates a custom field for each column that matches nothing (e.g. a HubSpot custom property), guessing the type from
+// the column's values when none is given, and maps the column to it.
+router.post("/batches/:id/custom-fields", safeHandler(async (req: any, res: any) => {
+  const b = await batchFor(req, res);
+  if (!b) return;
+  const object = CUSTOM_OBJECT_OF[b.record_type as RecordType];
+  if (!object) return res.status(400).json({ error: "Custom fields exist for contacts, companies and deals only." });
+  if (!EDITABLE.includes(b.status) || (b.status === "failed" && Number(b.processed_rows) > 0)) {
+    return res.status(409).json({ error: "This import has already started; its mapping can no longer change." });
+  }
+  const wanted: Array<{ column: string; label?: string; field_type?: string }> = Array.isArray(req.body?.columns) ? req.body.columns.slice(0, 100) : [];
+  const cols = new Set<string>(b.columns ?? []);
+  const mapping: Record<string, string> = { ...(b.mapping ?? {}) };
+  const used = new Set(Object.values(mapping));
+  const created: FieldDefinition[] = [];
+  const problems: string[] = [];
+  let samples: Record<string, unknown[]> | null = null;
+  for (const w of wanted) {
+    const column = String(w?.column ?? "");
+    if (!cols.has(column)) { problems.push(`The file has no column "${column}".`); continue; }
+    if (used.has(column)) { problems.push(`"${column}" is already mapped.`); continue; }
+    let fieldType = isFieldType(w.field_type) ? w.field_type : null;
+    if (!fieldType) {
+      if (!samples) {
+        samples = {};
+        const batch = await loadBatch(pool, b.id);
+        const src = await openBatchSource(batch!, importFileStore());
+        let n = 0;
+        for (const row of src.sample(200) as Array<Record<string, unknown>>) { for (const c of cols) (samples[c] ??= []).push(row?.[c]); if (++n >= 200) break; }
+      }
+      fieldType = guessFieldType(samples[column] ?? []);
+    }
+    const label = String(w.label ?? column).trim().slice(0, 80) || column;
+    const r = await createDefinition(pool as any, object, { label, name: slugifyName(label), field_type: fieldType, group_name: b.source === "hubspot" ? "From HubSpot" : "Imported" }, userId(req));
+    if (!r.ok) { problems.push(`${label}: ${r.errors.join(" ")}`); continue; }
+    created.push(r.definition);
+    mapping[customKey(r.definition.name)] = column;
+    used.add(column);
+  }
+  const u = await pool.query(
+    `UPDATE import_batches SET mapping = $2::jsonb, status = 'uploaded', dry_run = NULL, processed_rows = 0, updated_at = now() WHERE id = $1 RETURNING *`,
+    [b.id, JSON.stringify(mapping)]);
+  if (created.length) await auditEvent(req, "data_import.custom_fields_created", b.id, { fields: created.map((d) => d.name) });
+  return res.status(created.length ? 201 : 400).json({ ok: created.length > 0, batch: publicBatch(u.rows[0]), created, problems, ...(created.length ? {} : { error: problems[0] ?? "Nothing to create." }) });
 }));
 
 router.get("/batches/:id/preview", safeHandler(async (req: any, res: any) => {
@@ -249,11 +313,17 @@ router.get("/batches/:id/preview", safeHandler(async (req: any, res: any) => {
   const rows: unknown[] = [];
   let errorRows = 0;
   let scanned = 0;
+  const previewDefs = new Map<string, FieldDefinition[]>();
   for (const item of src.items(b.mapping ?? {})) {
     const n = normalise(item.type, item.input, { stageMap });
+    // KS_SERVER_v20_CRM_FIELDS - custom field values are previewed (and checked) like the run checks them.
+    if (!previewDefs.has(item.type)) previewDefs.set(item.type, await customDefs(item.type));
+    const custom = customValuesOf(previewDefs.get(item.type)!, item.input);
+    n.errors.push(...custom.errors);
+    const values = Object.keys(custom.values).length ? { ...n.values, custom_fields: custom.values } : n.values;
     scanned++;
     if (n.errors.length) errorRows++;
-    if (rows.length < limit) rows.push({ row_number: item.rowNumber, record_type: item.type, values: n.values, errors: n.errors, warnings: n.warnings });
+    if (rows.length < limit) rows.push({ row_number: item.rowNumber, record_type: item.type, values, errors: n.errors, warnings: n.warnings });
     if (scanned >= 5000 && rows.length >= limit) break;
   }
   const stages = src.types.includes("applications") ? stageValues(src, b.mapping ?? {}, stageMap) : [];
@@ -280,7 +350,7 @@ router.post("/batches/:id/dry-run", safeHandler(async (req: any, res: any) => {
   const b = await batchFor(req, res);
   if (!b) return;
   if (b.record_type !== "keystone") {
-    const problems = mappingProblems(b.record_type as RecordType, b.mapping ?? {});
+    const problems = mappingProblems(b.record_type as RecordType, b.mapping ?? {}, await customKeySet(b.record_type));
     if (problems.length) return res.status(400).json({ error: problems[0], problems });
   }
   return queue(req, res, ["uploaded", "ready"], "dry_run_queued", "data_import.dry_run_requested");

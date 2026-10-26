@@ -3,6 +3,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { safeHandler } from "../middleware/safeHandler.js";
+import { scopedRequest } from "../visibility/scopedDb.js"; // KS_SERVER_v20_TEAMS - only the records this user may see (and ?team_id=)
 import { catalogFor, reportByKey, canSee, normalizeRole } from "../services/reports/catalog.js";
 import { DATA } from "../services/reports/data.js";
 import { STARTER_DASHBOARD_REPORTS, checkFeature } from "../plans/catalogue.js"; // KS_SERVER_v7_NO_REPORTS_ON_STARTER
@@ -80,7 +81,7 @@ router.put("/team-tabs", requireAuth, safeHandler(async (req: any, res: any) => 
   } catch (err) { await client.query("ROLLBACK"); throw err; } finally { client.release(); }
   res.json({ ok: true });
 }));
-router.get("/data/:key", requireAuth, (req: any, res: any, next: any) => (STARTER_DASHBOARD_REPORTS.has(String(req.params?.key ?? "")) ? next() : reportsGate(req, res, next)), safeHandler(async (req: any, res: any) => {
+router.get("/data/:key", requireAuth, (req: any, res: any, next: any) => (STARTER_DASHBOARD_REPORTS.has(String(req.params?.key ?? "")) ? next() : reportsGate(req, res, next)), scopedRequest, safeHandler(async (req: any, res: any) => {
   const def = reportByKey(String(req.params?.key ?? "")); const run = def ? DATA[def.key] : undefined;
   if (!def || !run) { res.status(404).json({ error: "unknown_report" }); return; }
   if (!canSee(req.user?.role, def.group)) { res.status(403).json({ error: "not_allowed" }); return; }

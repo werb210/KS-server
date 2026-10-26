@@ -31,6 +31,10 @@ import { logWarn } from "../observability/logger.js"; // BF_SERVER_v789_WAITLIST
 import { emitAutomationEvent } from "../modules/automation/automationEngine.js"; // BF_SERVER_v786_WORKFLOW_GRAPH
 import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
 import { lockedAmong, refuseIfLocked } from "../retention/retention.js"; // KS_SERVER_v14_RETENTION
+import { CRM_RULES, recordGuard } from "../visibility/recordGuard.js"; // KS_SERVER_v20_TEAMS
+import { ownerFilterSql, scopeForRequest, visibleIds } from "../visibility/scope.js"; // KS_SERVER_v20_TEAMS
+import { customFieldFilters, customFieldSortExpr } from "../customFields/definitions.js"; // KS_SERVER_v20_CRM_FIELDS
+import { checkNewRecordValues, listDefinitions, writeRecordValues } from "../customFields/service.js"; // KS_SERVER_v20_CRM_FIELDS
 
 const router = Router();
 
@@ -49,6 +53,30 @@ router.post("/web-leads", SupportController.createWebLead);
 
 router.use(requireAuth);
 router.use(requireCapability([CAPABILITIES.CRM_READ]));
+router.use(recordGuard(CRM_RULES)); // KS_SERVER_v20_TEAMS - single contacts/companies and everything under them
+// KS_SERVER_v20_TEAMS - duplicate finding, merging and clean-up compare records across the whole database, so they
+// need a user who sees every record. Tagging checks each id.
+async function requireAllRecords(req: any, res: any, next: any) {
+  try {
+    const scope = await scopeForRequest(req, pool as any);
+    if (scope.mode !== "all") return res.status(403).json({ ok: false, error: "all_records_required", message: "Only people who can see every record can find or merge duplicates." });
+    next();
+  } catch (err) { next(err); }
+}
+router.use(["/contacts/dedupe-preview", "/contacts/dedupe-merge", "/contacts/merge", "/contacts/:id/duplicate-candidates",
+  "/unified/duplicates", "/unified/cleanup", "/unified/merge", "/unified/people/backfill"], requireAllRecords);
+router.post("/unified/tags/apply", async (req: any, res: any, next: any) => {
+  try {
+    const kind = req.body?.entity === "company" ? "company" : "contact";
+    const want: string[] = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
+    const scope = await scopeForRequest(req, pool as any);
+    if (scope.mode !== "all") {
+      const ok = await visibleIds(pool as any, scope, kind, want);
+      req.body = { ...req.body, ids: want.filter((id) => ok.has(id)) };
+    }
+    next();
+  } catch (err) { next(err); }
+});
 // BF_SERVER_v856_CRM_UNIFY - tags, company people/details, duplicates + merge, clean-up, AI summary sources (every silo).
 router.use("/unified", crmUnifyRoutes);
 
@@ -206,10 +234,12 @@ router.get("/contacts/:id/clarity-recording", requireFeature("visitor_tracking")
 
 router.get("/contacts/:id/companies", safeHandler(async (req: any, res: any) => {
   try {
+    const cParams: unknown[] = [req.params.id];
+    const cScope = ownerFilterSql(await scopeForRequest(req, pool as any), "company", "companies", cParams); // KS_SERVER_v20_TEAMS
     const { rows } = await pool.query(
       `SELECT *
        FROM companies
-       WHERE id IN (
+       WHERE (id IN (
          SELECT company_id
          FROM contacts
          WHERE id = $1
@@ -219,8 +249,8 @@ router.get("/contacts/:id/companies", safeHandler(async (req: any, res: any) => 
          FROM contacts
          WHERE id = $1
          LIMIT 1
-       )`,
-      [req.params.id]
+       )) AND ${cScope}`,
+      cParams
     );
 
     return res.json(rows);
@@ -264,14 +294,16 @@ router.get("/contacts/:id/applications", safeHandler(async (req: any, res: any) 
   // Use the canonical columns and surface the catch failures via warn so
   // the next schema drift is visible.
   try {
+    const aParams: unknown[] = [req.params.id, resolveSiloFromRequest(req)]; // BF_SERVER_v789_SILO_SCOPING
+    const aScope = ownerFilterSql(await scopeForRequest(req, pool as any), "application", "applications", aParams); // KS_SERVER_v20_TEAMS
     const { rows } = await pool.query(
       `SELECT id::text                                          AS id,
               coalesce(pipeline_state, current_stage, status, '') AS stage,
               contact_id::text                                    AS "contactId"
          FROM applications
-        WHERE contact_id::text = $1 AND silo = $2
+        WHERE contact_id::text = $1 AND silo = $2 AND ${aScope}
         ORDER BY created_at DESC`,
-      [req.params.id, resolveSiloFromRequest(req)] // BF_SERVER_v789_SILO_SCOPING
+      aParams
     );
 
     return res.json(rows);
@@ -315,8 +347,12 @@ router.get("/customers", safeHandler((req: any, res: any) => {
 // the CRM tab count badges. Cheap silo-scoped COUNT(*).
 router.get("/counts", safeHandler(async (req: any, res: any) => {
   const silo = resolveSiloFromRequest(req);
-  const c = await pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM contacts WHERE silo = $1`, [silo]);
-  const co = await pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM companies WHERE silo = $1`, [silo]);
+  // KS_SERVER_v20_TEAMS - counts of what this user may see.
+  const scope = await scopeForRequest(req, pool as any);
+  const cp: unknown[] = [silo];
+  const c = await pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM contacts c WHERE c.silo = $1 AND ${ownerFilterSql(scope, "contact", "c", cp)}`, cp);
+  const cop: unknown[] = [silo];
+  const co = await pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM companies co WHERE co.silo = $1 AND ${ownerFilterSql(scope, "company", "co", cop)}`, cop);
   res.json({ data: { contacts: c.rows[0]?.n ?? 0, companies: co.rows[0]?.n ?? 0 } });
 }));
 
@@ -359,13 +395,19 @@ router.get("/contacts", safeHandler(async (req: any, res: any) => {
   const orderCol = SORT_COLS.has(sortCol) ? sortCol : "created_at";
   const orderDir = sortDir && sortDir.toLowerCase() === "asc" ? "ASC" : "DESC";
   // company_name and owner_name require their joined table aliases; map them.
-  const orderColExpr =
-    orderCol === "company_name" ? "co.name"
+  // KS_SERVER_v20_CRM_FIELDS - custom field columns sort (sort=cf_<name>:asc) and filter (cf_<name>=...).
+  const contactDefs = await listDefinitions(pool as any, "contact");
+  const cfSort = customFieldSortExpr(contactDefs, sortCol ?? "", "c");
+  const orderColExpr = cfSort ??
+    (orderCol === "company_name" ? "co.name"
     : orderCol === "owner_name" ? "u.first_name"
-    : `c.${orderCol}`;
+    : `c.${orderCol}`);
 
   const values: unknown[] = [silo];
   const where: string[] = ["c.silo = $1"];
+  // KS_SERVER_v20_TEAMS - only the contacts this user may see (all / team / own).
+  where.push(ownerFilterSql(await scopeForRequest(req, pool as any), "contact", "c", values));
+  where.push(...customFieldFilters(contactDefs, req.query ?? {}, "c", values));
   // BF_SERVER_CONTACTS_HIDE_ARCHIVED_v1 - merged/archived contacts must not appear in the CRM list.
   if (hasStatus) where.push("coalesce(c.status, 'active') <> 'archived'");
 
@@ -488,7 +530,8 @@ router.get("/contacts", safeHandler(async (req: any, res: any) => {
       ${hasOwnerId ? "c.owner_id" : "NULL::uuid"} AS owner_id,
       coalesce(u.first_name || ' ' || u.last_name, '') AS owner_name,
       c.created_at,
-      c.silo
+      c.silo,
+      c.custom_fields
     FROM contacts c
     LEFT JOIN companies co ON ${hasCompanyId ? "c.company_id = co.id" : "false"}
     LEFT JOIN users u ON ${hasOwnerId ? "c.owner_id = u.id" : "false"}
@@ -545,6 +588,10 @@ router.post("/contacts", requireCrmWrite, safeHandler(async (req: any, res: any)
     return res.status(400).json({ error: { field: "company_id", message: "company_id must be a UUID" } });
   }
 
+  // KS_SERVER_v20_CRM_FIELDS - custom field values are checked before the contact is created.
+  const cf = await checkNewRecordValues(pool as any, "contact", req.body?.custom_fields ?? {}, { requireAll: req.body?.custom_fields !== undefined });
+  if (cf.errors.length) return res.status(400).json({ error: "invalid_custom_fields", message: cf.errors.map((e) => e.error).join(" "), errors: cf.errors });
+
   const silo = resolveSiloFromRequest(req);
   const ownerId = req.user?.id ?? req.user?.userId ?? null;
   const row = await createContact(pool, {
@@ -567,6 +614,10 @@ router.post("/contacts", requireCrmWrite, safeHandler(async (req: any, res: any)
     owner_id: ownerId,
   });
 
+  if (row?.id && Object.keys(cf.value).length) {
+    const w = await pool.query(`UPDATE contacts SET custom_fields = $2::jsonb WHERE id = $1 RETURNING custom_fields`, [row.id, JSON.stringify(cf.value)]);
+    (row as any).custom_fields = w.rows[0]?.custom_fields ?? cf.value;
+  }
   if (row?.id) void pushContactToOutlook(pool, String(row.id)); // BF_SERVER_BLOCK_v_CONTACTS_OUTLOOK_SYNC_v1
   // BF_SERVER_v786_WORKFLOW_GRAPH - automation trigger.
   if (row?.id) void emitAutomationEvent("contact.created", { silo, contactId: String(row.id), data: { source: "manual" } });
@@ -1065,6 +1116,15 @@ router.patch("/contacts/:id", requireCrmWrite, safeHandler(async (req: any, res:
       params.push(req.body[k] === "" ? null : req.body[k]);
     }
   }
+  // KS_SERVER_v20_CRM_FIELDS - custom field values: { custom_fields: { name: value | null } }.
+  if (req.body?.custom_fields !== undefined) {
+    const w = await writeRecordValues(pool as any, "contact", id, req.body.custom_fields);
+    if (!w.ok) return res.status(w.status).json({ error: "invalid_custom_fields", message: w.errors.map((e) => e.error).join(" "), errors: w.errors });
+    if (!updates.length) {
+      const { rows } = await pool.query(`SELECT * FROM contacts WHERE id = $1`, [id]);
+      return res.json({ data: rows[0] ?? null });
+    }
+  }
   if (!updates.length) return res.json({ data: null });
   // BF_SERVER_v786_WORKFLOW_GRAPH - read the old values so contact.field_changed carries from/to.
   const before = /^[0-9a-f-]{36}$/i.test(id) ? (await pool.query(`SELECT * FROM contacts WHERE id = $1`, [id])).rows[0] ?? null : null;
@@ -1087,9 +1147,15 @@ router.get("/companies", safeHandler(async (req: any, res: any) => {
   const sortColAllowed = ["name", "industry", "owner_name", "created_at"];
   const sortCol = sortColAllowed.includes(sortColRaw) ? sortColRaw : "created_at";
   const sortDir = sortDirRaw === "asc" ? "ASC" : "DESC";
+  // KS_SERVER_v20_CRM_FIELDS - custom field sort and filters.
+  const companyDefs = await listDefinitions(pool as any, "company");
+  const cfSort = customFieldSortExpr(companyDefs, sortColRaw ?? "", "co");
 
   const params: unknown[] = [silo];
   let where = "co.silo = $1";
+  // KS_SERVER_v20_TEAMS - only the companies this user may see.
+  where += ` AND ${ownerFilterSql(await scopeForRequest(req, pool as any), "company", "co", params)}`;
+  for (const cond of customFieldFilters(companyDefs, req.query ?? {}, "co", params)) where += ` AND ${cond}`;
   if (q) {
     params.push(`%${q}%`);
     where +=
@@ -1146,7 +1212,7 @@ router.get("/companies", safeHandler(async (req: any, res: any) => {
      FROM companies co
      LEFT JOIN users u ON u.id = co.owner_id
      WHERE ${where}
-     ORDER BY ${sortCol === "owner_name" ? "owner_name" : "co." + sortCol} ${sortDir}
+     ORDER BY ${cfSort ? `${cfSort} ${sortDir} NULLS LAST` : sortCol === "owner_name" ? `owner_name ${sortDir}` : `co.${sortCol} ${sortDir}`}
      LIMIT $${pagedParams.length - 1} OFFSET $${pagedParams.length}`,
     pagedParams,
   );
@@ -1184,11 +1250,14 @@ router.post("/companies", requireCrmWrite, safeHandler(async (req: any, res: any
   const b = req.body ?? {};
   const name = String(b.name ?? "").trim();
   if (!name) return res.status(400).json({ error: "name required" });
+  // KS_SERVER_v20_CRM_FIELDS - custom field values on create (required fields enforced when the form sends any).
+  const cf = await checkNewRecordValues(pool as any, "company", b.custom_fields ?? {}, { requireAll: b.custom_fields !== undefined });
+  if (cf.errors.length) return res.status(400).json({ error: "invalid_custom_fields", message: cf.errors.map((e) => e.error).join(" "), errors: cf.errors });
   const { rows } = await pool.query(
     `INSERT INTO companies
        (name, industry, domain, city, region, types_of_financing,
-        owner_id, silo)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        owner_id, silo, custom_fields)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)
      RETURNING *`,
     [
       name,
@@ -1199,6 +1268,7 @@ router.post("/companies", requireCrmWrite, safeHandler(async (req: any, res: any
       Array.isArray(b.types_of_financing) ? b.types_of_financing : [],
       req.user?.id ?? req.user?.userId ?? null,
       silo,
+      JSON.stringify(cf.value),
     ],
   );
   res.status(201).json({ data: rows[0] });
@@ -1214,6 +1284,15 @@ router.patch("/companies/:id", requireCrmWrite, safeHandler(async (req: any, res
     if (k in (req.body ?? {})) {
       updates.push(`${k} = $${i++}`);
       params.push(req.body[k]);
+    }
+  }
+  // KS_SERVER_v20_CRM_FIELDS - custom field values.
+  if (req.body?.custom_fields !== undefined) {
+    const w = await writeRecordValues(pool as any, "company", id, req.body.custom_fields);
+    if (!w.ok) return res.status(w.status).json({ error: "invalid_custom_fields", message: w.errors.map((e) => e.error).join(" "), errors: w.errors });
+    if (!updates.length) {
+      const { rows } = await pool.query(`SELECT * FROM companies WHERE id = $1`, [id]);
+      return res.json({ data: rows[0] ?? null });
     }
   }
   if (!updates.length) return res.json({ data: null });
@@ -1555,9 +1634,17 @@ router.get("/timeline", safeHandler(handleListCrmTimeline));
 router.get("/web-leads", SupportController.fetchWebLeads);
 
 const ids = (v: any) => Array.isArray(v) ? v.map(String).filter(Boolean) : [];
+// KS_SERVER_v20_TEAMS - bulk actions only touch records the user may see; the rest of the selection is ignored.
+async function visibleSelection(req: any, kind: "contact" | "company"): Promise<string[]> {
+  const selected = ids(req.body?.ids);
+  const scope = await scopeForRequest(req, pool as any);
+  if (scope.mode === "all") return selected;
+  const ok = await visibleIds(pool as any, scope, kind, selected);
+  return selected.filter((id) => ok.has(id));
+}
 
 router.post('/contacts/bulk-delete', requireCrmWrite, safeHandler(async (req: any, res: any) => {
-  const selected = ids(req.body?.ids); const silo = getSilo(res);
+  const selected = await visibleSelection(req, "contact"); const silo = getSilo(res);
   if (!selected.length) return res.json({ deleted: 0, protectedIds: [] });
   // v692: protect contacts attached to an application (direct FK or join table).
   // (Previous code joined a non-existent lenders.owner_contact_id column -> crash.)
@@ -1578,7 +1665,7 @@ router.post('/contacts/bulk-delete', requireCrmWrite, safeHandler(async (req: an
 }));
 
 router.post('/contacts/bulk-tag', safeHandler(async (req: any, res: any) => {
-  const selected = ids(req.body?.ids); const tags = ids(req.body?.tags); const op = String(req.body?.op ?? 'add'); const silo = getSilo(res);
+  const selected = await visibleSelection(req, "contact"); const tags = ids(req.body?.tags); const op = String(req.body?.op ?? 'add'); const silo = getSilo(res);
   let sql = `UPDATE contacts SET tags = $2::text[] WHERE id = ANY($1::uuid[]) AND silo = $3`;
   const params:any[] = [selected, tags, silo];
   if (op === 'add') { sql = `UPDATE contacts SET tags = (SELECT ARRAY(SELECT DISTINCT unnest(coalesce(contacts.tags,'{}'::text[]) || $2::text[]))) WHERE id = ANY($1::uuid[]) AND silo = $3`; }
@@ -1587,13 +1674,13 @@ router.post('/contacts/bulk-tag', safeHandler(async (req: any, res: any) => {
 }));
 
 router.post('/contacts/bulk-assign', safeHandler(async (req: any, res: any) => {
-  const selected = ids(req.body?.ids); const ownerUserId = String(req.body?.ownerUserId ?? ''); const silo = getSilo(res);
+  const selected = await visibleSelection(req, "contact"); const ownerUserId = String(req.body?.ownerUserId ?? ''); const silo = getSilo(res);
   const u = await pool.query(`SELECT id FROM users WHERE id::text = ($1)::text LIMIT 1`, [ownerUserId]); if (!u.rows[0]) return res.status(400).json({ error: 'invalid_owner' });
   const out = await pool.query(`UPDATE contacts SET owner_id = $2 WHERE id = ANY($1::uuid[]) AND silo = $3`, [selected, ownerUserId, silo]); res.json({ updated: out.rowCount ?? 0 });
 }));
 
 router.post('/companies/bulk-delete', safeHandler(async (req: any, res: any) => {
-  const selected = ids(req.body?.ids); const silo = getSilo(res);
+  const selected = await visibleSelection(req, "company"); const silo = getSilo(res);
   const prot = await pool.query(`SELECT id FROM companies WHERE id = ANY($1::uuid[]) AND silo = $2 AND (EXISTS (SELECT 1 FROM contacts c WHERE c.company_id = companies.id) OR EXISTS (SELECT 1 FROM applications a WHERE a.company_id = companies.id))`, [selected, silo]);
   const protectedIds = prot.rows.map((r:any)=>r.id); if (protectedIds.length) return res.status(409).json({ error:'fk_protected', protectedIds });
   const locked = await lockedAmong('company', selected); // KS_SERVER_v14_RETENTION - a legal hold blocks the whole batch
@@ -1602,7 +1689,7 @@ router.post('/companies/bulk-delete', safeHandler(async (req: any, res: any) => 
 }));
 
 router.post('/companies/bulk-tag', safeHandler(async (req: any, res: any) => {
-  const selected = ids(req.body?.ids); const tags = ids(req.body?.tags); const op = String(req.body?.op ?? 'add'); const silo = getSilo(res);
+  const selected = await visibleSelection(req, "company"); const tags = ids(req.body?.tags); const op = String(req.body?.op ?? 'add'); const silo = getSilo(res);
   let sql = `UPDATE companies SET tags = $2::text[] WHERE id = ANY($1::uuid[]) AND silo = $3`;
   if (op === 'add') sql = `UPDATE companies SET tags = (SELECT ARRAY(SELECT DISTINCT unnest(coalesce(companies.tags,'{}'::text[]) || $2::text[]))) WHERE id = ANY($1::uuid[]) AND silo = $3`;
   if (op === 'remove') sql = `UPDATE companies SET tags = ARRAY(SELECT t FROM unnest(coalesce(tags,'{}'::text[])) t WHERE NOT (t = ANY($2::text[]))) WHERE id = ANY($1::uuid[]) AND silo = $3`;
@@ -1610,7 +1697,7 @@ router.post('/companies/bulk-tag', safeHandler(async (req: any, res: any) => {
 }));
 
 router.post('/companies/bulk-assign', safeHandler(async (req: any, res: any) => {
-  const selected = ids(req.body?.ids); const ownerUserId = String(req.body?.ownerUserId ?? ''); const silo = getSilo(res);
+  const selected = await visibleSelection(req, "company"); const ownerUserId = String(req.body?.ownerUserId ?? ''); const silo = getSilo(res);
   const u = await pool.query(`SELECT id FROM users WHERE id::text = ($1)::text LIMIT 1`, [ownerUserId]); if (!u.rows[0]) return res.status(400).json({ error: 'invalid_owner' });
   const out = await pool.query(`UPDATE companies SET owner_id = $2 WHERE id = ANY($1::uuid[]) AND silo = $3`, [selected, ownerUserId, silo]); res.json({ updated: out.rowCount ?? 0 });
 }));

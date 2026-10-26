@@ -3,6 +3,7 @@ import { sqlZoneLiteral } from "../lib/brokerageTime.js"; // KS_SETTINGS_PACK_v1
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { safeHandler } from "../middleware/safeHandler.js";
+import { scopedRequest } from "../visibility/scopedDb.js"; // KS_SERVER_v20_TEAMS - only the records this user may see (and ?team_id=)
 import { resolveSiloFromRequest } from "../middleware/silo.js";
 // BF_SERVER_FRAUD_HOLD_v48
 import { historicalStageFilter, liveStageFilter } from "../modules/applications/reportingScope.js";
@@ -41,11 +42,11 @@ export function boardScope(t = "a"): string {
               OR ${t}.submitted_at IS NOT NULL)`;
 }
 
-router.get("/", requireAuth, safeHandler(async (req: any, res: any) => {
+router.get("/", requireAuth, scopedRequest, safeHandler(async (req: any, res: any) => {
   res.json({ ok: true });
 }));
 
-router.get("/metrics", requireAuth, safeHandler(async (req: any, res: any) => { // BF_SERVER_BLOCK_v829_DEALS_NOT_COMPANIONS
+router.get("/metrics", requireAuth, scopedRequest, safeHandler(async (req: any, res: any) => { // BF_SERVER_BLOCK_v829_DEALS_NOT_COMPANIONS
   const silo = resolveSiloFromRequest(req);
   const [active, won, stageRows, commissionRows] = await Promise.all([
     pool.query<{ count: string }>(
@@ -202,7 +203,7 @@ router.get("/metrics", requireAuth, safeHandler(async (req: any, res: any) => { 
 }));
 
 // BF_SERVER_BLOCK_v822_DASHBOARD_PIPELINE_ACTIONS — real urgent-action counts.
-router.get("/actions", requireAuth, safeHandler(async (req: any, res: any) => {
+router.get("/actions", requireAuth, scopedRequest, safeHandler(async (req: any, res: any) => {
   const silo = resolveSiloFromRequest(req);
   const [waiting, missing, expiring, awaiting] = await Promise.all([
     pool.query<{ count: string }>(
@@ -267,7 +268,7 @@ function windowDays(req: any): number {
 // Document upload issues: which document types actually cause trouble. Counts
 // rejections and stalled OCR per category so staff can see WHICH document is
 // costing them deals rather than just "N documents missing".
-router.get("/document-health", requireAuth, safeHandler(async (req: any, res: any) => {
+router.get("/document-health", requireAuth, scopedRequest, safeHandler(async (req: any, res: any) => {
   const silo = resolveSiloFromRequest(req);
   const days = windowDays(req);
   const r = await pool.query<{
@@ -309,7 +310,7 @@ router.get("/document-health", requireAuth, safeHandler(async (req: any, res: an
 // that lender for that application. Lenders with no sends are omitted rather
 // than shown as 0% - a lender nobody submitted to has no approval rate, and
 // rendering 0% would defame them.
-router.get("/lender-activity", requireAuth, safeHandler(async (req: any, res: any) => {
+router.get("/lender-activity", requireAuth, scopedRequest, safeHandler(async (req: any, res: any) => {
   const silo = resolveSiloFromRequest(req);
   const days = windowDays(req);
   const r = await pool.query<{
@@ -362,7 +363,7 @@ router.get("/lender-activity", requireAuth, safeHandler(async (req: any, res: an
   res.json({ status: "ok", data: { days, rows } });
 }));
 
-router.get("/offers", requireAuth, safeHandler(async (req: any, res: any) => {
+router.get("/offers", requireAuth, scopedRequest, safeHandler(async (req: any, res: any) => {
   const silo = resolveSiloFromRequest(req);
   const days = windowDays(req);
   const r = await pool.query(
@@ -389,7 +390,7 @@ router.get("/offers", requireAuth, safeHandler(async (req: any, res: any) => {
 // progressed past step 1, never submitted) are excluded - they are abandoned
 // page-loads, not real applicants, and counting them makes step-1 drop-off look
 // catastrophic.
-router.get("/funnel", requireAuth, safeHandler(async (req: any, res: any) => {
+router.get("/funnel", requireAuth, scopedRequest, safeHandler(async (req: any, res: any) => {
   const silo = resolveSiloFromRequest(req);
   const days = windowDays(req);
   const r = await pool.query<Record<string, string>>(
@@ -458,7 +459,7 @@ router.get("/funnel", requireAuth, safeHandler(async (req: any, res: any) => {
 
 // Funding rate by product type: of the applications requesting each product,
 // how many reached a funded state.
-router.get("/funding-by-product", requireAuth, safeHandler(async (req: any, res: any) => {
+router.get("/funding-by-product", requireAuth, scopedRequest, safeHandler(async (req: any, res: any) => {
   const silo = resolveSiloFromRequest(req);
   const days = windowDays(req);
   const r = await pool.query<{ product: string; total: string; funded: string }>(
@@ -498,7 +499,7 @@ router.get("/funding-by-product", requireAuth, safeHandler(async (req: any, res:
 // via a `configured` flag rather than failing the whole panel. A dashboard that
 // 500s because one integration is unset is worse than one that renders what it
 // has and says what is missing.
-router.get("/acquisition", requireAuth, safeHandler(async (req: any, res: any) => {
+router.get("/acquisition", requireAuth, scopedRequest, safeHandler(async (req: any, res: any) => {
   const silo = resolveSiloFromRequest(req);
   const days = windowDays(req);
 
@@ -598,7 +599,7 @@ router.get("/acquisition", requireAuth, safeHandler(async (req: any, res: any) =
 // that the aggregate component reads: acquisition.applications,
 // marketing.revenue, funding.funded, documents.issueRate and
 // lenders.approvalRate.
-router.get("/analytics", requireAuth, safeHandler(async (req: any, res: any) => {
+router.get("/analytics", requireAuth, scopedRequest, safeHandler(async (req: any, res: any) => {
   const silo = resolveSiloFromRequest(req);
   const days = windowDays(req);
 
@@ -820,7 +821,7 @@ router.get("/analytics", requireAuth, safeHandler(async (req: any, res: any) => 
 }));
 
 // BF_SERVER_BLOCK_v822_DASHBOARD_PIPELINE_ACTIONS — real silo-scoped pipeline counts.
-router.get("/pipeline", requireAuth, safeHandler(async (req: any, res: any) => {
+router.get("/pipeline", requireAuth, scopedRequest, safeHandler(async (req: any, res: any) => {
   const silo = resolveSiloFromRequest(req);
   const r = await pool.query<{ stage: string; count: string }>(
     `SELECT pipeline_state AS stage, COUNT(*)::text AS count

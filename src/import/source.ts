@@ -117,6 +117,18 @@ const s = (v: unknown): string => {
 
 /** A Keystone row (column -> value) as import fields. users maps a user id to the email, for owners. */
 export function keystoneInput(table: string, r: Record<string, any>, users: Map<string, string>): Record<string, string> {
+  const base = keystoneBaseInput(table, r, users);
+  // KS_SERVER_v20_CRM_FIELDS - custom field values travel as "cf:<name>" (kept when this copy has the same fields).
+  if ((table === "contacts" || table === "companies" || table === "applications") && r.custom_fields && typeof r.custom_fields === "object") {
+    for (const [k, v] of Object.entries(r.custom_fields as Record<string, unknown>)) {
+      if (v === null || v === undefined) continue;
+      base[`cf:${k}`] = Array.isArray(v) ? v.map(String).join("; ") : String(v);
+    }
+  }
+  return base;
+}
+
+function keystoneBaseInput(table: string, r: Record<string, any>, users: Map<string, string>): Record<string, string> {
   const owner = (id: unknown) => users.get(String(id ?? "")) ?? "";
   switch (table) {
     case "companies":
