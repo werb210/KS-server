@@ -67,6 +67,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "full_reports", label: "Reports", plan: "growth" },
   { key: "visitor_tracking", label: "Website visitor tracking", plan: "growth" },
   { key: "toll_free_number", label: "Toll-free number", plan: "growth" },
+  // KS_SETTINGS_PACK_v1_NPS - the post-funding survey and review request (Growth and Pro).
+  { key: "nps_survey", label: "Post-funding survey and review requests", plan: "growth" },
   // pro
   { key: "multiple_lines", label: "Multiple business lines and a direct line for each person", plan: "pro" },
   { key: "ad_attribution", label: "Ad attribution", plan: "pro" },

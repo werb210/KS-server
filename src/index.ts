@@ -452,6 +452,12 @@ export async function start(): Promise<void> {
     try { const w = startTaskRemindersWorker(pool); workerStops.push(w.stop); console.log("[startup] task-reminders worker started"); }
     catch (err) { console.error("[startup] task-reminders worker failed to start:", err); }
 
+    // KS_SETTINGS_PACK_v1_NPS - post-funding surveys (Growth and Pro).
+    const { startNpsSurveyWorker } = await import("./workers/npsSurveyWorker.js");
+    await workerStagger();
+    try { const w = startNpsSurveyWorker(pool); workerStops.push(w.stop); console.log("[startup] nps-survey worker started"); }
+    catch (err) { console.error("[startup] nps-survey worker failed to start:", err); }
+
     // KS_SETTINGS_PACK_v1_BOOKING - booking reminders 24 h and 1 h before.
     const { startBookingRemindersWorker } = await import("./workers/bookingRemindersWorker.js");
     await workerStagger();

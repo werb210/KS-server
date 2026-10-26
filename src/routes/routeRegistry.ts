@@ -141,6 +141,7 @@ import securityRoutes from "./security.js"; // KS_SETTINGS_PACK_v1_SECURITY
 import neverLogRoutes from "./neverLog.js"; // KS_SETTINGS_PACK_v1_NEVER_LOG
 import leadRotationRoutes from "./leadRotation.js"; // KS_SETTINGS_PACK_v1_LEAD_ROTATION
 import blockedNumbersRoutes from "./blockedNumbers.js"; // KS_SETTINGS_PACK_v1_BLOCKED_NUMBERS
+import surveysRoutes from "./surveys.js"; // KS_SETTINGS_PACK_v1_NPS
 import planRoutes from "./plan.js"; // KS_SERVER_v6_PLANS
 import provisionRoutes from "./provision.js"; // KS_SERVER_v15_PROVISION
 import phoneNumbersRoutes from "./phoneNumbers.js"; // KS_SERVER_PHONE_PROVISIONING
@@ -387,6 +388,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/never-log", router: neverLogRoutes }, // Admin: addresses and domains never logged to the CRM
   { path: "/lead-rotation", router: leadRotationRoutes }, // Admin: round-robin owners for new leads; staff: away
   { path: "/blocked-numbers", router: blockedNumbersRoutes }, // Admin: blocked callers and texters
+  { path: "/surveys", router: surveysRoutes }, // public answers; Admin settings and report gated per route (nps_survey)
 ];
 
 export const PORTAL_ROUTE_REQUIREMENTS: Pick<ApiRoute, "method" | "path">[] = [
