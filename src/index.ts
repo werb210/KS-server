@@ -441,6 +441,12 @@ export async function start(): Promise<void> {
     try { const w = startTaskRemindersWorker(pool); workerStops.push(w.stop); console.log("[startup] task-reminders worker started"); }
     catch (err) { console.error("[startup] task-reminders worker failed to start:", err); }
 
+    // KS_SETTINGS_PACK_v1_BOOKING - booking reminders 24 h and 1 h before.
+    const { startBookingRemindersWorker } = await import("./workers/bookingRemindersWorker.js");
+    await workerStagger();
+    try { const w = startBookingRemindersWorker(pool); workerStops.push(w.stop); console.log("[startup] booking-reminders worker started"); }
+    catch (err) { console.error("[startup] booking-reminders worker failed to start:", err); }
+
     // KS_SERVER_v11_PGI - PGI referrals to the insurance partner: send, forward documents, sync, resend replies.
     const { startPgiReferralWorker } = await import("./workers/pgiReferralWorker.js");
     await workerStagger();

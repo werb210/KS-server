@@ -36,10 +36,12 @@ vi.mock("../services/notifications/notifyAllStaff.js", () => ({ notifyAllStaff: 
 vi.mock("../services/sendgridService.js", () => ({ sendTransactional: async () => undefined, mergeFields: (s: string) => s, sendgridConfigured: () => false }));
 vi.mock("../modules/crm/leadUpsert.service.js", () => ({ upsertCrmLead: async () => ({ id: "lead-2" }) }));
 vi.mock("../modules/readiness/readiness.service.js", () => ({ linkCrmContact: async () => "k-readiness" }));
-vi.mock("../services/clientBooking.js", () => ({
+vi.mock("../services/clientBooking.js", async (orig) => ({
+  ...(await orig<typeof import("../services/clientBooking.js")>()),
   bookableStaff: async () => [],
   openSlots: async () => [],
-  createBooking: async () => ({ ok: true, bookingId: "b1" }),
+  // KS_SETTINGS_PACK_v1_BOOKING - the booking result the route now reads (confirmation, timeline).
+  createBooking: async () => ({ ok: true, booking: { id: "b1", startsAt: new Date().toISOString(), staffFirstName: null, kind: "phone", joinUrl: null, manageToken: "t".repeat(32), contactId: "k1" } }),
   bookingPhoneE164: (p: string) => p,
   BookingCalendarError: class extends Error {},
 }));
