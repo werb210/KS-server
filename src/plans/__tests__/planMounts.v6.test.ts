@@ -13,7 +13,7 @@ describe("plan-gated mounts", () => {
     clearPlanCache();
     const { API_ROUTE_MOUNTS, registerApiRouteMounts } = await import("../../routes/routeRegistry.js");
     expect(Object.fromEntries(API_ROUTE_MOUNTS.filter((m) => m.feature).map((m) => [m.path, m.feature]))).toEqual({
-      "/watch": "watch_ipad_apps",
+      "/watch": "watch_app",
       "/lender": "lender_portal",
       "/referrer": "referrer_portal", // KS_SERVER_v9_PORTAL_PLANS
       "/broker": "broker_portal",
@@ -38,7 +38,7 @@ describe("plan-gated mounts", () => {
   });
 
   it("answers 402 on a starter copy", async () => {
-    for (const [path, feature] of [["/api/templates", "templates"], ["/api/admin/referrers", "referrer_portal"], ["/api/referrer/me", "referrer_portal"], ["/api/broker/me", "broker_portal"], ["/api/broker-imports", "broker_portal"], ["/api/watch/face", "watch_ipad_apps"], ["/api/reporting", "full_reports"], ["/api/sso-settings", "sso"], ["/api/api-keys", "api_access"]]) {
+    for (const [path, feature] of [["/api/templates", "templates"], ["/api/admin/referrers", "referrer_portal"], ["/api/referrer/me", "referrer_portal"], ["/api/broker/me", "broker_portal"], ["/api/broker-imports", "broker_portal"], ["/api/watch/face", "watch_app"], ["/api/reporting", "full_reports"], ["/api/sso-settings", "sso"], ["/api/api-keys", "api_access"]]) {
       const r = await request(app).get(path);
       expect(r.status, path).toBe(402);
       expect(r.body).toMatchObject({ ok: false, error: "feature_not_in_plan", feature });

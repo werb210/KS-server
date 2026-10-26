@@ -32,6 +32,7 @@ vi.mock("../modules/automation/automationEngine.js", () => ({
   runDue: h.runDue,
   runEnrollment: h.runEnrollment,
   buildContext: h.buildContext,
+  automationsInPlan: async () => true, // KS_SERVER_PLAN_FIXES - the plan check is covered in plans/__tests__/planFixes.test.ts
 }));
 vi.mock("../modules/automation/graphEngine.js", () => ({
   runDailyTriggers: h.runDailyTriggers,

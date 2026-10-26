@@ -9,6 +9,7 @@ import { ROLES } from "../auth/roles.js"; // BF_SERVER_v821_DIALER
 import { twilioWebhookValidation } from "../middleware/twilioWebhookValidation.js";
 import { generateVoiceToken, parseVoiceTokenApp } from "../telephony/services/tokenService.js"; // BF_SERVER_VOICE_TOKEN_ROUTE_v1
 import { pool } from "../db.js";
+import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_PHONE_PROVISIONING
 
 // BF_SERVER_BLOCK_CALL_CONTACT_RESOLVE_v1 — resolve the CRM contact for a dialed
 // call when the client did not send one. Order: explicit contactId -> the
@@ -448,7 +449,8 @@ router.get("/direct-numbers", auth, safeHandler(async (_req: any, res) => {
   return res.json({ ok: true, users: rows });
 }));
 
-router.put("/direct-numbers/:userId", auth, safeHandler(async (req: any, res) => {
+// KS_SERVER_PHONE_PROVISIONING - typing in a number bought elsewhere (or ported) is the pro direct-lines feature too.
+router.put("/direct-numbers/:userId", auth, requireFeature("multiple_lines"), safeHandler(async (req: any, res) => {
   if (String(req.user?.role ?? "").toLowerCase() !== "admin") return res.status(403).json({ ok: false, error: "admin_only" });
   const raw = String(req.body?.direct_number ?? "").trim();
   const { e164 } = await import("../voice/directLines.js");

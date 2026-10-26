@@ -39,18 +39,27 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "pipeline", label: "Pipeline", plan: "starter" },
   { key: "client_portal", label: "Branded client portal and application wizard", plan: "starter" },
   { key: "iphone_dialler", label: "iPhone dialler", plan: "starter" },
-  { key: "office_sync", label: "Office 365 / Google sync", plan: "starter" },
+  // KS_SERVER_PLAN_FIXES - the iPad staff portal app is on every plan (Todd, Oct 26); the Apple Watch app stays growth+.
+  { key: "ipad_app", label: "iPad staff portal app", plan: "starter" },
+  // KS_SERVER_PLAN_FIXES - inbox sync reads Outlook (Microsoft 365) only for now; Gmail can send, inbox reading comes later.
+  { key: "office_sync", label: "Email sync: Outlook (Microsoft 365) inbox sync; Gmail sends only for now", plan: "starter" },
   { key: "ai_assistant", label: "AI assistant", plan: "starter" },
-  // KS_SERVER_v9_PORTAL_PLANS - lender portal on every plan (Todd, Oct 22): lenders see files and send deals they can't place.
-  { key: "lender_portal", label: "Lender portal (lenders can send you deals they can't place)", plan: "starter" },
+  // KS_SERVER_v9_PORTAL_PLANS - lender portal on every plan (Todd, Oct 22).
+  // KS_SERVER_PLAN_FIXES - lender packages go to each lender by email or API; lenders use the portal to keep their
+  // details and products current and to send you deals they can't place. They do not review files there.
+  { key: "lender_portal", label: "Lender portal (lenders keep their details and products current and send you deals they can't place)", plan: "starter" },
   // KS_SERVER_v11_PGI - every plan: PGI referrals to the insurance partner, 20% referral fee on bound policies.
   { key: "pgi_referrals", label: "Personal Guarantee Insurance referrals (20% referral fee)", plan: "starter" },
+  // KS_SERVER_PLAN_FIXES - calls are recorded on every plan; playing recordings back is growth and up.
+  { key: "call_recording", label: "Call recording on every plan (playback on Growth and Pro)", plan: "starter" },
   // growth
-  { key: "call_recording", label: "Call recording", plan: "growth" },
+  { key: "call_recording_playback", label: "Call recording playback", plan: "growth" },
   { key: "call_summaries", label: "AI call summaries", plan: "growth" },
   { key: "voicemail_transcription", label: "Voicemail transcription", plan: "growth" },
-  { key: "watch_ipad_apps", label: "Apple Watch and iPad apps", plan: "growth" },
-  { key: "templates", label: "Message templates", plan: "growth" },
+  { key: "watch_app", label: "Apple Watch app", plan: "growth" },
+  // KS_SERVER_PLAN_FIXES - templates and snippets (one store, /api/templates) and automations are growth and up.
+  { key: "templates", label: "Message templates and snippets", plan: "growth" },
+  { key: "automations", label: "Automations (workflows)", plan: "growth" },
   { key: "referrer_portal", label: "Referrer portal", plan: "growth" },
   // KS_SERVER_v9_PORTAL_PLANS - co-broker portal (broker sign-up, files, split agreement) growth and up.
   { key: "broker_portal", label: "Broker portal", plan: "growth" },
@@ -59,7 +68,7 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "visitor_tracking", label: "Website visitor tracking", plan: "growth" },
   { key: "toll_free_number", label: "Toll-free number", plan: "growth" },
   // pro
-  { key: "multiple_lines", label: "Multiple business lines", plan: "pro" },
+  { key: "multiple_lines", label: "Multiple business lines and a direct line for each person", plan: "pro" },
   { key: "ad_attribution", label: "Ad attribution", plan: "pro" },
   { key: "api_access", label: "API access", plan: "pro" },
   { key: "sso", label: "Single sign-on", plan: "pro" },

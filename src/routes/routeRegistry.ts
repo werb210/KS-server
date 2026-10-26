@@ -136,6 +136,7 @@ import { siloMiddleware } from "../middleware/silo.js";
 import licenseeRoutes from "./licensee.js"; // KS_SERVER_v1_LICENSEE
 import planRoutes from "./plan.js"; // KS_SERVER_v6_PLANS
 import provisionRoutes from "./provision.js"; // KS_SERVER_v15_PROVISION
+import phoneNumbersRoutes from "./phoneNumbers.js"; // KS_SERVER_PHONE_PROVISIONING
 import dataExportRoutes from "./dataExport.js"; // KS_SERVER_v8_DATA_EXPORT
 import dataImportRoutes from "./dataImport.js"; // KS_SERVER_v16_DATA_IMPORT
 import fraudRoutes from "./fraud.js"; // KS_SERVER_v9_FRAUD
@@ -254,7 +255,7 @@ export function applySiloMiddleware(app: import("express").Application): void {
 }
 
 export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
-  { path: "/watch", router: watchRoutes, feature: "watch_ipad_apps" }, // KS_SERVER_v6_PLANS
+  { path: "/watch", router: watchRoutes, feature: "watch_app" }, // KS_SERVER_v6_PLANS // KS_SERVER_PLAN_FIXES - Apple Watch only; the iPad app is on every plan
   { path: "/_int", router: internalRoutes },
   { path: "/internal/processing", router: internalProcessingRoutes },
   { path: "/calendar", router: calendarRoutes },
@@ -359,6 +360,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/licensee", router: licenseeRoutes }, // KS_SERVER_v1_LICENSEE
   { path: "/plan", router: planRoutes }, // KS_SERVER_v6_PLANS
   { path: "/provision", router: provisionRoutes }, // KS_SERVER_v15_PROVISION - KS-Ops automatic provisioning (ops key)
+  { path: "/phone-numbers", router: phoneNumbersRoutes }, // KS_SERVER_PHONE_PROVISIONING - Admins buy / release numbers (Twilio)
   { path: "/export", router: dataExportRoutes }, // KS_SERVER_v8_DATA_EXPORT - Admin
   { path: "/data-import", router: dataImportRoutes }, // KS_SERVER_v16_DATA_IMPORT - Admin: the Import data wizard
   { path: "/fraud", router: fraudRoutes }, // KS_SERVER_v9_FRAUD - staff; individual checks gated per route
@@ -554,7 +556,7 @@ export function registerApiRouteMounts(app: Router): void {
   const mount = createMountTracker();
 
   mount(app, "/ocr/admin", Router().use(requireAuth, ocrAdminRoutes));
-  mount(app, "/automations", Router().use(requireAuth, automationRoutes)); // BF_SERVER_AUTOMATION_ENGINE_v1
+  mount(app, "/automations", Router().use(requireAuth, requireFeature("automations"), automationRoutes)); // BF_SERVER_AUTOMATION_ENGINE_v1 // KS_SERVER_PLAN_FIXES - growth and up
   mount(app, "/push", Router().use(requireAuthAllowClient, clientPushRoutes)); // BF_SERVER_v784_STAFF_ONLY_AUTH - applicant device registers its own token // BF_SERVER_CLIENT_PUSH_TOKEN_v1
 
   API_ROUTE_MOUNTS.forEach((entry) => {
