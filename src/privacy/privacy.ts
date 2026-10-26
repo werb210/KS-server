@@ -92,7 +92,7 @@ export async function closeRequest(db: Q, id: string, status: "completed" | "ref
 // ------------------------------------------------------------------ access: the export
 /** Everything held about a person, by table. Tables with a contact_id column (migrations/000000_baseline.sql). */
 export const EXPORT_TABLES = [
-  "crm_notes", "crm_call_log", "crm_email_log", "crm_meetings", "crm_tasks", "tasks", "crm_timeline_events", "communications_messages",
+  "crm_notes", "crm_call_log", "crm_email_log", "crm_meetings", "tasks", "crm_timeline_events", "communications_messages",
   "voicemails", "call_logs", "contact_documents", "client_bookings", "visitor_sessions", "contact_ad_attribution", "sequence_sends",
   "sms_campaign_sends", "email_link_clicks", "marketing_sequence_enrollments", "booking_events", "applications",
 ] as const;
@@ -152,7 +152,7 @@ export async function correctContact(db: Q, contactId: string, changes: Record<s
 // ------------------------------------------------------------------ deletion
 /** Activity removed with the contact when no retention or hold applies (contacts itself last). */
 export const DELETE_TABLES = [
-  "crm_notes", "crm_call_log", "crm_email_log", "crm_meetings", "crm_tasks", "tasks", "crm_timeline_events", "communications_messages",
+  "crm_notes", "crm_call_log", "crm_email_log", "crm_meetings", "tasks", "crm_timeline_events", "communications_messages",
   "voicemails", "client_bookings", "visitor_sessions", "contact_ad_attribution", "sequence_sends", "sms_campaign_sends", "email_link_clicks",
   "marketing_sequence_enrollments", "booking_events",
 ] as const;
