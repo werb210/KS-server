@@ -17,6 +17,7 @@ import { ACTIVE_STAFF_WHERE, adminEmails, seatCount } from "../plans/storage.js"
 import { bodies, sendPlanMail, type PlanMailer } from "../plans/email.js";
 import { mainLineNumberSetting } from "../licensee/connections.js";
 import { TwilioNumberError, twilioConfigured, type AvailableNumber, type TwilioNumbersApi } from "./twilioNumbers.js";
+import { addressSidFor, bundleSidFor, textingMessages, textingSnapshot } from "./textingState.js"; // KS_SERVER_TEXTING_REGISTRATION
 
 export const NUMBER_KINDS = ["main", "toll_free", "direct"] as const;
 export type NumberKind = (typeof NUMBER_KINDS)[number];
@@ -65,9 +66,9 @@ export function webhookUrls(base: string) {
 }
 
 export const REGULATORY_MESSAGE =
-  "Twilio needs a registered business address (or a regulatory bundle) on this account before it can buy this number. " +
-  "Add the address in the Twilio console (Phone Numbers > Regulatory Compliance > Addresses), set its AD... id as " +
-  "TWILIO_ADDRESS_SID on this server (and TWILIO_BUNDLE_SID if Twilio asks for a bundle), then try again.";
+  "Twilio needs your registered business address (or a regulatory bundle) before it sells this number. Keystone " +
+  "registers it for you when your system is set up; pick another number for now, or ask Keystone support if this " +
+  "keeps happening.";
 
 export type SetupStatus = { ready: boolean; twilio: boolean; server_url: string | null; address_sid: boolean; bundle_sid: boolean; messages: string[] };
 
@@ -78,13 +79,13 @@ export function setupStatus(env: NodeJS.ProcessEnv = process.env): SetupStatus {
   const messages: string[] = [];
   if (!twilio) messages.push("Twilio is not connected: TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN are not set on this server. Ask Keystone support to connect it.");
   if (!base) messages.push("This server's https address (KS_SERVER_URL) is not set, so new numbers could not be pointed at it. Ask Keystone support to set it.");
-  messages.push("Texting from a toll-free number needs toll-free verification in Twilio, and texting US numbers from a local line needs A2P 10DLC registration. Calls work straight away.");
+  messages.push(...textingMessages()); // KS_SERVER_TEXTING_REGISTRATION - plain English, from Keystone operations
   return {
     ready: twilio && Boolean(base),
     twilio,
     server_url: base,
-    address_sid: Boolean(String(env.TWILIO_ADDRESS_SID ?? "").trim()),
-    bundle_sid: Boolean(String(env.TWILIO_BUNDLE_SID ?? "").trim()),
+    address_sid: Boolean(addressSidFor(env)),
+    bundle_sid: Boolean(bundleSidFor(env)),
     messages,
   };
 }
@@ -167,7 +168,7 @@ export async function searchNumbers(api: TwilioNumbersApi, input: SearchInput, e
   const contains = String(input.contains ?? "").trim();
   if (contains && !/^[0-9*]{1,7}$/.test(contains)) return refuse(400, "invalid_contains", "Search for up to 7 digits.");
   const limit = Math.min(30, Math.max(1, Math.floor(Number(input.limit) || 20)));
-  const hasAddress = Boolean(String(env.TWILIO_ADDRESS_SID ?? "").trim());
+  const hasAddress = Boolean(addressSidFor(env));
   try {
     const found = kind === "toll_free"
       ? await api.searchTollFree({ country, contains: contains || undefined, limit })
@@ -253,8 +254,8 @@ export async function purchaseNumber(db: Q, api: TwilioNumbersApi, input: Purcha
       phoneNumber: number,
       friendlyName: kind === "direct" ? `Direct line - ${userName}`.slice(0, 64) : kind === "toll_free" ? "Toll-free line" : "Business line",
       ...hooks,
-      addressSid: String(env.TWILIO_ADDRESS_SID ?? "").trim() || undefined,
-      bundleSid: String(env.TWILIO_BUNDLE_SID ?? "").trim() || undefined,
+      addressSid: addressSidFor(env) || undefined,
+      bundleSid: bundleSidFor(env) || undefined,
     });
   } catch (err) {
     logTwilio("purchase", err, { number, kind });
@@ -558,7 +559,8 @@ export async function listNumbers(db: Q, env: NodeJS.ProcessEnv = process.env, n
     console.error("[phone-numbers] licensee settings not read for the default search", { message: (err as Error)?.message ?? String(err) });
   }
   const used = Object.fromEntries(NUMBER_KINDS.map((k) => [k, rows.rows.filter((r: any) => r.kind === k && r.status !== "releasing").length]));
-  return { plan, numbers: rows.rows, limits, used, allowed, grace_days: graceDays(env), main_line: mainLineNumberSetting(env) || null, default_search: search, setup: setupStatus(env) };
+  const texting = Object.values(textingSnapshot().registrations).map((r) => ({ kind: r!.kind, status: r!.status, phone_number: r!.phone_number, message: r!.message }));
+  return { plan, numbers: rows.rows, limits, used, allowed, grace_days: graceDays(env), main_line: mainLineNumberSetting(env) || null, default_search: search, setup: setupStatus(env), texting };
 }
 
 export type MainLineRequest = { area_code?: unknown; region?: unknown; country?: unknown; actor: string };

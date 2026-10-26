@@ -73,7 +73,7 @@ import { refuseIfLocked } from "../retention/retention.js"; // KS_SERVER_v14_RET
 // BF_APP_ID_CAST_v39 — Block 39-A — applications.id comparisons cast to text
 
 const router = Router();
-import { smsFromFor, smsSenderFor } from "../lib/smsFrom.js"; // BF_SERVER_US_SMS_TOLLFREE_v755
+import { smsFromFor, smsSenderFor, usTextingHold } from "../lib/smsFrom.js"; // BF_SERVER_US_SMS_TOLLFREE_v755
 
 // BF_SERVER_DOC_WAIVERS_ROUTES_v1 — Request Items checklist (dynamic Step-5 required set) +
 // admin-only per-application document waivers.
@@ -229,6 +229,11 @@ async function sendDocumentRejectionSms(params: {
 
   // BF_SERVER_GUARD_EVERYWHERE_v136
   if (isUndeliverableNumber(to)) return;
+  // KS_SERVER_TEXTING_REGISTRATION - a US mobile waits until the texting registration is approved.
+  if (usTextingHold(to)) {
+    console.warn("[portal] document-rejection text to a US mobile held until texting registration is approved");
+    return;
+  }
 
   const client: any = sharedTwilio(accountSid, authToken);
   const msg = await client.messages.create({ body, ...smsSenderFor(to, from), to }).catch(() => null); // BF_SERVER_US_SMS_TOLLFREE_v755

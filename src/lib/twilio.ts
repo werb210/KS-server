@@ -1,7 +1,7 @@
 import { countOutboundText } from "../plans/usage.js"; // KS_SERVER_v8_USAGE - monthly text count
 import { safeImport } from "../utils/safeImport.js";
 import { isUndeliverableNumber } from "./smsDeliverability.js"; // BF_SERVER_GUARD_EVERYWHERE_v136
-import { smsFromFor, smsSenderFor } from "./smsFrom.js"; // BF_SERVER_US_SMS_TOLLFREE_v755
+import { smsFromFor, smsSenderFor, usTextingHold, UsTextingPendingError } from "./smsFrom.js"; // BF_SERVER_US_SMS_TOLLFREE_v755
 
 export async function sendSMS(to: string, body: string) {
   if (process.env.NODE_ENV === "test") {
@@ -29,6 +29,12 @@ export async function sendSMS(to: string, body: string) {
   // BF_SERVER_GUARD_EVERYWHERE_v136 - last line of defence for helper callers.
   if (isUndeliverableNumber(to)) {
     throw new Error(`undeliverable_number:${String(to).slice(0, 6)}`);
+  }
+  // KS_SERVER_TEXTING_REGISTRATION - a US mobile waits until the texting registration is approved.
+  const hold = usTextingHold(to);
+  if (hold) {
+    console.warn("[sms] US text held until texting registration is approved", String(to).slice(0, 6));
+    throw new UsTextingPendingError(hold);
   }
 
   const sent = await client.messages.create({

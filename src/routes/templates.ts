@@ -42,15 +42,36 @@ router.get("/", safeHandler(async (req: any, res: any) => {
 
 // BF_SERVER_v821_DIALER - quick replies for the iPhone dialler / Watch: GET / already returns templates AND snippets,
 // but every column (HTML bodies included) and no cap. This is the lightweight list:
-//   GET /api/templates/quick?channel=sms -> { items: [{ id, name, body, isSnippet }] }  (max 50, snippets first, then name)
+//   GET /api/templates/quick?channel=sms -> { items: [{ id, name, body, isSnippet, builtIn? }] }  (max 50, snippets first, then name)
 // body is the RAW text with merge fields ({{contact.first_name}}) unrendered: POST /api/communications/sms and
 // /api/communications/messages/send render them for the recipient on send.
+// KS_SERVER_QUICK_REPLIES_EVERY_PLAN - the dialler's built-in quick replies work on every plan: this route is mounted on
+// its own (routeRegistry, before the Growth-and-up /templates mount). The brokerage's saved templates and snippets are
+// added only when the plan includes templates (Growth and up, or the in-app trial); Starter gets the built-in ones.
 export const QUICK_REPLY_LIMIT = 50;
-router.get("/quick", safeHandler(async (req: any, res: any) => {
-  const silo = getSilo(res);
-  const userId = req.user?.id ?? req.user?.userId ?? null;
+export const BUILT_IN_QUICK_REPLIES: ReadonlyArray<{ id: string; name: string; body: string }> = [
+  { id: "builtin-on-a-call", name: "On a call", body: "Sorry, I'm on a call. I'll call you back shortly." },
+  { id: "builtin-call-back", name: "Call me back", body: "Can you call me back when you have a minute?" },
+  { id: "builtin-got-it", name: "Got it", body: "Thanks, got it. I'll be in touch soon." },
+  { id: "builtin-running-late", name: "Running late", body: "Running a few minutes late. I'll be there soon." },
+  { id: "builtin-documents", name: "Documents", body: "Could you upload the documents we talked about in the app? Thank you." },
+];
+
+export const quickRepliesRouter = Router();
+quickRepliesRouter.use(requireAuth);
+quickRepliesRouter.get("/", safeHandler(async (req: any, res: any) => {
   const channel = req.query.channel == null ? "sms" : String(req.query.channel).toLowerCase();
   if (!CHANNELS.has(channel)) return res.status(400).json({ error: "invalid_channel" });
+  const builtIn = channel === "sms" || channel === "message"
+    ? BUILT_IN_QUICK_REPLIES.map((r) => ({ ...r, isSnippet: false, builtIn: true }))
+    : [];
+  const { getPlanState } = await import("../plans/state.js");
+  const { checkFeature } = await import("../plans/catalogue.js");
+  const now = new Date();
+  const plan = checkFeature(await getPlanState(pool as any, now.getTime()), "templates", now);
+  if (!plan.allowed) return res.json({ items: builtIn });
+  const silo = getSilo(res);
+  const userId = req.user?.id ?? req.user?.userId ?? null;
   const { rows } = await pool.query(
     `SELECT id::text AS id, name, COALESCE(NULLIF(body_text, ''), body_html, '') AS body, is_snippet
        FROM message_templates
@@ -61,9 +82,8 @@ router.get("/quick", safeHandler(async (req: any, res: any) => {
       LIMIT ${QUICK_REPLY_LIMIT}`,
     [silo, userId, channel],
   );
-  res.json({
-    items: rows.map((r: any) => ({ id: String(r.id), name: String(r.name ?? ""), body: htmlToText(String(r.body ?? "")), isSnippet: r.is_snippet === true })),
-  });
+  const saved = rows.map((r: any) => ({ id: String(r.id), name: String(r.name ?? ""), body: htmlToText(String(r.body ?? "")), isSnippet: r.is_snippet === true }));
+  res.json({ items: [...saved, ...builtIn].slice(0, QUICK_REPLY_LIMIT) });
 }));
 
 /** Plain text for a template that only has an HTML body (merge fields are left untouched). */

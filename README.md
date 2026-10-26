@@ -260,8 +260,20 @@ webhooks straight away: voice `POST {server}/api/webhooks/twilio/voice/twiml`, c
 | `TWILIO_BUNDLE_SID` (optional, `BU...`) | only needed where Twilio asks for a regulatory bundle |
 | `KS_NUMBER_RELEASE_GRACE_DAYS` (optional) | 30 days between "will be released" and the release |
 
-Texting from a toll-free number needs Twilio toll-free verification, and texting US numbers from a local line needs
-A2P 10DLC registration; both are done by hand in Twilio. Calls work straight away.
+Texting registration (KS_SERVER_TEXTING_REGISTRATION): Keystone operations sets up this copy's Twilio sub-account,
+address and texting registration by itself and pushes the status here with `PUT /api/provision/texting`
+`{ registrations: [{ kind: toll_free | a2p_10dlc, status, phone_number, reason, message }] }` (`KS_OPS_KEY`). The
+address (`AD...`) and any regulatory bundle (`BU...`) it registered come with `POST /api/provision/phone-numbers` and
+are used for every purchase unless `TWILIO_ADDRESS_SID` / `TWILIO_BUNDLE_SID` are set. Settings > Phone lines shows
+the status in plain English (`GET /api/phone-numbers` -> `setup.messages`, `texting`). Texts to US mobiles go from the
+brokerage's own toll-free line once its toll-free verification is approved (or from its US business line once A2P
+10DLC is approved); until then they wait with a plain reason (`409 us_texting_pending` for staff sends) and Canadian
+mobiles get texts from the business line. A copy that never received a status keeps the old rules
+(`TWILIO_US_SMS_FROM`). Calls work straight away.
+
+Dialler quick replies (KS_SERVER_QUICK_REPLIES_EVERY_PLAN): `GET /api/templates/quick` answers on every plan with the
+built-in quick replies; the brokerage's saved templates and snippets are added on Growth and up (they stay a Growth+
+feature everywhere else).
 
 ## Ops Control Plane
 

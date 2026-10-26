@@ -4,7 +4,7 @@ import { config } from "../../config/index.js";
 import { withRetry } from "../../lib/retry.js";
 import { pushDeadLetter } from "../../lib/deadLetter.js";
 import { isPermanentSmsFailure, isUndeliverableNumber } from "../../lib/smsDeliverability.js";
-import { smsFromFor, smsSenderFor } from "../../lib/smsFrom.js"; // BF_SERVER_US_SMS_TOLLFREE_v755
+import { smsFromFor, smsSenderFor, usTextingHold, UsTextingPendingError } from "../../lib/smsFrom.js"; // BF_SERVER_US_SMS_TOLLFREE_v755
 import { serverUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 // BF_SERVER_SMS_LOOP_KILL_v121
@@ -52,6 +52,13 @@ export async function sendSms(
   if (isUndeliverableNumber(to)) {
     console.warn("[sms] undeliverable number, not sent", { to: String(to).slice(0, 6) });
     throw new UndeliverableNumberError(String(to));
+  }
+
+  // KS_SERVER_TEXTING_REGISTRATION - a US mobile waits until the texting registration is approved.
+  const hold = usTextingHold(to);
+  if (hold) {
+    console.warn("[sms] US text held until texting registration is approved", { to: String(to).slice(0, 6) });
+    throw new UsTextingPendingError(hold);
   }
 
   const client = fetchTwilioClient();

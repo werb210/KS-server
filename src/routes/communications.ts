@@ -15,7 +15,7 @@ import { replayKey } from "../middleware/replayKey.js"; // BF_SERVER_v831_DIALER
 import { clientUrl, serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 const router = Router();
-import { smsFromFor, smsSenderFor } from "../lib/smsFrom.js"; // BF_SERVER_US_SMS_TOLLFREE_v755
+import { smsFromFor, smsSenderFor, usTextingHold } from "../lib/smsFrom.js"; // BF_SERVER_US_SMS_TOLLFREE_v755
 import { brandName, assistantName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
 
@@ -1382,6 +1382,12 @@ router.post("/sms", replayKey("sms"), safeHandler(async (req: any, res: any) => 
     // BF_SERVER_GUARD_EVERYWHERE_v136 - tell staff so they can fix the number.
     if (isUndeliverableNumber(to)) {
       return res.status(400).json({ error: "undeliverable_number", message: "That number cannot receive SMS." });
+    }
+    // KS_SERVER_TEXTING_REGISTRATION - tell staff why a text to a US mobile waits.
+    const usHold = usTextingHold(to);
+    if (usHold) {
+      console.warn("communications.sms.us_held", { to: String(to).slice(0, 6) });
+      return res.status(409).json({ error: "us_texting_pending", message: usHold });
     }
     // BF_SERVER_BLOCK_v499_STAFF_SMS_DELIVERY_STATUS - ask Twilio for delivery updates.
     const statusCallback = `${(process.env.PUBLIC_BASE_URL || serverUrl()).replace(/\/+$/, "")}/api/r/status`;

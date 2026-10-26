@@ -9,6 +9,11 @@
 //                                       copy's business line (every plan) and toll-free line (growth and up) through
 //                                       its own Twilio account, once each. 200 { ok, results: [{ kind, status, number?,
 //                                       error?, message? }] }; 503 twilio_not_configured / server_url_not_set.
+//                                       KS_SERVER_TEXTING_REGISTRATION: address_sid / bundle_sid (AD... / BU...) that
+//                                       KS-Ops registered are kept for every later purchase too.
+//   PUT  /api/provision/texting         { registrations: [{ kind, status, phone_number?, reason?, message? }] } -
+//                                       KS_SERVER_TEXTING_REGISTRATION: toll-free verification / A2P 10DLC status, for
+//                                       Settings > Phone lines and for where texts to US mobiles may go from.
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { pool } from "../db.js";
@@ -17,6 +22,7 @@ import { safeHandler } from "../middleware/safeHandler.js";
 import { opsKeyMatches } from "./plan.js";
 import { provisionMainLines } from "../phone/numbers.js"; // KS_SERVER_PHONE_PROVISIONING
 import { liveTwilioNumbersApi, type TwilioNumbersApi } from "../phone/twilioNumbers.js";
+import { saveCompliance, saveTexting } from "../phone/textingState.js"; // KS_SERVER_TEXTING_REGISTRATION
 
 type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[] }> };
 const db = () => pool as unknown as Q;
@@ -116,6 +122,8 @@ router.post("/phone-numbers", safeHandler(async (req: any, res) => {
   if (!opsAuthorized(req, res)) return;
   const b = req.body ?? {};
   const actor = `ks-ops ${String(req.headers["x-ks-ops-user"] ?? "provisioning").slice(0, 80)}`;
+  const comp = await saveCompliance(db(), { address_sid: b.address_sid, bundle_sid: b.bundle_sid }, actor);
+  if (!comp.ok) return res.status(400).json({ ok: false, error: comp.error });
   const r = await provisionMainLines(db(), numbersApi(), { area_code: b.area_code, region: b.region, country: b.country, actor });
   if (!r.ok) {
     console.error("[provision] phone numbers not set up", { error: r.error, message: r.message });
@@ -123,6 +131,17 @@ router.post("/phone-numbers", safeHandler(async (req: any, res) => {
     return res.status(status).json(body);
   }
   for (const x of r.results.filter((y) => y.status === "failed")) console.error("[provision] phone number not bought", x);
+  return res.json(r);
+}));
+
+router.put("/texting", safeHandler(async (req: any, res) => {
+  if (!opsAuthorized(req, res)) return;
+  const actor = `ks-ops ${String(req.headers["x-ks-ops-user"] ?? "texting").slice(0, 80)}`;
+  const r = await saveTexting(db(), req.body ?? {}, actor);
+  if (!r.ok) {
+    console.error("[provision] texting status refused", { error: r.error });
+    return res.status(400).json(r);
+  }
   return res.json(r);
 }));
 

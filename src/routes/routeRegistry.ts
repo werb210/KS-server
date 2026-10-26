@@ -61,7 +61,7 @@ import creditResearchRoutes from "./creditResearch.js"; // BF_SERVER_BLOCK_v537
 import creditCollateralRoutes from "./creditCollateral.js"; // BF_SERVER_BLOCK_v536
 import creditFinancialsRoutes from "./creditFinancials.js"; // BF_SERVER_BLOCK_v535
 import brokerImportRoutes from "./brokerImports.js"; // BF_SERVER_BLOCK_v521_BROKER_IMPORT
-import templatesRoutes from "./templates.js"; // v693
+import templatesRoutes, { quickRepliesRouter } from "./templates.js"; // v693 // KS_SERVER_QUICK_REPLIES_EVERY_PLAN
 import staffRoutes from "./staff.js";
 import staffPushTokenRoutes from "./staffPushToken.js"; // BF_SERVER_v820_WATCH_CALLS
 import { callHoursRouter, missedSummaryRouter, nextFollowUpRouter } from "./staffDialer.js"; // BF_SERVER_v821_DIALER
@@ -557,6 +557,9 @@ export function registerApiRouteMounts(app: Router): void {
 
   mount(app, "/ocr/admin", Router().use(requireAuth, ocrAdminRoutes));
   mount(app, "/automations", Router().use(requireAuth, requireFeature("automations"), automationRoutes)); // BF_SERVER_AUTOMATION_ENGINE_v1 // KS_SERVER_PLAN_FIXES - growth and up
+  // KS_SERVER_QUICK_REPLIES_EVERY_PLAN - before the Growth-and-up /templates mount, so the dialler's built-in quick
+  // replies answer on every plan (saved templates are still added only when the plan has them).
+  mount(app, "/templates/quick", quickRepliesRouter);
   mount(app, "/push", Router().use(requireAuthAllowClient, clientPushRoutes)); // BF_SERVER_v784_STAFF_ONLY_AUTH - applicant device registers its own token // BF_SERVER_CLIENT_PUSH_TOKEN_v1
 
   API_ROUTE_MOUNTS.forEach((entry) => {

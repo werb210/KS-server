@@ -31,7 +31,6 @@ describe("starter refuses snippets, templates, automations and recording playbac
     for (const [method, path, feature] of [
       ["get", "/api/templates?snippets=1", "templates"],
       ["post", "/api/templates", "templates"],
-      ["get", "/api/templates/quick?channel=sms", "templates"],
       ["get", "/api/automations", "automations"],
       ["post", "/api/automations", "automations"],
       ["get", "/api/automations/catalog", "automations"],
@@ -41,6 +40,15 @@ describe("starter refuses snippets, templates, automations and recording playbac
       expect(r.status, path).toBe(402);
       expect(r.body, path).toMatchObject({ ok: false, error: "feature_not_in_plan", feature });
     }
+  });
+
+  // KS_SERVER_QUICK_REPLIES_EVERY_PLAN - the dialler's built-in quick replies work on Starter; saved templates do not.
+  it("the dialler's quick replies answer on Starter with the built-in ones", async () => {
+    const r = await request(app).get("/api/templates/quick?channel=sms").set("Authorization", `Bearer ${token}`);
+    expect(r.status).toBe(200);
+    expect(r.body.items.length).toBeGreaterThan(0);
+    expect(r.body.items.every((x: any) => x.builtIn === true)).toBe(true);
+    expect((await request(app).get("/api/templates/quick?channel=sms")).status).toBe(401);
   });
 
   it("automations still need sign-in first", async () => {
