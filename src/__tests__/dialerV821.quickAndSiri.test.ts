@@ -17,6 +17,10 @@ afterEach(() => { vi.restoreAllMocks(); });
 
 describe("quick replies", () => {
   const app = async () => mountRouter((await import("../routes/templates.js")).default, "/api/templates");
+  // KS_SERVER_QUICK_REPLIES_EVERY_PLAN - /api/templates/quick is its own router, mounted ahead of the gated /templates.
+  const quickApp = async () => mountRouter((await import("../routes/templates.js")).quickRepliesRouter, "/api/templates/quick");
+  beforeEach(async () => { process.env.KS_PLAN = "growth"; (await import("../plans/state.js")).clearPlanCache(); });
+  afterEach(async () => { delete process.env.KS_PLAN; (await import("../plans/state.js")).clearPlanCache(); });
   const QUICK = /SELECT id::text AS id, name, COALESCE\(NULLIF\(body_text, ''\), body_html, ''\) AS body, is_snippet/;
 
   it("GET /api/templates?channel=sms already returns templates AND snippets (no is_snippet filter without ?snippets)", async () => {
@@ -31,12 +35,14 @@ describe("quick replies", () => {
       { id: "s1", name: "On my way", body: "Hi {{contact.first_name}}, calling you in 5.", is_snippet: true },
       { id: "t1", name: "Docs reminder", body: "<p>Hi {{contact.first_name}},</p><p>Please upload your statements &amp; ID.</p>", is_snippet: false },
     ] }]]));
-    const res = await request(await app()).get("/api/templates/quick").query({ channel: "sms" }).set(auth());
+    const res = await request(await quickApp()).get("/api/templates/quick").query({ channel: "sms" }).set(auth());
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ items: [
+    expect(res.body.items.slice(0, 2)).toEqual([
       { id: "s1", name: "On my way", body: "Hi {{contact.first_name}}, calling you in 5.", isSnippet: true },
       { id: "t1", name: "Docs reminder", body: "Hi {{contact.first_name}},\nPlease upload your statements & ID.", isSnippet: false },
-    ] });
+    ]);
+    // The built-in quick replies follow the saved ones.
+    expect(res.body.items.slice(2).every((x: any) => x.builtIn === true && x.isSnippet === false)).toBe(true);
     const [sql, params] = callsMatching(h.query, QUICK)[0]!;
     expect(sqlText(sql)).toMatch(/ORDER BY is_snippet DESC, name ASC\s+LIMIT 50/);
     expect(sqlText(sql)).toContain("(shared = true OR owner_user_id = $2)");
@@ -44,10 +50,20 @@ describe("quick replies", () => {
   });
 
   it("defaults to sms, rejects unknown channels, requires a sign-in", async () => {
-    await request(await app()).get("/api/templates/quick").set(auth());
+    await request(await quickApp()).get("/api/templates/quick").set(auth());
     expect((callsMatching(h.query, QUICK)[0]![1] as unknown[])[2]).toBe("sms");
-    expect((await request(await app()).get("/api/templates/quick").query({ channel: "fax" }).set(auth())).status).toBe(400);
-    expect((await request(await app()).get("/api/templates/quick")).status).toBe(401);
+    expect((await request(await quickApp()).get("/api/templates/quick").query({ channel: "fax" }).set(auth())).status).toBe(400);
+    expect((await request(await quickApp()).get("/api/templates/quick")).status).toBe(401);
+  });
+
+  it("KS_SERVER_QUICK_REPLIES_EVERY_PLAN: on Starter the built-in quick replies answer, saved templates are not read", async () => {
+    process.env.KS_PLAN = "starter";
+    (await import("../plans/state.js")).clearPlanCache();
+    const { BUILT_IN_QUICK_REPLIES } = await import("../routes/templates.js");
+    const res = await request(await quickApp()).get("/api/templates/quick").query({ channel: "sms" }).set(auth());
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual(BUILT_IN_QUICK_REPLIES.map((r) => ({ ...r, isSnippet: false, builtIn: true })));
+    expect(callsMatching(h.query, QUICK)).toHaveLength(0);
   });
 });
 

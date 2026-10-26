@@ -4,7 +4,7 @@ import { config } from "../config/index.js";
 import { withRetry } from "../lib/retry.js";
 import { pushDeadLetter } from "../lib/deadLetter.js";
 import { isUndeliverableNumber } from "../lib/smsDeliverability.js"; // BF_SERVER_GUARD_EVERYWHERE_v136
-import { smsFromFor, smsSenderFor } from "../lib/smsFrom.js"; // BF_SERVER_US_SMS_TOLLFREE_v755
+import { smsFromFor, smsSenderFor, usTextingHold } from "../lib/smsFrom.js"; // BF_SERVER_US_SMS_TOLLFREE_v755
 
 export async function sendSMS(to: string, body: string, opts: { silo?: string | null } = {}): Promise<{ success: boolean } | void> { // BF_SERVER_RCS_BRAND_BF_ONLY_v781 - silo
   if (config.app.testMode === "true") {
@@ -20,6 +20,11 @@ export async function sendSMS(to: string, body: string, opts: { silo?: string | 
   // BF_SERVER_GUARD_EVERYWHERE_v136
   if (isUndeliverableNumber(to)) {
     console.warn("[sms] skipped undeliverable number", String(to).slice(0, 6));
+    return;
+  }
+  // KS_SERVER_TEXTING_REGISTRATION - a US mobile waits until the texting registration is approved.
+  if (usTextingHold(to)) {
+    console.warn("[sms] US text held until texting registration is approved", String(to).slice(0, 6));
     return;
   }
 

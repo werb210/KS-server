@@ -7,6 +7,8 @@
 // BF_SERVER_v813_NO_TOLLFREE_SMS - Twilio refused texting on the 866 toll-free number for good (Oct 15 2026,
 // policy 1712), so a US text now goes out from the usual number unless TWILIO_US_SMS_FROM names another number,
 // and a toll-free number there is ignored. The 866 stays the voice line.
+import { textingManaged, textingSnapshot, CARRIER_TIME, type TextingSnapshot } from "../phone/textingState.js"; // KS_SERVER_TEXTING_REGISTRATION
+
 export const DEFAULT_US_SMS_FROM = "";
 const TOLL_FREE = /^(?:\+?1)?8(00|33|44|55|66|77|88)\d{7}$/;
 
@@ -24,9 +26,48 @@ export function isUsNumber(to: unknown): boolean {
   return !CANADA.has(area) && !OTHER_NANP.has(area);
 }
 
+// KS_SERVER_TEXTING_REGISTRATION - when Keystone operations manages this copy's texting registration, a text to a US
+// mobile goes from the brokerage's own toll-free line once its toll-free verification is approved, or from its usual
+// (US) line once A2P 10DLC is approved; until then it waits, with a plain reason (usTextingHold). TWILIO_US_SMS_FROM is
+// then not used. Copies KS-Ops never pushed a status to keep the behaviour below.
+function approvedUsSender(s: TextingSnapshot): { from: string } | "usual" | null {
+  const tf = s.registrations.toll_free;
+  if (tf?.status === "approved" && tf.phone_number) return { from: tf.phone_number };
+  if (s.registrations.a2p_10dlc?.status === "approved") return "usual";
+  return null;
+}
+
+/** Why a text to this number cannot go now (a plain sentence), or null when it can. Only US mobiles ever wait. */
+export function usTextingHold(to: unknown, s: TextingSnapshot = textingSnapshot()): string | null {
+  if (!isUsNumber(to) || !textingManaged(s)) return null;
+  if (approvedUsSender(s)) return null;
+  const tf = s.registrations.toll_free;
+  const a2p = s.registrations.a2p_10dlc;
+  if ([tf?.status, a2p?.status].some((x) => x === "pending" || x === "submitted")) {
+    return `Texts to US mobiles wait until the carriers approve your texting registration (${CARRIER_TIME}). Canadian mobiles get texts now.`;
+  }
+  if ([tf?.status, a2p?.status].some((x) => x === "rejected" || x === "needs_info")) {
+    return "Texts to US mobiles cannot be sent yet: your texting registration is not approved. Keystone support has been told and is fixing it.";
+  }
+  return "Texts to US mobiles need an approved toll-free line (Growth and Pro plans) or a registered US business line, so this one was not sent.";
+}
+
+export class UsTextingPendingError extends Error {
+  readonly code = "us_texting_pending";
+  constructor(message: string) {
+    super(message);
+    this.name = "UsTextingPendingError";
+  }
+}
+
 /** The number to send from: the toll-free line for a US recipient, otherwise the usual number. */
 export function smsFromFor<T extends string | undefined | null>(to: unknown, defaultFrom: T): string | T {
   if (!isUsNumber(to)) return defaultFrom;
+  const snap = textingSnapshot();
+  if (textingManaged(snap)) {
+    const sender = approvedUsSender(snap);
+    return sender && sender !== "usual" ? sender.from : defaultFrom;
+  }
   const configured = String(process.env.TWILIO_US_SMS_FROM ?? DEFAULT_US_SMS_FROM).trim();
   if (!configured || configured.toLowerCase() === "off") return defaultFrom;
   if (TOLL_FREE.test(configured.replace(/[^0-9+]/g, ""))) return defaultFrom; // BF_SERVER_v813_NO_TOLLFREE_SMS

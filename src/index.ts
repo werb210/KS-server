@@ -230,6 +230,9 @@ export async function start(): Promise<void> {
     const { startOcrWorker } = await import("./modules/ocr/ocr.worker.js");
     const { startBankingAutoWorker } = await import("./workers/bankingAutoWorker.js");
     const workerStops: Array<() => void> = [];
+    // KS_SERVER_TEXTING_REGISTRATION - texting registration state in memory on every instance (the SMS senders read it).
+    try { const { startTextingStateRefresher } = await import("./phone/textingState.js"); const w = startTextingStateRefresher(pool as any); workerStops.push(w.stop); }
+    catch (err) { console.error("[startup] texting state refresher failed to start:", err); }
     try { const w = startOcrWorker(); workerStops.push(w.stop); console.log("[startup] OCR worker started"); }
     catch (err) { console.error("[startup] OCR worker failed to start:", err); }
     await workerStagger();
