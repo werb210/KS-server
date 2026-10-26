@@ -114,6 +114,13 @@ export function checkField(field: LicenseeField, raw: unknown): { ok: true; valu
   if (field === "logo_url" && !/^https:\/\/[^\s]+$/i.test(value)) return { ok: false, error: "logo_url must start with https://" };
   if (field === "support_email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return { ok: false, error: "support_email is not an email address" };
   if (field === "country" && !/^[A-Z]{2}$/.test(value.toUpperCase())) return { ok: false, error: "country must be a two-letter code like CA or US" };
+  // KS_SETTINGS_PACK_v1_TIME_ZONE - the brokerage's zone drives quiet hours, call hours, reports and usage periods,
+  // so only a real IANA zone name is accepted (src/lib/brokerageTime.ts computes with it).
+  if (field === "time_zone") {
+    let valid = /^[A-Za-z][A-Za-z0-9_+\-/]*$/.test(value) && value.length <= 64;
+    try { if (valid) new Intl.DateTimeFormat("en-CA", { timeZone: value }); } catch { valid = false; }
+    if (!valid) return { ok: false, error: "time_zone must be an IANA time zone like America/Edmonton or America/Toronto" };
+  }
   if (field === "workspace_provider") {
     const v = value.toLowerCase();
     if (v !== "m365" && v !== "google" && v !== "both") return { ok: false, error: "workspace_provider must be m365, google or both" };

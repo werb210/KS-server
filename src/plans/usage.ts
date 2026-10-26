@@ -14,8 +14,7 @@
 // Allowances are pooled: per-seat allowance x seats (+ the trial bonus during a trial, already in allowancesFor).
 // Minutes and texts are never cut off; what goes over is overage, billed at OVERAGE_RATES.
 import { brandSettings } from "../licensee/brand.js";
-import { DEFAULT_LICENSEE_TIME_ZONE } from "../licensee/settings.js";
-import { ALBERTA_TZ } from "../lib/albertaTime.js";
+import { brokerageTimeZone } from "../lib/brokerageTime.js";
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js";
 import {
   allowancesFor, effectivePlan, storageSummary, trialStatus, type Plan, type PlanState,
@@ -28,14 +27,8 @@ export const OVERAGE_RATES = { minute: 0.04, text: 0.03 } as const;
 /** The licensee's IANA time zone when it is a valid one, else Alberta. Alberta (the default zone name) is computed as
  *  ALBERTA_TZ, UTC-6 all year. */
 export function licenseeTimeZone(raw: unknown = brandSettings().time_zone): string {
-  const tz = String(raw ?? "").trim();
-  if (!tz || tz === DEFAULT_LICENSEE_TIME_ZONE) return ALBERTA_TZ;
-  try {
-    new Intl.DateTimeFormat("en-CA", { timeZone: tz });
-    return tz;
-  } catch {
-    return ALBERTA_TZ;
-  }
+  // KS_SETTINGS_PACK_v1_TIME_ZONE - one rule for the whole server (src/lib/brokerageTime.ts).
+  return brokerageTimeZone(raw);
 }
 
 function parts(d: Date, tz: string): { y: number; m: number; day: number } {

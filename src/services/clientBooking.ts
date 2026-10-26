@@ -1,4 +1,4 @@
-import { ALBERTA_TZ } from "../lib/albertaTime.js"; // BF_SERVER_ALBERTA_TIME_v743 - Alberta is UTC-6 all year
+import { brokerageTimeZone } from "../lib/brokerageTime.js"; // KS_SETTINGS_PACK_v1_TIME_ZONE - the brokerage's zone (Settings > Company)
 // BF_SERVER_CLIENT_BOOKING_v738 - clients book a 30-minute phone call or Teams meeting.
 import { randomUUID } from "node:crypto";
 import { pool } from "../db.js";
@@ -8,7 +8,8 @@ import { googleConfigProblem } from "./workspace/googleConfig.js"; // KS_SERVER_
 import { getGoogleForUser, type GoogleClient } from "./workspace/googleAuth.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
 import { createGoogleEvent, googleBusyTimes } from "./workspace/google.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
 
-export const TZ = ALBERTA_TZ;
+/** KS_SETTINGS_PACK_v1_TIME_ZONE - bookings are offered in the brokerage's own zone. */
+export const bookingZone = (): string => brokerageTimeZone();
 export const SLOT_MIN = 30;
 export const DAY_START_H = 9;
 export const DAY_END_H = 17;
@@ -20,7 +21,7 @@ export type BookingKind = "phone" | "teams";
 export type Staff = { id: string; email: string; first_name: string | null; signed_in?: boolean; mailbox?: string };
 export const mailboxOf = (staff: Staff): string => (staff.mailbox || staff.email).toLowerCase();
 
-function tzOffsetMin(at: Date, tz = TZ): number {
+function tzOffsetMin(at: Date, tz: string = bookingZone()): number {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(at).map((p) => [p.type, p.value]));
   const asUtc = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second));
   return Math.round((asUtc - at.getTime()) / 60_000);
@@ -30,7 +31,7 @@ export function albertaTime(y: number, m: number, d: number, h: number, min = 0)
   return new Date(guess.getTime() - tzOffsetMin(guess) * 60_000);
 }
 function albertaYmdDow(at: Date): { y: number; m: number; d: number; dow: number } {
-  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" }).formatToParts(at).map((x) => [x.type, x.value]));
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: bookingZone(), year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" }).formatToParts(at).map((x) => [x.type, x.value]));
   return { y: Number(p.year), m: Number(p.month), d: Number(p.day), dow: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(String(p.weekday)) };
 }
 export function candidateSlots(now: Date, days = 14): Date[] {

@@ -1,4 +1,4 @@
-import { ALBERTA_TZ } from "../lib/albertaTime.js"; // BF_SERVER_ALBERTA_TIME_v743 - Alberta is UTC-6 all year
+import { brokerageTimeZone } from "../lib/brokerageTime.js"; // KS_SETTINGS_PACK_v1_TIME_ZONE - the brokerage's zone (Settings > Company)
 // BF_SERVER_CLIENT_BOOKING_v738 - public booking API used by the website and client app.
 import { Router } from "express";
 import { safeHandler } from "../middleware/safeHandler.js";
@@ -29,7 +29,7 @@ router.get("/staff/:slug", safeHandler(async (req: any, res: any) => {
 router.get("/slots", safeHandler(async (req: any, res: any) => {
   const staffId = typeof req.query?.staff === "string" && req.query.staff !== "any" ? req.query.staff : null;
   try {
-    res.json({ timeZone: ALBERTA_TZ, slots: await openSlots(new Date(), staffId) });
+    res.json({ timeZone: brokerageTimeZone(), slots: await openSlots(new Date(), staffId) });
   } catch (err) {
     console.error("[booking] slots failed", err instanceof Error ? err.message : String(err));
     res.status(503).json({ error: "calendar_unavailable", message: "Booking is temporarily unavailable. Please call (866) 631-8939." });

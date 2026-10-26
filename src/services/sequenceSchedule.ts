@@ -1,10 +1,10 @@
-import { ALBERTA_TZ } from "../lib/albertaTime.js"; // BF_SERVER_ALBERTA_TIME_v743 - Alberta is UTC-6 all year
+import { brokerageTimeZone } from "../lib/brokerageTime.js"; // KS_SETTINGS_PACK_v1_TIME_ZONE - the brokerage's zone (Settings > Company)
 // BF_SERVER_SEQ_BUSINESS_HOURS_v1 - all deadlines are weekdays inside the
-// sequence's configured send window in Alberta time.
-const ZONE = ALBERTA_TZ;
+// sequence's configured send window in the brokerage's time zone.
+const zone = (): string => brokerageTimeZone();
 
 function localParts(at: Date): { weekday: string; hour: number } {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: ZONE, weekday: "short", hour: "2-digit", hourCycle: "h23" }).formatToParts(at);
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: zone(), weekday: "short", hour: "2-digit", hourCycle: "h23" }).formatToParts(at);
   const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
   return { weekday: value("weekday"), hour: Number(value("hour")) };
 }

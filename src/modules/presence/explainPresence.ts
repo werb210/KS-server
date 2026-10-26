@@ -1,4 +1,4 @@
-import { ALBERTA_TZ } from "../../lib/albertaTime.js"; // BF_SERVER_ALBERTA_TIME_v743 - Alberta is UTC-6 all year
+import { brokerageTimeZone } from "../../lib/brokerageTime.js"; // KS_SETTINGS_PACK_v1_TIME_ZONE
 // BF_SERVER_PRESENCE_EXPLAIN_v142
 // Presence is computed from several independent conditions, so "no agents are
 // available" gives no clue which one fired. This turns a staff_presence row
@@ -45,9 +45,9 @@ export const BUSINESS_END_HOUR = 18;
  * abbreviation, which silently shifted the window by an hour for most of the
  * year - 09:00-19:00 local through the summer.
  */
-export const BUSINESS_TIMEZONE = ALBERTA_TZ;
+export const businessTimeZone = (): string => brokerageTimeZone(); // KS_SETTINGS_PACK_v1_TIME_ZONE
 
-export function localHourIn(when: Date, timeZone = BUSINESS_TIMEZONE): number {
+export function localHourIn(when: Date, timeZone: string = businessTimeZone()): number {
   const formatted = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     hour: "numeric",
@@ -57,7 +57,7 @@ export function localHourIn(when: Date, timeZone = BUSINESS_TIMEZONE): number {
   return Number.isFinite(hour) ? hour % 24 : when.getUTCHours();
 }
 
-export function withinBusinessHours(when: Date, timeZone = BUSINESS_TIMEZONE): boolean {
+export function withinBusinessHours(when: Date, timeZone: string = businessTimeZone()): boolean {
   const hour = localHourIn(when, timeZone);
   return hour >= BUSINESS_START_HOUR && hour < BUSINESS_END_HOUR;
 }
@@ -76,7 +76,7 @@ function ageMinutes(value: Date | string | null | undefined, now: Date): number 
 export function explainPresence(
   row: PresenceRow,
   now: Date = new Date(),
-  timeZone = BUSINESS_TIMEZONE,
+  timeZone: string = businessTimeZone(),
 ): PresenceExplanation {
   const age = ageMinutes(row.last_heartbeat, now);
   const hour = localHourIn(now, timeZone);

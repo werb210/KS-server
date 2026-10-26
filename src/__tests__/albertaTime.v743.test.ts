@@ -35,7 +35,8 @@ describe("Alberta time is UTC-6 all year", () => {
     // choose (default America/Edmonton, DST via Intl on purpose). It is not business hours and never uses ALBERTA_TZ.
     // KS_SERVER_v1_LICENSEE - licensee/settings.ts stores each licensee's own time zone name (a setting, default
     // America/Edmonton); it does no clock arithmetic.
-    const allowed = [join("modules", "automation", "graph.ts"), join("voice", "callHours.ts"), join("licensee", "settings.ts")];
+    // KS_SETTINGS_PACK_v1_TIME_ZONE - lib/brokerageTime.ts is the one place that maps the stored name to the zone computed.
+    const allowed = [join("modules", "automation", "graph.ts"), join("voice", "callHours.ts"), join("licensee", "settings.ts"), join("lib", "brokerageTime.ts")];
     const hits = walk("src").filter((p) => readFileSync(p, "utf8").includes("America/Edmonton") && !allowed.some((a) => p.endsWith(a)));
     expect(hits).toEqual([]);
     expect(effectiveTz("America/Edmonton")).toBe(ALBERTA_TZ);
