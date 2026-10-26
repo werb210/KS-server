@@ -139,6 +139,7 @@ import bookingSettingsRoutes from "./bookingSettings.js"; // KS_SETTINGS_PACK_v1
 import privacyRoutes from "./privacy.js"; // KS_SETTINGS_PACK_v1_PRIVACY
 import securityRoutes from "./security.js"; // KS_SETTINGS_PACK_v1_SECURITY
 import neverLogRoutes from "./neverLog.js"; // KS_SETTINGS_PACK_v1_NEVER_LOG
+import leadRotationRoutes from "./leadRotation.js"; // KS_SETTINGS_PACK_v1_LEAD_ROTATION
 import planRoutes from "./plan.js"; // KS_SERVER_v6_PLANS
 import provisionRoutes from "./provision.js"; // KS_SERVER_v15_PROVISION
 import phoneNumbersRoutes from "./phoneNumbers.js"; // KS_SERVER_PHONE_PROVISIONING
@@ -383,6 +384,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/privacy", router: privacyRoutes }, // public: cookie consent; Admin: privacy requests
   { path: "/security", router: securityRoutes }, // staff: own sessions; Admin: anyone's, and the two-step switch
   { path: "/never-log", router: neverLogRoutes }, // Admin: addresses and domains never logged to the CRM
+  { path: "/lead-rotation", router: leadRotationRoutes }, // Admin: round-robin owners for new leads; staff: away
 ];
 
 export const PORTAL_ROUTE_REQUIREMENTS: Pick<ApiRoute, "method" | "path">[] = [

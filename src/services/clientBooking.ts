@@ -232,6 +232,12 @@ export async function createBooking(input: { kind: BookingKind; startsAt: Date; 
       [randomUUID(), input.name, input.email, phone, staff.id]);
     contactId = ins.rows[0]!.id;
     contactCreated = true;
+    // KS_SETTINGS_PACK_v1_LEAD_ROTATION - a new lead from the team page gets its owner in turn (a booking on someone's
+    // own page stays theirs).
+    if (!input.staffId) {
+      const { assignRotatingOwner } = await import("../leads/leadRotation.js");
+      await assignRotatingOwner(pool as any, contactId, "booking", { replaceOwnerId: staff.id });
+    }
   }
 
   // 2. The booking and the CRM meeting.

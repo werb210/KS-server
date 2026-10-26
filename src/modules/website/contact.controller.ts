@@ -61,6 +61,9 @@ export async function submitContactForm(req: Request, res: Response) {
       });
       contactId = (contactRes?.row as { id?: string } | undefined)?.id ?? null;
       if (contactId && contactRes?.created) {
+        // KS_SETTINGS_PACK_v1_LEAD_ROTATION - a new website lead gets an owner in turn (when the Admin turned it on).
+        const { assignRotatingOwner } = await import("../../leads/leadRotation.js");
+        await assignRotatingOwner(pool as any, contactId, "website");
         // BF_SERVER_BLOCK_v619 - automation trigger.
         void import("../../modules/automation/automationEngine.js").then((m) => m.emitAutomationEvent({ trigger: "contact.created", silo: "BF", contactId, data: { source: "website_form" } })).catch((err: any) => console.warn("[automation] emit failed", err?.message ?? String(err)));
       }
