@@ -26,6 +26,8 @@ import { clientUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 import { bankConnectEnabled } from "../../plans/addonGate.js"; // KS_SERVER_BANK_CONNECT_ADDON
 import { isBankConnectTask } from "../../plans/addons.js";
+import { APPLICATIONS_RULES, recordGuard } from "../../visibility/recordGuard.js"; // KS_SERVER_v20_TEAMS
+import { ownerFilterSql, scopeForRequest } from "../../visibility/scope.js"; // KS_SERVER_v20_TEAMS
 // BF_APP_ID_CAST_v39 — Block 39-A — applications.id comparisons cast to text
 
 const router = Router();
@@ -72,6 +74,7 @@ router.get('/:publicId/required-documents', safeHandler(async (req: any, res: an
 
 router.use(requireAuth);
 router.use(requireCapability([CAPABILITIES.APPLICATION_READ]));
+router.use(recordGuard(APPLICATIONS_RULES)); // KS_SERVER_v20_TEAMS - one application and everything under it
 
 // BF_SERVER_v789_SILO_SCOPING - per-application routes answer 404 when the record lives in a
 // silo other than the caller's (getSilo(res) is re-resolved by requireAuth from the users row).
@@ -113,6 +116,10 @@ router.get('/', safeHandler(async (req: any, res: any) => {
     )`);
   }
 
+  // KS_SERVER_v20_TEAMS - only the applications this user may see.
+  conditions.push(ownerFilterSql(await scopeForRequest(req, pool as any), "application", "a", params));
+  idx = params.length + 1;
+
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const [data, count] = await Promise.all([
@@ -121,7 +128,7 @@ router.get('/', safeHandler(async (req: any, res: any) => {
               a.requested_amount, a.lender_id, a.lender_product_id,
               a.owner_user_id, a.source, a.created_at, a.updated_at,
               a.metadata, a.processing_stage, a.current_stage,
-              a.silo, a.ocr_completed_at, a.banking_completed_at
+              a.silo, a.ocr_completed_at, a.banking_completed_at, a.custom_fields
        FROM applications a ${where}
        ORDER BY a.created_at DESC
        LIMIT $${idx++} OFFSET $${idx++}`,

@@ -441,6 +441,11 @@ export async function start(): Promise<void> {
     catch (err) { console.error("[startup] quickbooks-invoice worker failed to start:", err); }
 
     // KS_SERVER_v16_DATA_IMPORT - the Import data wizard's dry runs, runs and undos, one at a time.
+    // KS_SERVER_v20_WEBHOOKS - outgoing webhook deliveries (the outbox the row triggers fill).
+    const { startOutboundWebhookWorker } = await import("./workers/outboundWebhookWorker.js");
+    await workerStagger();
+    try { const w = startOutboundWebhookWorker(pool); workerStops.push(w.stop); console.log("[startup] outbound-webhook worker started"); }
+    catch (err) { console.error("[startup] outbound-webhook worker failed to start:", err); }
     const { startDataImportWorker } = await import("./workers/dataImportWorker.js");
     await workerStagger();
     try { const w = startDataImportWorker(pool); workerStops.push(w.stop); console.log("[startup] data-import worker started"); }

@@ -12,6 +12,7 @@ import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth } from "../middleware/auth.js";
 import { safeHandler } from "../middleware/safeHandler.js";
+import { scopedRequest } from "../visibility/scopedDb.js"; // KS_SERVER_v20_TEAMS - only the records this user may see (and ?team_id=)
 import { getSilo } from "../middleware/silo.js";
 import { ApplicationStage } from "../modules/applications/pipelineState.js";
 // BF_SERVER_WIDGET_PARKED_v109
@@ -35,7 +36,7 @@ const REAL_DEAL = `
   -- that a held file "drops out of live pipeline and commission figures".
   ${liveStageFilter("a.pipeline_state")}`;
 
-router.get("/summary", requireAuth, safeHandler(async (req: any, res: any) => {
+router.get("/summary", requireAuth, scopedRequest, safeHandler(async (req: any, res: any) => {
   const silo = getSilo(res);
   const userId = req.user?.id ?? req.user?.userId ?? null;
 

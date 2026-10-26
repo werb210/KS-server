@@ -122,7 +122,9 @@ import issuesRoutes from "./issues.js";
 import conversationsRoutes from "./conversations.js";
 import smsInboundWebhookRoutes from "./smsInboundWebhook.js";
 // BF_SERVER_BLOCK_v214_MAYA_STAFF_PIPELINE_QUERY_v1
-import mayaStaffRouter from "./mayaStaff.js";
+import mayaStaffRouter, { verifyMayaService } from "./mayaStaff.js";
+import { scopedAssistantRequest } from "../visibility/scopedDb.js"; // KS_SERVER_v20_TEAMS
+import { recordGuard, type GuardRule } from "../visibility/recordGuard.js"; // KS_SERVER_v20_TEAMS
 import mayaStaffInsightsRouter from "./mayaStaffInsights.js"; // BF_SERVER_MAYA_INSIGHTS_v655
 import mayaStaffAdsRouter from "./mayaStaffAds.js"; // BF_SERVER_MAYA_ADS_v683
 import mayaStaffAdsInsightsRouter from "./mayaStaffAdsInsights.js"; // BF_SERVER_MAYA_ADS_TOOLS_v712
@@ -155,6 +157,9 @@ import betaRoutes from "./beta.js"; // KS_SERVER_BETA_v1
 import ssoSettingsRoutes from "./ssoSettings.js"; // KS_SERVER_SSO_API_KEYS
 import apiKeysRoutes from "./apiKeys.js"; // KS_SERVER_SSO_API_KEYS
 import publicApiRoutes from "../publicApi/router.js"; // KS_SERVER_SSO_API_KEYS
+import customFieldsRoutes from "./customFields.js"; // KS_SERVER_v20_CRM_FIELDS
+import salesTeamsRoutes from "./salesTeams.js"; // KS_SERVER_v20_TEAMS
+import webhookEndpointsRoutes from "./webhookEndpoints.js"; // KS_SERVER_v20_WEBHOOKS
 import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
 import { requireAuth, requireAuthAllowClient } from "../middleware/auth.js";
 import watchAuthRoutes from "../watch/authRoutes.js";
@@ -234,6 +239,11 @@ combinedMayaRoutes.post("/website-chat", mayaProxyRateLimit, safeHandler(async (
     req
   );
 }));
+// KS_SERVER_v20_TEAMS - the assistant's staff tools read only what the acting staff member may see (staff_user_id in
+// the body; without it, a role whose visibility is restricted sees nothing). Only for verified service calls.
+// Tools that read no contact, company or application (Ads, GA4, lender products, automations) are left alone.
+const ASSISTANT_UNSCOPED = /^\/(ads-|ga4|lender-products|automations-overview|audit-recent)/;
+combinedMayaRoutes.use("/staff", (req, res, next) => (verifyMayaService(req) && !ASSISTANT_UNSCOPED.test(req.path) ? scopedAssistantRequest(req, res, next) : next()));
 combinedMayaRoutes.use(mayaRoutes);
 combinedMayaRoutes.use(mayaPendingActionsRouter); // BF_SERVER_v784_MAYA_SMS_CONFIRM - /pending-actions (staff humans only)
 combinedMayaRoutes.use(mayaAdminStubs);
@@ -391,7 +401,27 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/blocked-numbers", router: blockedNumbersRoutes }, // Admin: blocked callers and texters
   { path: "/surveys", router: surveysRoutes }, // public answers; Admin settings and report gated per route (nps_survey)
   { path: "/task-defaults", router: taskDefaultsRoutes }, // staff: follow-up task defaults and the prompt
+  { path: "/custom-fields", router: customFieldsRoutes, feature: "custom_fields" }, // KS_SERVER_v20_CRM_FIELDS - every plan
+  { path: "/teams", router: salesTeamsRoutes }, // KS_SERVER_v20_TEAMS - growth+ gated per route (GET /me answers on every plan)
+  { path: "/webhook-endpoints", router: webhookEndpointsRoutes, feature: "webhooks" }, // KS_SERVER_v20_WEBHOOKS - Admin, pro
 ];
+
+// KS_SERVER_v20_TEAMS - staff mounts whose routes address one application by id (router-relative patterns). The
+// CRM, companies, portal, applications, documents and application-notes routers carry their own guards.
+const APP_FIRST: GuardRule[] = [{ pattern: /^\/([^/]+)(?:\/|$)/, kind: "application" }];
+export const RECORD_GUARDED_MOUNTS: Record<string, GuardRule[]> = {
+  "/credit-summary": [{ pattern: /^\/([^/]+)(?:\/|$)/, kind: "application" }],
+  "/credit-summary-v2": APP_FIRST,
+  "/credit-research": APP_FIRST,
+  "/credit-collateral": APP_FIRST,
+  "/credit-financials": APP_FIRST,
+  "/application-origin": APP_FIRST,
+  "/banking": [{ pattern: /^\/applications\/([^/]+)(?:\/|$)/, kind: "application" }],
+  "/fraud": [{ pattern: /^\/applications\/([^/]+)(?:\/|$)/, kind: "application" }],
+  "/retention": [{ pattern: /^\/applications\/([^/]+)(?:\/|$)/, kind: "application" }],
+  "/pgi": [{ pattern: /^\/referrals\/([^/]+)(?:\/|$)/, kind: "application" }],
+  "/lender-referrals": [{ pattern: /^\/by-application\/([^/]+)(?:\/|$)/, kind: "application" }],
+};
 
 export const PORTAL_ROUTE_REQUIREMENTS: Pick<ApiRoute, "method" | "path">[] = [
   { method: "GET", path: "/api/auth/me" },
@@ -587,7 +617,11 @@ export function registerApiRouteMounts(app: Router): void {
 
   API_ROUTE_MOUNTS.forEach((entry) => {
     if (entry.path === "/ocr/admin") return;
+    // KS_SERVER_v20_TEAMS - mounts keyed by an application id check that the user may see that application.
+    const guarded = RECORD_GUARDED_MOUNTS[entry.path]
+      ? Router().use(recordGuard(RECORD_GUARDED_MOUNTS[entry.path], { requireFirst: true }), entry.router)
+      : entry.router;
     // KS_SERVER_v6_PLANS - plan-gated mounts get the feature gate in front of their router.
-    mount(app, entry.path, entry.feature ? Router().use(requireFeature(entry.feature), entry.router) : entry.router);
+    mount(app, entry.path, entry.feature ? Router().use(requireFeature(entry.feature), guarded) : guarded);
   });
 }

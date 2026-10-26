@@ -11,8 +11,10 @@ import { AppError } from "../middleware/errors.js";
 import { safeHandler } from "../middleware/safeHandler.js";
 import { parseAndResolveMentions } from "../services/notes/mentions.js";
 import { notifyMentions } from "../services/notifications/notifications.service.js";
+import { paramGuard } from "../visibility/recordGuard.js"; // KS_SERVER_v20_TEAMS
 
 const router = Router({ mergeParams: true });
+router.use(requireAuth, paramGuard("id", "application")); // KS_SERVER_v20_TEAMS
 
 const noteShape = `n.id, n.body, n.application_id, n.contact_id, n.company_id, n.silo,
                    n.owner_id, n.mentions, n.is_deleted, n.created_at, n.updated_at,
