@@ -40,7 +40,7 @@ const createUserSchema = z.object({
   email: z.string().email().optional(),
   phone: z.string().min(1).optional(),
   role: z.string().min(1),
-  lenderId: z.string().uuid().optional(),
+  lenderId: z.guid().optional(),
   silo: z.enum(["BF"]).optional(),
   silos: z.array(z.enum(["BF"])).optional(),
 });
