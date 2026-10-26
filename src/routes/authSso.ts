@@ -111,7 +111,7 @@ export function staffRefusal(user: SsoStaffUser | undefined): string | null {
   return null;
 }
 
-export function mintStaffSessionToken(user: any): string {
+export function mintStaffSessionToken(user: any, ksid?: string | null): string {
   const role = normalizeRole(user.role ?? "") ?? ROLES.STAFF;
   const userSilos = Array.isArray(user.silos) ? (user.silos as string[]) : [];
   const userSilo = user.silo as string | undefined;
@@ -123,6 +123,7 @@ export function mintStaffSessionToken(user: any): string {
     ...(user.phoneNumber ? { phone: user.phoneNumber } : {}),
     ...(userSilo ? { silo: userSilo } : {}),
     ...(userSilos.length ? { silos: userSilos } : {}),
+    ...(ksid ? { ksid } : {}), // KS_SETTINGS_PACK_v1_SECURITY - the signed-in session (single sign-on is strong)
   } as any);
 }
 
@@ -252,7 +253,11 @@ router.post("/exchange", ssoExchangeLimiter, safeHandler(async (req: any, res: a
     await audit(req, false, String(row.provider ?? ""), { reason: why, stage: "exchange" }, row.user_id);
     return res.status(403).json({ ok: false, error: "user_inactive", message: "This account can't sign in. Ask an admin." });
   }
-  return res.status(200).json({ status: "ok", data: { token: mintStaffSessionToken(user) } });
+  // KS_SETTINGS_PACK_v1_SECURITY - a single sign-on session, listed under Security and strong for the two-step switch.
+  const { openSession } = await import("../security/sessions.js");
+  const fwd = String(req.headers?.["x-forwarded-for"] ?? "").split(",")[0]?.trim();
+  const ksid = await openSession(db() as any, { userId: String(user.id), method: "sso", ip: fwd || req.ip || null, userAgent: String(req.headers?.["user-agent"] ?? "") });
+  return res.status(200).json({ status: "ok", data: { token: mintStaffSessionToken(user, ksid) } });
 }));
 
 export type { SsoProvider };
