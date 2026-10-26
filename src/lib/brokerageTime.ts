@@ -28,21 +28,31 @@ export function isValidTimeZone(raw: unknown): boolean {
 
 /** The zone to compute with for a stored zone name: Edmonton as Alberta's all-year UTC-6; anything invalid falls back
  *  to the brokerage's zone (or Alberta when that is invalid too). */
+// KS_SERVER_PERMANENT_TIME_v1 - provinces that stopped changing their clocks in 2026 (no fall-back on 2026-11-01):
+// Alberta (Alberta Time, UTC-6), Manitoba (permanent daylight time, UTC-5) and most of British Columbia (permanent
+// daylight time, UTC-7). Servers, browsers and phones with older time-zone data still move these zones back an hour, so
+// each is computed as a zone with the same offset all year. Etc/GMT+N is UTC-N (the IANA sign is inverted).
+export const PERMANENT_ZONES: Readonly<Record<string, string>> = {
+  [DEFAULT_BROKERAGE_TIME_ZONE]: ALBERTA_TZ, // America/Edmonton -> UTC-6 all year
+  "America/Winnipeg": "Etc/GMT+5", // Manitoba -> UTC-5 all year
+  "America/Vancouver": "Etc/GMT+7", // British Columbia -> UTC-7 all year
+};
+
 export function computeZone(raw: unknown, fallback?: string): string {
   const tz = String(raw ?? "").trim();
-  if (tz === DEFAULT_BROKERAGE_TIME_ZONE) return ALBERTA_TZ;
+  if (PERMANENT_ZONES[tz]) return PERMANENT_ZONES[tz];
   if (isValidTimeZone(tz)) return tz;
   if (fallback !== undefined) return computeZone(fallback);
   return ALBERTA_TZ;
 }
 
-/** Alberta's last clock change: from 2026-03-08 02:00 MST it stays on UTC-6. */
+/** The last clock change for Alberta, Manitoba and B.C.: 2026-03-08 (from then on each stays on its summer offset). */
 export const ALBERTA_ALL_YEAR_FROM = Date.UTC(2026, 2, 8, 9, 0, 0);
 
 /** computeZone for a particular moment: Edmonton before 2026-03-08 keeps its old DST rules (so history reads right). */
 export function computeZoneAt(raw: unknown, at: Date, fallback?: string): string {
   const tz = String(raw ?? "").trim();
-  if (tz === DEFAULT_BROKERAGE_TIME_ZONE && at.getTime() < ALBERTA_ALL_YEAR_FROM) return DEFAULT_BROKERAGE_TIME_ZONE;
+  if (PERMANENT_ZONES[tz] && at.getTime() < ALBERTA_ALL_YEAR_FROM) return tz; // KS_SERVER_PERMANENT_TIME_v1 - history keeps the old rules
   return computeZone(raw, fallback);
 }
 
