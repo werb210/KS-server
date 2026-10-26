@@ -123,7 +123,8 @@ export function createPublicApiRouter(deps: Deps = { db }): Router {
   // ---- contacts -------------------------------------------------------------------------------------------------
   const CONTACT_COLS = `c.id::text AS id, c.first_name, c.last_name, c.name, c.email, c.phone, c.company_id::text AS company_id,
     COALESCE(co.name, c.company_name) AS company_name, c.job_title, c.lead_status, c.lifecycle_stage,
-    COALESCE(c.tags, '{}'::text[]) AS tags, c.owner_id::text AS owner_id, c.created_at, c.updated_at`;
+    COALESCE(c.tags, '{}'::text[]) AS tags, c.owner_id::text AS owner_id, c.created_at, c.updated_at,
+    COALESCE(c.custom_fields, '{}'::jsonb) AS custom_fields`; // KS_SERVER_v20_CRM_FIELDS
   const CONTACT_FROM = `FROM contacts c LEFT JOIN companies co ON co.id = c.company_id
     WHERE c.silo = $1 AND c.merged_into_id IS NULL AND COALESCE(c.status, 'active') <> 'archived'`;
 
@@ -178,7 +179,7 @@ export function createPublicApiRouter(deps: Deps = { db }): Router {
 
   // ---- companies ------------------------------------------------------------------------------------------------
   const COMPANY_COLS = `id::text AS id, name, legal_name, dba_name, website, email, phone, industry, city, province, country,
-    created_at, updated_at`;
+    created_at, updated_at, COALESCE(custom_fields, '{}'::jsonb) AS custom_fields`; // KS_SERVER_v20_CRM_FIELDS
 
   router.get("/companies", safeHandler(async (req: Request, res: Response) => {
     const p = pageParams(req.query as Record<string, unknown>);
@@ -206,7 +207,7 @@ export function createPublicApiRouter(deps: Deps = { db }): Router {
   // ---- applications ---------------------------------------------------------------------------------------------
   const APP_COLS = `id::text AS id, name, pipeline_state AS stage, business_legal_name, requested_amount, product_category,
     company_id::text AS company_id, contact_id::text AS contact_id, lender_id::text AS lender_id, submitted_at,
-    funded_amount, funded_at, created_at, updated_at`;
+    funded_amount, funded_at, created_at, updated_at, COALESCE(custom_fields, '{}'::jsonb) AS custom_fields`; // KS_SERVER_v20_CRM_FIELDS
   const appId = (v: unknown) => { const s = String(v ?? "").trim(); return s && s.length <= 100 ? s : ""; };
   async function findApp(id: string) {
     const r = await deps.db().query(`SELECT ${APP_COLS} FROM applications WHERE silo = $1 AND id::text = $2 LIMIT 1`, [SILO, id]);

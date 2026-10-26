@@ -73,7 +73,7 @@ export function openApiDocument() {
           email: { type: "string", nullable: true }, phone: { type: "string", nullable: true }, company_id: { type: "string", nullable: true },
           company_name: { type: "string", nullable: true }, job_title: { type: "string", nullable: true }, lead_status: { type: "string", nullable: true },
           lifecycle_stage: { type: "string", nullable: true }, tags: { type: "array", items: { type: "string" } }, owner_id: { type: "string", nullable: true },
-          created_at: { type: "string", format: "date-time" }, updated_at: { type: "string", format: "date-time" },
+          created_at: { type: "string", format: "date-time" }, updated_at: { type: "string", format: "date-time" }, custom_fields: { type: "object", additionalProperties: true, description: "Custom field values keyed by internal name (Settings > Properties)." },
         } },
         ContactInput: { type: "object", required: ["first_name", "last_name"], properties: {
           first_name: { type: "string" }, last_name: { type: "string" }, email: { type: "string" }, phone: { type: "string" },
@@ -83,7 +83,7 @@ export function openApiDocument() {
           id: { type: "string" }, name: { type: "string", nullable: true }, legal_name: { type: "string", nullable: true }, dba_name: { type: "string", nullable: true },
           website: { type: "string", nullable: true }, email: { type: "string", nullable: true }, phone: { type: "string", nullable: true },
           industry: { type: "string", nullable: true }, city: { type: "string", nullable: true }, province: { type: "string", nullable: true },
-          country: { type: "string", nullable: true }, created_at: { type: "string", format: "date-time" }, updated_at: { type: "string", format: "date-time" },
+          country: { type: "string", nullable: true }, created_at: { type: "string", format: "date-time" }, updated_at: { type: "string", format: "date-time" }, custom_fields: { type: "object", additionalProperties: true, description: "Custom field values keyed by internal name (Settings > Properties)." },
         } },
         Application: { type: "object", properties: {
           id: { type: "string" }, name: { type: "string" }, stage: { type: "string", enum: [...API_STAGES, "Fraud", "Hold"] },
@@ -91,7 +91,7 @@ export function openApiDocument() {
           product_category: { type: "string", nullable: true }, company_id: { type: "string", nullable: true }, contact_id: { type: "string", nullable: true },
           lender_id: { type: "string", nullable: true }, submitted_at: { type: "string", format: "date-time", nullable: true },
           funded_amount: { type: "number", nullable: true }, funded_at: { type: "string", format: "date-time", nullable: true },
-          created_at: { type: "string", format: "date-time" }, updated_at: { type: "string", format: "date-time" },
+          created_at: { type: "string", format: "date-time" }, updated_at: { type: "string", format: "date-time" }, custom_fields: { type: "object", additionalProperties: true, description: "Custom field values keyed by internal name (Settings > Properties)." },
         } },
         Note: { type: "object", properties: {
           id: { type: "string" }, application_id: { type: "string" }, body: { type: "string" }, owner_id: { type: "string", nullable: true },
