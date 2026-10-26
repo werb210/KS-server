@@ -16,6 +16,8 @@ import { safeHandler } from "../middleware/safeHandler.js";
 import { pool } from "../db.js";
 import { clearStaffUserCache } from "../auth/staffUserState.js";
 import { actorId, auditFor, UUID_RE, type Q } from "../settingsPack/common.js";
+import { activeMenuUsers } from "../phoneMenu/store.js";
+import { displayName } from "../phoneMenu/menu.js";
 import {
   activeSessions, checkSession, readiness, revokeSession, saveSecuritySettings, signOutEverywhere, strongSignInRequired,
 } from "../security/sessions.js";
@@ -96,7 +98,8 @@ router.post("/users/:id/sign-out-everywhere", ...adminOnly, safeHandler(async (r
 
 router.get("/settings", ...adminOnly, safeHandler(async (req: any, res: any) => {
   res.setHeader("Cache-Control", "no-store");
-  return res.json({ ok: true, require_strong_sign_in: strongSignInRequired(), session_strong: await sessionStrong(req), readiness: await readiness(db()) });
+  const users = (await activeMenuUsers(db())).map((u) => ({ id: u.id, name: displayName(u) }));
+  return res.json({ ok: true, require_strong_sign_in: strongSignInRequired(), session_strong: await sessionStrong(req), readiness: await readiness(db()), users });
 }));
 
 router.put("/settings", ...adminOnly, safeHandler(async (req: any, res: any) => {
