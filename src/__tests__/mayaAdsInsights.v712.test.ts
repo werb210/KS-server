@@ -40,7 +40,7 @@ const sg = (kind: string, title = "t", rationale = "r") => ({ id: kind, kind, ti
 
 describe("Boreal's ad rules", () => {
   it("holds back pause advice while Google records no conversions", () => { const r = applyAdRules([sg("pause_campaign"), sg("pause_keyword"), sg("add_negative")], { conversions: 0 }); expect(r.suggestions.map((s) => s.kind)).toEqual(["add_negative"]); expect(r.caveats[0]).toContain("no conversions"); expect(applyAdRules([sg("pause_campaign")], { conversions: 3 }).suggestions).toHaveLength(1); });
-  it("marks Todd-only advice", () => { const r = applyAdRules([sg("set_budget", "Raise budget")], { conversions: 5 }); expect(r.suggestions[0].toddOnly).toBe(true); expect(r.suggestions[0].title).toContain("(Todd decides)"); expect(isToddOnlyAction({ type: "set_budget" })).toBe(true); expect(isToddOnlyAction({ type: "pause_keyword" })).toBe(false); });
+  it("marks Todd-only advice", () => { const r = applyAdRules([sg("set_budget", "Raise budget")], { conversions: 5 }); expect(r.suggestions[0].toddOnly).toBe(true); expect(r.suggestions[0].title).toContain("(Admin decides)"); expect(isToddOnlyAction({ type: "set_budget" })).toBe(true); expect(isToddOnlyAction({ type: "pause_keyword" })).toBe(false); });
   it("drops Quebec and demographic targeting", () => { expect(applyAdRules([sg("x", "Target Quebec"), sg("y", "Narrow by gender"), sg("z", "Add negative")], { conversions: 5 }).suggestions.map((s) => s.kind)).toEqual(["z"]); });
   it("states five rules", () => { expect(ADS_RULES).toHaveLength(5); expect(ADS_RULES.join(" ")).toMatch(/Quebec/); });
 });
@@ -71,7 +71,7 @@ describe("wiring", () => {
     const r = await request(app).get("/api/marketing/google-ads/suggestions?days=30").set("Authorization", `Bearer ${token}`);
     expect(r.status).toBe(200);
     expect(r.body.data.suggestions.map((s: any) => s.kind)).toEqual(["set_budget"]);
-    expect(r.body.data.suggestions[0]).toMatchObject({ toddOnly: true, title: "Raise budget on \"Winner\" by 20% (Todd decides)" });
+    expect(r.body.data.suggestions[0]).toMatchObject({ toddOnly: true, title: "Raise budget on \"Winner\" by 20% (Admin decides)" });
     expect(r.body.data.caveat).toContain("no conversions");
     expect(r.body.data.insights).toEqual([{ title: "Ad clicks are not becoming submitted applications", detail: "300 clicks, 0 submitted" }]);
     expect(insights).toHaveBeenCalledWith(30);
@@ -91,7 +91,7 @@ describe("wiring", () => {
     expect(insights).toHaveBeenCalledWith(7);
     const html = String(sendTransactional.mock.calls[0][0].html);
     expect(html).toContain("Ad clicks are not becoming submitted applications - 300 clicks, 0 submitted");
-    expect(html).toContain("Raise budget on &quot;Winner&quot; by 20% (Todd decides)");
+    expect(html).toContain("Raise budget on &quot;Winner&quot; by 20% (Admin decides)");
     expect(html).not.toContain("Pause campaign");
     expect(html).toContain("pause suggestions are held back");
   });

@@ -23,7 +23,7 @@ export function applyAdRules(suggestions: Suggestion[], ctx: { conversions: numb
     out = out.filter((s) => s.kind !== "pause_campaign" && s.kind !== "pause_keyword");
     if (out.length !== before || before === 0) caveats.push("Google Ads has recorded no conversions in this window, so pause suggestions are held back until conversions are flowing.");
   }
-  out = out.map((s) => TODD_ONLY_KINDS.has(s.kind) ? { ...s, toddOnly: true, title: s.title + " (Todd decides)" } : s);
+  out = out.map((s) => TODD_ONLY_KINDS.has(s.kind) ? { ...s, toddOnly: true, title: s.title + " (Admin decides)" /* KS_SERVER_PERMANENT_TIME_v1: Keystone wording, not Boreal's */ } : s);
   return { suggestions: out, caveats };
 }
 
