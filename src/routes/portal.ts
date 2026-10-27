@@ -326,6 +326,8 @@ router.get(
         // + docs), exactly like a closing-cost companion. Surface it as its own
         // card too instead of hiding it as a collapsed child.
         where.push(`(a.parent_application_id IS NULL OR a.source IN ('closing_costs_companion', 'capital_and_equipment_leg'))`);
+        // KS_HUBSPOT_GAPS_1_PIPELINES - a deal moved to another pipeline (Renewals, Equipment...) shows on that board.
+        where.push(`a.pipeline_id IS NULL`);
       }
       // KS_SERVER_v20_TEAMS - only the files this user may see, narrowed to ?team_id= (the Team filter, growth and up).
       let pipelineScope = await scopeForRequest(req, pool as any);

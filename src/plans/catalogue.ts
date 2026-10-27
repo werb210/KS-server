@@ -77,6 +77,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "payment_links", label: "Payment links and bank debit for fees (your own Stripe account)", plan: "growth" },
   // KS_HUBSPOT_GAPS_1_CALL_SCRIPTS - call scripts (playbooks) beside the dialler and on records.
   { key: "call_scripts", label: "Call scripts (playbooks)", plan: "growth" },
+  // KS_HUBSPOT_GAPS_1_PIPELINES - extra pipelines with custom stages: Growth 3 pipelines in all, Pro unlimited.
+  { key: "custom_pipelines", label: "Extra pipelines with custom stages (Growth 3, Pro unlimited)", plan: "growth" },
   // pro
   { key: "multiple_lines", label: "Multiple business lines and a direct line for each person", plan: "pro" },
   { key: "ad_attribution", label: "Ad attribution", plan: "pro" },

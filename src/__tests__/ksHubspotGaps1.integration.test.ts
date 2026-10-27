@@ -19,6 +19,8 @@ import { clearCustomFieldCache } from "../customFields/service.js";
 import meetingNotesRoutes from "../routes/meetingNotes.js";
 import { setZoomFetchForTests } from "../meetingNotes/zoom.js";
 import { runMeetingNotesSync } from "../meetingNotes/sync.js";
+import pipelinesRoutes from "../routes/pipelines.js";
+import portalRoutes from "../routes/portal.js";
 
 const intel = vi.hoisted(() => ({ calls: 0 }));
 vi.mock("../services/teams/meetingIntel.js", () => ({ runMeetingIntel: async () => { intel.calls++; } }));
@@ -27,6 +29,7 @@ const MIGRATIONS = [
   "migrations/2026_11_04_ks_hg1_payments.sql",
   "migrations/2026_11_04_ks_hg1_call_scripts.sql",
   "migrations/2026_11_04_ks_hg1_meeting_notes.sql",
+  "migrations/2026_11_04_ks_hg1_pipelines.sql",
 ];
 const tag = randomUUID().slice(0, 8);
 const ADMIN = randomUUID(), S1 = randomUUID(), S2 = randomUUID();
@@ -51,6 +54,8 @@ function app() {
   a.use("/api/payments", paymentsRoutes);
   a.use("/api/call-scripts", callScriptsRoutes);
   a.use("/api/meeting-notes", meetingNotesRoutes);
+  a.use("/api/pipelines", pipelinesRoutes);
+  a.use("/api/portal", portalRoutes);
   return a;
 }
 const http = () => request(app());
@@ -101,6 +106,10 @@ describe("KS HubSpot gaps 1 (real Postgres)", () => {
     await pool.query(`DELETE FROM call_scripts WHERE name LIKE $1 OR name LIKE 'Intake - %'`, [`%${tag}%`]);
     await pool.query(`DELETE FROM custom_field_definitions WHERE name = $1`, [`hg1_band_${tag}`]);
     await pool.query(`DELETE FROM crm_timeline_events WHERE contact_id = ANY($1::uuid[])`, [[C1, C2]]);
+    await pool.query(`DELETE FROM pipeline_moves WHERE application_id = ANY($1::text[])`, [[A1, A2]]);
+    await pool.query(`UPDATE applications SET pipeline_id = NULL, pipeline_stage_id = NULL WHERE id = ANY($1::text[])`, [[A1, A2]]);
+    await pool.query(`DELETE FROM pipeline_stages WHERE pipeline_id IN (SELECT id FROM pipelines WHERE name LIKE $1)`, [`%${tag}%`]);
+    await pool.query(`DELETE FROM pipelines WHERE name LIKE $1`, [`%${tag}%`]);
     await pool.query(`DELETE FROM applications WHERE id = ANY($1::text[])`, [[A1, A2]]);
     await pool.query(`DELETE FROM contacts WHERE id = ANY($1::uuid[])`, [[C1, C2]]);
     await pool.query(`DELETE FROM users WHERE id = ANY($1::uuid[])`, [[ADMIN, S1, S2]]);
@@ -340,6 +349,74 @@ describe("KS HubSpot gaps 1 (real Postgres)", () => {
       setZoomFetchForTests(async () => new Response("", { status: 200 }));
       expect((await http().post("/api/meeting-notes/zoom/disconnect").set("Authorization", tok(S1, "Staff"))).body.ok).toBe(true);
       expect((await pool.query(`SELECT status, access_token_enc FROM zoom_accounts WHERE user_id = $1`, [S1])).rows[0]).toEqual({ status: "disconnected", access_token_enc: null });
+    });
+  });
+  // ------------------------------------------------------------------ 4. extra pipelines
+  describe("extra pipelines", () => {
+    let renewals = "";
+    let stages: any[] = [];
+    const stageBody = [{ name: "Due soon", color: "#0f766e", probability: 30 }, { name: "Quoted", probability: 60 }, { name: "Renewed", outcome: "won", probability: 100 }, { name: "Lost", outcome: "lost" }];
+
+    it("Starter lists only the lending pipeline and cannot create one", async () => {
+      await setPlan("starter");
+      await pool.query(`UPDATE pipelines SET archived_at = now() WHERE archived_at IS NULL`); // earlier runs
+      const r = await http().get("/api/pipelines").set("Authorization", tok(S1, "Staff"));
+      expect(r.body).toMatchObject({ feature: false, can_create: false, limit: 1 });
+      expect(r.body.pipelines.map((p: any) => p.id)).toEqual(["lending"]);
+      expect((await http().post("/api/pipelines").set("Authorization", tok(ADMIN, "Admin")).send({ name: `Renewals ${tag}`, stages: stageBody })).status).toBe(402);
+    });
+
+    it("Growth: Admins add up to two more pipelines (3 in all); the lending stages stay locked", async () => {
+      await setPlan("growth");
+      const r = await http().post("/api/pipelines").set("Authorization", tok(ADMIN, "Admin")).send({ name: `Renewals ${tag}`, stages: stageBody });
+      expect(r.status).toBe(201);
+      renewals = r.body.pipeline.id;
+      stages = r.body.pipeline.stages;
+      expect(stages.map((x: any) => x.name)).toEqual(["Due soon", "Quoted", "Renewed", "Lost"]);
+      expect((await http().post("/api/pipelines").set("Authorization", tok(S1, "Staff")).send({ name: `X ${tag}`, stages: stageBody })).status).toBe(403);
+      expect((await http().post("/api/pipelines").set("Authorization", tok(ADMIN, "Admin")).send({ name: `Equipment ${tag}`, stages: stageBody })).status).toBe(201);
+      const third = await http().post("/api/pipelines").set("Authorization", tok(ADMIN, "Admin")).send({ name: `MCA ${tag}`, stages: stageBody });
+      expect(third.status).toBe(402);
+      expect(third.body.error).toBe("pipeline_limit");
+      expect((await http().put("/api/pipelines/lending").set("Authorization", tok(ADMIN, "Admin")).send({ name: "Mine", stages: stageBody })).status).toBe(409);
+      const prob = await http().put("/api/pipelines/lending/probabilities").set("Authorization", tok(ADMIN, "Admin")).send({ Offer: 80 });
+      expect(prob.body.pipeline.stages.find((x: any) => x.name === "Offer").probability).toBe(80);
+      await setPlan("pro");
+      expect((await http().post("/api/pipelines").set("Authorization", tok(ADMIN, "Admin")).send({ name: `MCA ${tag}`, stages: stageBody })).status).toBe(201);
+      await setPlan("growth");
+    });
+
+    it("a deal moved to Renewals leaves the lending board, shows on the Renewals board and report, and can come back", async () => {
+      const board0 = await http().get("/api/portal/applications").set("Authorization", tok(ADMIN, "Admin"));
+      expect(board0.body.items.map((c: any) => c.id)).toContain(A1);
+      const mv = await http().post("/api/pipelines/move").set("Authorization", tok(S1, "Staff")).send({ application_id: A1, pipeline_id: renewals, stage_id: stages[1].id });
+      expect(mv.body).toMatchObject({ ok: true, pipeline_id: renewals, stage: "Quoted" });
+      expect((await http().get(`/api/pipelines/application/${A1}`).set("Authorization", tok(S1, "Staff"))).body).toMatchObject({ pipeline_id: renewals, stage_id: stages[1].id, stage: "Quoted" });
+      const board1 = await http().get("/api/portal/applications").set("Authorization", tok(ADMIN, "Admin"));
+      expect(board1.body.items.map((c: any) => c.id)).not.toContain(A1);
+      const rb = await http().get(`/api/pipelines/${renewals}/board`).set("Authorization", tok(S1, "Staff"));
+      expect(rb.body.cards).toEqual([expect.objectContaining({ id: A1, stage_id: stages[1].id, lending_stage: "Received" })]);
+      const rep = await http().get(`/api/pipelines/report?pipeline_id=${renewals}`).set("Authorization", tok(ADMIN, "Admin"));
+      expect(rep.body.stages.find((x: any) => x.name === "Quoted")).toMatchObject({ deals: 1, amount: 100000, weighted: 60000 });
+      expect(rep.body.totals).toMatchObject({ open_deals: 1, weighted_amount: 60000 });
+      const lend = await http().get(`/api/pipelines/report?pipeline_id=lending`).set("Authorization", tok(ADMIN, "Admin"));
+      expect(lend.body.stages.find((x: any) => x.name === "Received").deals).toBeGreaterThanOrEqual(1); // A2 still there
+      // A stage with a deal in it cannot be removed.
+      const edit = await http().put(`/api/pipelines/${renewals}`).set("Authorization", tok(ADMIN, "Admin")).send({ name: `Renewals ${tag}`, stages: [stages[0], stages[2], stages[3]] });
+      expect(edit.status).toBe(409);
+      expect((await http().post(`/api/pipelines/${renewals}/archive`).set("Authorization", tok(ADMIN, "Admin"))).status).toBe(409);
+      // Sue (own records only) cannot move or see Sam's deal.
+      await pool.query(`INSERT INTO role_record_visibility (role, visibility) VALUES ('Staff', 'own') ON CONFLICT (role) DO UPDATE SET visibility = 'own'`);
+      clearVisibilityCache();
+      expect((await http().post("/api/pipelines/move").set("Authorization", tok(S2, "Staff")).send({ application_id: A1, pipeline_id: "lending" })).status).toBe(404);
+      expect((await http().get(`/api/pipelines/${renewals}/board`).set("Authorization", tok(S2, "Staff"))).body.cards).toEqual([]);
+      await pool.query(`DELETE FROM role_record_visibility`);
+      clearVisibilityCache();
+      const back = await http().post("/api/pipelines/move").set("Authorization", tok(S1, "Staff")).send({ application_id: A1, pipeline_id: "lending" });
+      expect(back.body).toMatchObject({ pipeline_id: "lending", stage: "Received" });
+      const board2 = await http().get("/api/portal/applications").set("Authorization", tok(ADMIN, "Admin"));
+      expect(board2.body.items.map((c: any) => c.id)).toContain(A1);
+      expect((await pool.query(`SELECT count(*)::int AS n FROM pipeline_moves WHERE application_id = $1`, [A1])).rows[0].n).toBe(2);
     });
   });
 });
