@@ -18,6 +18,7 @@ const router = Router();
 import { smsFromFor, smsSenderFor, usTextingHold } from "../lib/smsFrom.js"; // BF_SERVER_US_SMS_TOLLFREE_v755
 import { brandName, assistantName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
+import { scopedReads } from "../visibility/scopedDb.js"; // KS_SERVER_v21_VISIBILITY_GAPS
 
 // BF_SERVER_MEDIA_QUERY_AUTH_v1 - <img>/<audio>/EventSource cannot send an
 // Authorization header, so the media proxies and the message stream accept a
@@ -89,6 +90,9 @@ async function mergeCtxForContact(opts: { contactId?: string | null; phone?: str
 }
 router.use(unlessUrlTicket(requireAuth)); // BF_SERVER_v789_URL_TICKETS
 router.use(requireCapability([CAPABILITIES.COMMUNICATIONS_READ]));
+// KS_SERVER_v21_VISIBILITY_GAPS - lists, threads, timelines and call events show only activity whose contact,
+// company and application this user may see (all / team / own). See src/visibility/scopedDb.ts.
+router.use(scopedReads);
 
 // BF_SERVER_v817_DIALER_MESSAGING - see the call-events route below.
 const CALL_EVENT_TYPES = new Set(["call.started", "call.ended", "call.failed", "call.missed", "call.declined"]);

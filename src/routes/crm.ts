@@ -33,6 +33,7 @@ import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLA
 import { lockedAmong, refuseIfLocked } from "../retention/retention.js"; // KS_SERVER_v14_RETENTION
 import { CRM_RULES, recordGuard } from "../visibility/recordGuard.js"; // KS_SERVER_v20_TEAMS
 import { ownerFilterSql, scopeForRequest, visibleIds } from "../visibility/scope.js"; // KS_SERVER_v20_TEAMS
+import { scopedRequest } from "../visibility/scopedDb.js"; // KS_SERVER_v21_VISIBILITY_GAPS
 import { customFieldFilters, customFieldSortExpr } from "../customFields/definitions.js"; // KS_SERVER_v20_CRM_FIELDS
 import { checkNewRecordValues, listDefinitions, writeRecordValues } from "../customFields/service.js"; // KS_SERVER_v20_CRM_FIELDS
 
@@ -63,8 +64,13 @@ async function requireAllRecords(req: any, res: any, next: any) {
     next();
   } catch (err) { next(err); }
 }
-router.use(["/contacts/dedupe-preview", "/contacts/dedupe-merge", "/contacts/merge", "/contacts/:id/duplicate-candidates",
+router.use(["/contacts/dedupe-preview", "/contacts/dedupe-merge", "/contacts/merge",
   "/unified/duplicates", "/unified/cleanup", "/unified/merge", "/unified/people/backfill"], requireAllRecords);
+// KS_SERVER_v21_VISIBILITY_GAPS - the duplicate banner on a contact: candidates only among the contacts this user may
+// see (merging still needs a user who sees every record). Voicemails, the CRM timeline and the shared inbox list read
+// only activity on visible records.
+router.get("/contacts/:id/duplicate-candidates", scopedRequest);
+router.get(["/voicemails", "/voicemails/*", "/timeline", "/inbox", "/inbox/*"], scopedRequest);
 router.post("/unified/tags/apply", async (req: any, res: any, next: any) => {
   try {
     const kind = req.body?.entity === "company" ? "company" : "contact";

@@ -16,6 +16,12 @@ vi.mock("../db.js", async () => ({
     }),
   },
 }));
+// KS_SERVER_v21_VISIBILITY_GAPS - the CRM router now loads the scoped views, which reroute pool.query; keep this file's
+// pool.query mock in place (every user here sees all records anyway).
+vi.mock("../visibility/scopedDb.js", () => {
+  const pass = (_req: unknown, _res: unknown, next: () => void) => next();
+  return { scopedRequest: pass, scopedReads: pass, scopedAssistantRequest: pass, currentScopedClient: () => null, runScoped: (_s: unknown, fn: () => unknown) => fn() };
+});
 vi.mock("../services/notifications/notifyClient.js", () => ({ pushToClientApp: vi.fn(async () => state.pushOk) }));
 vi.mock("../modules/notifications/sms.service.js", () => ({ sendSms: vi.fn(async (m: any) => { state.smsSent.push(m); }) }));
 
