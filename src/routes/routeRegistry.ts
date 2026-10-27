@@ -66,6 +66,7 @@ import staffRoutes from "./staff.js";
 import staffPushTokenRoutes from "./staffPushToken.js"; // BF_SERVER_v820_WATCH_CALLS
 import { callHoursRouter, missedSummaryRouter, nextFollowUpRouter } from "./staffDialer.js"; // BF_SERVER_v821_DIALER
 import supportRoutes from "./support.js";
+import helpCenterRoutes from "./helpCenter.js"; // KS_SERVER_KB_v1
 import tasksRoutes from "./tasks.js";
 import usersRoutes from "./users.js";
 import o365TokensRoutes from "./o365Tokens.js";
@@ -327,6 +328,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/staff/call-hours", router: callHoursRouter },
   { path: "/staff", router: staffRoutes },
   { path: "/support", router: supportRoutes },
+  { path: "/help-center", router: helpCenterRoutes }, // KS_SERVER_KB_v1 - Help Center and Ask Maya (KS-Ops knowledge base)
   { path: "/tasks", router: tasksRoutes },
   { path: "/users/me", router: o365TokensRoutes },
   { path: "/users", router: usersRoutes },

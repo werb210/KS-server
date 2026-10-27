@@ -28,7 +28,8 @@ export async function postToOps(
     // KS_STAFF_DIRECTORY_v1 - the staff list (hashes only, see src/staffDirectory/sync.ts).
     | "staff-directory"
     | "beta/enrolment" | "beta/feedback" // KS_SERVER_BETA_v1
-    | `tickets/${string}/messages`, // KS_SERVER_v17_TICKET_FOLLOW_UPS
+    | `tickets/${string}/messages` // KS_SERVER_v17_TICKET_FOLLOW_UPS
+    | "kb/search" | "kb/article" | "kb/categories" | "kb/ask", // KS_SERVER_KB_v1 - the Help Center (helpCenter/helpCenter.ts)
   body: unknown,
   opts: { env?: NodeJS.ProcessEnv; fetchImpl?: OpsFetch } = {},
 ): Promise<OpsResult> {
