@@ -239,7 +239,8 @@ describe("KS v9 fraud suite (real Postgres)", () => {
     await handleCandidates(db, { id: ADMIN, label: "Pat Admin" }, [{ kind: "banking_details_changed", severity: "red", applicationId: A, detail: { fields: ["transit_number"] } }], new Date()); // same hour: deduped
     await alertAdmins(db);
     await alertAdmins(db);
-    const n = await pool.query(`SELECT user_id::text AS u, body FROM notifications WHERE type = 'fraud_staff_alert' AND application_id = $1`, [A]);
+    // KS_SERVER_TEST_ISOLATION - other files add Admins to the shared database in parallel; look only at this file's two.
+    const n = await pool.query(`SELECT user_id::text AS u, body FROM notifications WHERE type = 'fraud_staff_alert' AND application_id = $1 AND user_id::text = ANY($2::text[])`, [A, [ADMIN, ADMIN2]]);
     expect(n.rows).toEqual([{ u: ADMIN2, body: "Pat Admin changed the banking details on a file. Review it in the file's Fraud check tab." }]);
   });
 

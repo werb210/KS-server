@@ -1,11 +1,19 @@
 // KS_SERVER_PLAN_FIXES (Todd, Oct 26) - on a starter copy the registry refuses snippets and templates (/api/templates),
 // automations (/api/automations) and call recording playback with 402 feature_not_in_plan.
 // KS_PLAN=starter makes starter the plan in force even with no database (the plan row read fails -> default plan).
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import express, { Router } from "express";
 import request from "supertest";
 import jwt from "jsonwebtoken";
 import { clearPlanCache } from "../state.js";
+
+// KS_SERVER_TEST_ISOLATION - in the integration run these tests share a real database with other files that write the
+// licensee_plan row in parallel. Read the plan as if the row were unreadable, so KS_PLAN=starter always decides here.
+vi.mock("../state.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../state.js")>();
+  const noDb = { query: async () => { throw new Error("plan row not read in this test"); } };
+  return { ...actual, getPlanState: (_db: unknown, nowMs?: number) => actual.getPlanState(noDb as never, nowMs) };
+});
 
 describe("starter refuses snippets, templates, automations and recording playback", () => {
   let app: express.Express;
