@@ -71,6 +71,7 @@ import usersRoutes from "./users.js";
 import o365TokensRoutes from "./o365Tokens.js";
 import o365OAuthRoutes from "./o365OAuth.js";
 import googleOAuthRoutes from "./googleOAuth.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
+import connectionsRoutes from "./connections.js"; // KS_SERVER_M365_ONE_CLICK
 import quickbooksRoutes from "./quickbooks.js"; // KS_SERVER_v13_QUICKBOOKS
 import auditActivityRoutes from "./auditActivity.js"; // BF_SERVER_AUDIT_ACTIVITY_v802
 import portalRoutes from "./portal.js";
@@ -352,6 +353,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/webhooks/sendgrid", router: sendgridWebhookRoutes }, // BF_SERVER_SENDGRID_WEBHOOK_v1 (public)
   { path: "/o365-oauth", router: o365OAuthRoutes },
   { path: "/google", router: googleOAuthRoutes }, // KS_SERVER_v12_GOOGLE_WORKSPACE - connect/status/disconnect (callback public)
+  { path: "/connections", router: connectionsRoutes }, // KS_SERVER_M365_ONE_CLICK - Settings > Connections status (Admins)
   { path: "/quickbooks", router: quickbooksRoutes }, // KS_SERVER_v13_QUICKBOOKS - connect (Admin), fee invoices (callback public)
   { path: "/audit", router: auditActivityRoutes }, // BF_SERVER_AUDIT_ACTIVITY_v802
   { path: "/o365", router: o365Routes },

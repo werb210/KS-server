@@ -6,6 +6,7 @@
 // (CASA). It is requested only when GOOGLE_GMAIL_READ_ENABLED is "true"; until then it never appears in a consent
 // request and the Gmail sync never runs. See docs/GOOGLE_WORKSPACE.md.
 import { portalUrl, serverUrl } from "../../licensee/urls.js";
+import { redirectUriFor } from "../../licensee/oauthBroker.js";
 
 export const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 export const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -50,23 +51,37 @@ export function requestedScopes(e: NodeJS.ProcessEnv = process.env): string[] {
 
 export type GoogleOAuthConfig = { clientId: string; clientSecret: string; redirectUri: string; returnUrl: string };
 
+/** KS_SERVER_M365_ONE_CLICK - the Google OAuth client: this server's own (GOOGLE_OAUTH_CLIENT_ID / _SECRET) when set,
+ *  else Keystone's single client, which KS-Ops writes to every licensee server (KS_GOOGLE_OAUTH_CLIENT_ID / _SECRET). */
+export function googleClientCredentials(e: NodeJS.ProcessEnv = process.env): { clientId: string; clientSecret: string; source: "own" | "keystone" } | null {
+  const ownId = env("GOOGLE_OAUTH_CLIENT_ID", e);
+  const ownSecret = env("GOOGLE_OAUTH_CLIENT_SECRET", e);
+  if (ownId && ownSecret) return { clientId: ownId, clientSecret: ownSecret, source: "own" };
+  const ksId = env("KS_GOOGLE_OAUTH_CLIENT_ID", e);
+  const ksSecret = env("KS_GOOGLE_OAUTH_CLIENT_SECRET", e);
+  if (ksId && ksSecret) return { clientId: ksId, clientSecret: ksSecret, source: "keystone" };
+  return null;
+}
+
 /** Why Google cannot be used on this copy, or null when it is fully configured. */
 export function googleConfigProblem(e: NodeJS.ProcessEnv = process.env): string | null {
-  if (!env("GOOGLE_OAUTH_CLIENT_ID", e) || !env("GOOGLE_OAUTH_CLIENT_SECRET", e)) {
-    return "Google Workspace is not set up on this server yet (GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET).";
+  if (!googleClientCredentials(e)) {
+    return "Google Workspace is not available on this server yet. Keystone sets it up for you; contact Keystone support if it stays like this.";
   }
   if (!env("GOOGLE_TOKEN_ENCRYPTION_KEY", e)) {
-    return "Google Workspace is not set up on this server yet (GOOGLE_TOKEN_ENCRYPTION_KEY).";
+    return "Google Workspace is not available on this server yet (its token key is missing). Contact Keystone support.";
   }
   return null;
 }
 
 export function googleOAuthConfig(e: NodeJS.ProcessEnv = process.env): GoogleOAuthConfig | null {
   if (googleConfigProblem(e)) return null;
+  const creds = googleClientCredentials(e)!;
   return {
-    clientId: env("GOOGLE_OAUTH_CLIENT_ID", e),
-    clientSecret: env("GOOGLE_OAUTH_CLIENT_SECRET", e),
-    redirectUri: env("GOOGLE_OAUTH_REDIRECT_URI", e) || serverUrl() + "/api/google/oauth/callback",
+    clientId: creds.clientId,
+    clientSecret: creds.clientSecret,
+    // With Keystone's redirect broker (KS_OAUTH_BROKER_URL) Google sends everyone to one verified address on KS-Ops.
+    redirectUri: env("GOOGLE_OAUTH_REDIRECT_URI", e) || redirectUriFor("google", serverUrl() + "/api/google/oauth/callback", e),
     returnUrl: env("GOOGLE_OAUTH_RETURN_URL", e) || portalUrl() + "/settings/profile",
   };
 }

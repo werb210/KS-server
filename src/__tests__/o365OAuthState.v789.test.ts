@@ -12,6 +12,7 @@ const db = vi.hoisted(() => ({ states: [] as any[], updates: [] as Array<{ sql: 
 
 vi.mock("../middleware/auth.js", () => ({
   requireAuth: (req: any, _res: any, next: any) => { req.user = { id: db.currentUser, role: "Staff" }; next(); },
+  requireAuthorization: () => (_req: any, _res: any, next: any) => next(), // KS_SERVER_M365_ONE_CLICK - admin routes
 }));
 vi.mock("../db.js", () => ({
   pool: {
@@ -44,7 +45,7 @@ beforeEach(() => {
   db.states.length = 0;
   db.updates.length = 0;
   db.currentUser = "user-a";
-  process.env.MSAL_TENANT_ID = "tenant-1";
+  process.env.MSAL_TENANT_ID = "tenant-1"; // KS_SERVER_M365_ONE_CLICK - the fallback tenant (no saved connection)
   process.env.MSAL_CLIENT_ID = "client-1";
   process.env.MSAL_CLIENT_SECRET = "client-secret-1";
   process.env.O365_OAUTH_RETURN_URL = "https://staff.example/communications";

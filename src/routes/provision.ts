@@ -14,6 +14,8 @@
 //   PUT  /api/provision/texting         { registrations: [{ kind, status, phone_number?, reason?, message? }] } -
 //                                       KS_SERVER_TEXTING_REGISTRATION: toll-free verification / A2P 10DLC status, for
 //                                       Settings > Phone lines and for where texts to US mobiles may go from.
+//   GET  /api/provision/connections     KS_SERVER_M365_ONE_CLICK: whether the brokerage connected Microsoft 365 / Google
+//                                       Workspace, for KS-Ops's provisioning page. No names or email addresses.
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { pool } from "../db.js";
@@ -23,6 +25,7 @@ import { opsKeyMatches } from "./plan.js";
 import { provisionMainLines } from "../phone/numbers.js"; // KS_SERVER_PHONE_PROVISIONING
 import { liveTwilioNumbersApi, type TwilioNumbersApi } from "../phone/twilioNumbers.js";
 import { saveCompliance, saveTexting } from "../phone/textingState.js"; // KS_SERVER_TEXTING_REGISTRATION
+import { opsConnectionsView } from "../licensee/workspaceConnections.js"; // KS_SERVER_M365_ONE_CLICK
 
 type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[] }> };
 const db = () => pool as unknown as Q;
@@ -149,6 +152,13 @@ router.get("/teardown-check", safeHandler(async (req: any, res) => {
   if (!opsAuthorized(req, res)) return;
   res.setHeader("Cache-Control", "no-store");
   return res.json(await teardownCheck(db()));
+}));
+
+// KS_SERVER_M365_ONE_CLICK - Microsoft 365 / Google Workspace connection state for KS-Ops.
+router.get("/connections", safeHandler(async (req: any, res: any) => {
+  if (!opsAuthorized(req, res)) return;
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ ok: true, ...(await opsConnectionsView(pool)) });
 }));
 
 export default router;

@@ -16,6 +16,7 @@ import {
   STATE_TTL_MS, buildAuthUrl, disconnectGoogle, exchangeCode, fetchGoogleIdentity, googleStatusForUser,
   newCodeVerifier, nonceHash, saveGoogleAccount,
 } from "../services/workspace/googleAuth.js";
+import { unwrapState, wrapState } from "../licensee/oauthBroker.js"; // KS_SERVER_M365_ONE_CLICK
 
 const router = Router();
 const STATE_COOKIE = "google_oauth_nonce";
@@ -71,12 +72,13 @@ router.get("/oauth/start", requireAuth, safeHandler(async (req: any, res: any) =
     .catch((err: unknown) => logWarnSwallowed(err, "google_oauth_states.prune"));
   res.cookie(STATE_COOKIE, nonce, { ...stateCookieOptions, maxAge: STATE_TTL_MS });
   const hint = typeof req.query.login_hint === "string" ? req.query.login_hint : null;
-  res.json({ url: buildAuthUrl(cfg, nonce, verifier, { loginHint: hint }) });
+  res.json({ url: buildAuthUrl(cfg, wrapState("google", nonce, STATE_TTL_MS), verifier, { loginHint: hint }) });
 }));
 
 router.get("/oauth/callback", safeHandler(async (req: any, res: any) => {
   const code = typeof req.query.code === "string" ? req.query.code : "";
-  const state = typeof req.query.state === "string" ? req.query.state : "";
+  // KS_SERVER_M365_ONE_CLICK - a state that came through Keystone's redirect broker is unwrapped (HMAC checked).
+  const state = unwrapState("google", typeof req.query.state === "string" ? req.query.state : "") ?? "";
   const cookieNonce = cookieValue(req, STATE_COOKIE);
   res.clearCookie(STATE_COOKIE, stateCookieOptions);
   const cfg = googleOAuthConfig();

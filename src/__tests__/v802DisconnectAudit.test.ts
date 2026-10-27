@@ -6,6 +6,7 @@ import request from "supertest";
 const q = vi.hoisted(() => ({ calls: [] as Array<{ sql: string; params: any[] }> }));
 vi.mock("../middleware/auth.js", () => ({
   requireAuth: (req: any, _res: any, next: any) => { req.user = { id: "11111111-1111-1111-1111-111111111111", role: "Staff" }; next(); },
+  requireAuthorization: () => (_req: any, _res: any, next: any) => next(), // KS_SERVER_M365_ONE_CLICK - admin routes
 }));
 vi.mock("../db.js", () => ({
   pool: { query: vi.fn(async (sql: string, params: any[] = []) => { q.calls.push({ sql, params }); return { rowCount: 1, rows: [] }; }) },

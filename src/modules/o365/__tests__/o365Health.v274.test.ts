@@ -31,14 +31,14 @@ describe("reading Microsoft errors", () => {
 
 describe("plain-English explanations", () => {
   const at = new Date().toISOString();
-  it("names the expired server secret", () => expect(explainO365Failure({ stage: "refresh", status: 401, code: "AADSTS7000222", at })).toContain("MSAL_CLIENT_SECRET"));
+  it("names the expired server secret", () => expect(explainO365Failure({ stage: "refresh", status: 401, code: "AADSTS7000222", at })).toContain("Keystone support renews it")); // KS_SERVER_M365_ONE_CLICK
   it("asks the user to reconnect when their sign-in expired", () => {
     expect(explainO365Failure({ stage: "refresh", status: 400, code: "AADSTS700082", at })).toContain("Reconnect Office 365");
     expect(explainO365Failure({ stage: "no_refresh_token", at })).toContain("Reconnect Office 365");
   });
   it("explains missing mail permission and missing configuration", () => {
     expect(explainO365Failure({ stage: "graph_inbox", status: 403, code: "ErrorAccessDenied", at })).toContain("permission");
-    expect(explainO365Failure({ stage: "not_configured", at })).toContain("MSAL_CLIENT_SECRET");
+    expect(explainO365Failure({ stage: "not_configured", at })).toContain("Settings > Connections"); // KS_SERVER_M365_ONE_CLICK
   });
 });
 

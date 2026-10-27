@@ -29,6 +29,7 @@ import {
   randomToken, sha256Hex, ssoReturnUrl, verifyIdToken, type KeyResolver, type SsoProvider,
 } from "../sso/oidc.js";
 import { loadSsoAvailability } from "../sso/settings.js";
+import { unwrapState, wrapState } from "../licensee/oauthBroker.js"; // KS_SERVER_M365_ONE_CLICK
 
 const router = Router();
 const db = () => pool as unknown as Q;
@@ -156,7 +157,7 @@ router.get("/:provider/start", safeHandler(async (req: any, res: any) => {
   res.cookie(STATE_COOKIE, state, { ...stateCookieOptions, maxAge: STATE_TTL_MS });
   res.setHeader("Cache-Control", "no-store");
   return res.redirect(buildAuthorizeUrl(cfg, {
-    state, nonce, verifier,
+    state: wrapState(provider === "google" ? "sso-google" : "sso-ms", state, STATE_TTL_MS), nonce, verifier,
     tenantRestriction: a.settings.microsoft_tenant_id || undefined,
     hostedDomain: a.settings.google_hosted_domain || undefined,
   }));
@@ -166,7 +167,8 @@ router.get("/:provider/callback", ssoCallbackLimiter, safeHandler(async (req: an
   const provider = String(req.params.provider ?? "");
   if (!isSsoProvider(provider)) return res.status(404).json({ ok: false, error: "not_found" });
   const code = typeof req.query.code === "string" ? req.query.code : "";
-  const state = typeof req.query.state === "string" ? req.query.state : "";
+  // KS_SERVER_M365_ONE_CLICK - a state that came through Keystone's redirect broker is unwrapped (HMAC checked).
+  const state = unwrapState(provider === "google" ? "sso-google" : "sso-ms", typeof req.query.state === "string" ? req.query.state : "") ?? "";
   const cookieState = cookieValue(req, STATE_COOKIE);
   res.clearCookie(STATE_COOKIE, stateCookieOptions);
   res.setHeader("Cache-Control", "no-store");

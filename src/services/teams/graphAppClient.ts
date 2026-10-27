@@ -3,33 +3,28 @@
 // endpoints are Application-permission only and are addressed as
 //   /users/{organizerUpn}/onlineMeetings/{id}/transcripts
 // so they cannot use the delegated per-user client in modules/o365/graphClient.ts.
+import { m365AppOnly, tokenEndpoint } from "../../modules/o365/m365App.js";
 // Uses the same MS_GRAPH_* env trio as services/email/graphSendService.ts, which
 // is already proven working for the app-only submissions pipeline.
-let cachedToken: { token: string; expiresAt: number } | null = null;
-
-function envOrEmpty(k: string): string {
-  return (process.env[k] ?? "").trim();
-}
+// KS_SERVER_M365_ONE_CLICK - the tenant is the one the brokerage's admin connected (Settings > Connections), the app
+// is Keystone's (or MS_GRAPH_* / MSAL_* on servers with their own registration). See modules/o365/m365App.ts.
+let cachedToken: { token: string; expiresAt: number; key: string } | null = null;
 
 export function isAppGraphConfigured(): boolean {
-  return Boolean(
-    envOrEmpty("MS_GRAPH_TENANT_ID") &&
-      envOrEmpty("MS_GRAPH_CLIENT_ID") &&
-      envOrEmpty("MS_GRAPH_CLIENT_SECRET"),
-  );
+  return m365AppOnly() !== null;
 }
 
 async function getAppGraphToken(): Promise<string> {
-  if (cachedToken && cachedToken.expiresAt > Date.now() + 60_000) {
+  const creds = m365AppOnly();
+  if (!creds) throw new Error("teams_graph_not_configured");
+  const key = `${creds.tenant}|${creds.clientId}`;
+  if (cachedToken && cachedToken.key === key && cachedToken.expiresAt > Date.now() + 60_000) {
     return cachedToken.token;
   }
-  const tenant = envOrEmpty("MS_GRAPH_TENANT_ID");
-  const clientId = envOrEmpty("MS_GRAPH_CLIENT_ID");
-  const clientSecret = envOrEmpty("MS_GRAPH_CLIENT_SECRET");
-  const url = `https://login.microsoftonline.com/${encodeURIComponent(tenant)}/oauth2/v2.0/token`;
+  const url = tokenEndpoint(creds.tenant);
   const body = new URLSearchParams({
-    client_id: clientId,
-    client_secret: clientSecret,
+    client_id: creds.clientId,
+    client_secret: creds.clientSecret,
     grant_type: "client_credentials",
     scope: "https://graph.microsoft.com/.default",
   });
@@ -46,7 +41,7 @@ async function getAppGraphToken(): Promise<string> {
   const token = String(json.access_token ?? "");
   if (!token) throw new Error("teams_graph_token_empty");
   const expiresIn = Number(json.expires_in ?? 3600);
-  cachedToken = { token, expiresAt: Date.now() + expiresIn * 1000 };
+  cachedToken = { token, expiresAt: Date.now() + expiresIn * 1000, key };
   return token;
 }
 

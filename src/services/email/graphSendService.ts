@@ -1,3 +1,4 @@
+import { m365AppOnly, m365SendAsMailbox, tokenEndpoint } from "../../modules/o365/m365App.js";
 export type GraphAttachment = { filename: string; contentType: string; content: Buffer };
 export type GraphSendInput = { to: string | string[]; cc?: string | string[]; bcc?: string | string[]; subject: string; bodyText: string; bodyHtml?: string; attachments?: GraphAttachment[]; sendAs?: string; signatureHtml?: string };
 export type GraphSendResult = { ok: true; messageId: string | null } | { ok: false; error: string; status?: number };
@@ -8,34 +9,40 @@ const SIMPLE_ATTACHMENT_LIMIT = 3 * 1024 * 1024;
 const MAX_ATTACHMENT_SIZE = 150 * 1024 * 1024;
 const UPLOAD_CHUNK_SIZE = 5 * 1024 * 1024; // 16 × Graph's required 320 KiB block size.
 
-let cachedToken: { token: string; expiresAt: number } | null = null;
+// KS_SERVER_M365_ONE_CLICK - app-only settings come from modules/o365/m365App.ts: the tenant the brokerage's admin
+// connected, Keystone's app (or MS_GRAPH_* on servers with their own), and the shared mailbox saved on Settings >
+// Connections (else MS_GRAPH_SEND_AS).
+let cachedToken: { token: string; expiresAt: number; key: string } | null = null;
 
-function envOrEmpty(key: string): string { return (process.env[key] ?? "").trim(); }
 function asArray(value: string | string[] | undefined): string[] { return value ? (Array.isArray(value) ? value : [value]) : []; }
-function isConfigured(): { ok: true } | { ok: false; reason: string } {
-  const missing = ["MS_GRAPH_TENANT_ID", "MS_GRAPH_CLIENT_ID", "MS_GRAPH_CLIENT_SECRET", "MS_GRAPH_SEND_AS"].filter((key) => !envOrEmpty(key));
-  return missing.length ? { ok: false, reason: `Missing env: ${missing.join(", ")}` } : { ok: true };
+export function isConfigured(): { ok: true } | { ok: false; reason: string } {
+  const missing: string[] = [];
+  if (!m365AppOnly()) missing.push("Microsoft 365 connection (Settings > Connections)");
+  if (!m365SendAsMailbox()) missing.push("shared mailbox for outgoing email (Settings > Connections)");
+  return missing.length ? { ok: false, reason: `Not set up: ${missing.join(", ")}` } : { ok: true };
 }
 
 // BF_SERVER_BLOCK_v494 - app-only token + send-as mailbox, for the bounce reader.
 export async function graphAppToken(): Promise<string> { return getAccessToken(); }
-export function graphSendAsMailbox(): string { return envOrEmpty("MS_GRAPH_SEND_AS"); }
+export function graphSendAsMailbox(): string { return m365SendAsMailbox(); }
 
 export function logGraphConfigStatus(): void {
   const config = isConfigured();
-  if (config.ok) console.log(`[graph] configured (send-as=${envOrEmpty("MS_GRAPH_SEND_AS")})`);
+  if (config.ok) console.log(`[graph] configured (send-as=${m365SendAsMailbox()})`);
   else console.warn(`[graph] NOT configured — ${config.reason}. Email sends will fail.`);
 }
 
 async function getAccessToken(): Promise<string> {
-  if (cachedToken && cachedToken.expiresAt > Date.now() + 60_000) return cachedToken.token;
-  const url = `https://login.microsoftonline.com/${encodeURIComponent(envOrEmpty("MS_GRAPH_TENANT_ID"))}/oauth2/v2.0/token`;
-  const body = new URLSearchParams({ client_id: envOrEmpty("MS_GRAPH_CLIENT_ID"), client_secret: envOrEmpty("MS_GRAPH_CLIENT_SECRET"), grant_type: "client_credentials", scope: "https://graph.microsoft.com/.default" });
-  const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
+  const creds = m365AppOnly();
+  if (!creds) throw new Error("graph_not_configured");
+  const key = `${creds.tenant}|${creds.clientId}`;
+  if (cachedToken && cachedToken.key === key && cachedToken.expiresAt > Date.now() + 60_000) return cachedToken.token;
+  const body = new URLSearchParams({ client_id: creds.clientId, client_secret: creds.clientSecret, grant_type: "client_credentials", scope: "https://graph.microsoft.com/.default" });
+  const response = await fetch(tokenEndpoint(creds.tenant), { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
   if (!response.ok) throw new Error(`graph_token_failed status=${response.status} body=${(await response.text().catch(() => "")).slice(0, 300)}`);
   const json = await response.json() as { access_token?: string; expires_in?: number };
   if (!json.access_token) throw new Error("graph_token_empty");
-  cachedToken = { token: json.access_token, expiresAt: Date.now() + Number(json.expires_in ?? 3600) * 1000 };
+  cachedToken = { token: json.access_token, expiresAt: Date.now() + Number(json.expires_in ?? 3600) * 1000, key };
   return cachedToken.token;
 }
 
@@ -96,7 +103,7 @@ async function recordGraphSendOnTimeline(input: GraphSendInput): Promise<void> {
 async function sendViaGraphInner(input: GraphSendInput): Promise<GraphSendResult> {
   const config = isConfigured();
   if (!config.ok) return { ok: false, error: config.reason };
-  const sendAs = (input.sendAs ?? envOrEmpty("MS_GRAPH_SEND_AS")).trim();
+  const sendAs = (input.sendAs ?? m365SendAsMailbox()).trim();
   if (!sendAs) return { ok: false, error: "send_as_missing" };
   const attachments = input.attachments ?? [];
   const tooLarge = attachments.find((attachment) => attachment.content.length > MAX_ATTACHMENT_SIZE);

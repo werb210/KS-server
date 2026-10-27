@@ -191,7 +191,7 @@ describe("token encryption", () => {
     expect(decryptToken("plaintext", env)).toBeNull();
   });
   it("Google is 'not configured' without a dedicated encryption key", () => {
-    expect(googleConfigProblem({ GOOGLE_OAUTH_CLIENT_ID: "x", GOOGLE_OAUTH_CLIENT_SECRET: "y" } as any)).toMatch(/GOOGLE_TOKEN_ENCRYPTION_KEY/);
+    expect(googleConfigProblem({ GOOGLE_OAUTH_CLIENT_ID: "x", GOOGLE_OAUTH_CLIENT_SECRET: "y" } as any)).toMatch(/token key is missing/); // KS_SERVER_M365_ONE_CLICK
     expect(googleConfigProblem({ GOOGLE_OAUTH_CLIENT_ID: "x", GOOGLE_OAUTH_CLIENT_SECRET: "y", GOOGLE_TOKEN_ENCRYPTION_KEY: "k" } as any)).toBeNull();
   });
 });

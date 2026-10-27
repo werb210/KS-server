@@ -1,5 +1,7 @@
 import type { Pool } from "pg";
 import { clearO365Failure, parseMicrosoftError, recordO365Failure } from "./o365Health.js"; // BF_SERVER_O365_VISIBILITY_v274
+import { DELEGATED_SCOPE_STRING, m365Delegated, tokenEndpoint } from "./m365App.js"; // KS_SERVER_M365_ONE_CLICK
+import { markWorkspaceSync } from "./m365Consent.js";
 
 // BF_SERVER_BLOCK_v337_GRAPH_AUTO_REFRESH_v1
 // Microsoft Graph delegated-flow scopes. Must match what the portal's
@@ -9,8 +11,9 @@ import { clearO365Failure, parseMicrosoftError, recordO365Failure } from "./o365
 // to, so all three layers (this string, VITE_MSAL_SCOPES, and the app reg
 // Delegated permissions) MUST list the same scope set or the refreshed
 // token gets silently downgraded.
-const REFRESH_SCOPE =
-  "User.Read Mail.ReadWrite Mail.Read.Shared Mail.Send Mail.Send.Shared Calendars.ReadWrite Tasks.ReadWrite Contacts.ReadWrite offline_access";
+// KS_SERVER_M365_ONE_CLICK - the same list the connect asks for (it used to be a shorter one, so a refreshed token
+// silently lost Files, Presence, MailboxSettings and Calendars.Read.Shared).
+const REFRESH_SCOPE = DELEGATED_SCOPE_STRING;
 
 // Refresh window: refresh the access token proactively when fewer than
 // EXPIRY_SKEW_MS milliseconds remain on it. Microsoft access tokens
@@ -24,22 +27,20 @@ type RefreshResult = {
 };
 
 async function refreshAccessToken(refreshToken: string, userId: string | null = null): Promise<RefreshResult | null> {
-  const tenant = process.env.MSAL_TENANT_ID;
-  const client = process.env.MSAL_CLIENT_ID;
-  const secret = process.env.MSAL_CLIENT_SECRET;
-  if (!tenant || !client || !secret) {
+  const ms = m365Delegated();
+  if (!ms) {
     recordO365Failure(userId, { stage: "not_configured" });
     return null;
   }
   const body = new URLSearchParams({
-    client_id: client,
-    client_secret: secret,
+    client_id: ms.clientId,
+    client_secret: ms.clientSecret,
     refresh_token: refreshToken,
     grant_type: "refresh_token",
     scope: REFRESH_SCOPE,
   });
   const r = await fetch(
-    `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`,
+    tokenEndpoint(ms.tenant),
     {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -291,6 +292,7 @@ export async function getGraphForUser(
       const detail = parseMicrosoftError(await resp.clone().text().catch(() => ""));
       recordO365Failure(userId, { stage: "graph", status: resp.status, ...detail });
     }
+    if (resp.ok) markWorkspaceSync(db, "m365"); // KS_SERVER_M365_ONE_CLICK - "last successful sync" on Connections
     return resp;
   });
 

@@ -18,11 +18,13 @@ export type LicenseeField = (typeof LICENSEE_FIELDS)[number];
 
 // KS_SERVER_v8_CONNECTIONS - the licensee's own accounts. Admin-only: never in the public GET /api/licensee.
 // Where the server needs one it prefers this setting, then the App Service setting (see ./connections.ts).
-export const CONNECTION_FIELDS = ["twilio_main_number", "google_ads_customer_id", "office365_tenant_id"] as const;
+// KS_SERVER_M365_ONE_CLICK - office365_tenant_id is now written by the Microsoft admin consent (Settings > Connections);
+// office365_send_as is the shared mailbox lender packages and notices go out from.
+export const CONNECTION_FIELDS = ["twilio_main_number", "google_ads_customer_id", "office365_tenant_id", "office365_send_as"] as const;
 export type ConnectionField = (typeof CONNECTION_FIELDS)[number];
 export type LicenseeConnections = Record<ConnectionField, string>;
 
-const EMPTY_CONNECTIONS: LicenseeConnections = { twilio_main_number: "", google_ads_customer_id: "", office365_tenant_id: "" };
+const EMPTY_CONNECTIONS: LicenseeConnections = { twilio_main_number: "", google_ads_customer_id: "", office365_tenant_id: "", office365_send_as: "" };
 
 /** Checks one connection field; returns the cleaned value or an error message. */
 export function checkConnectionField(field: ConnectionField, raw: unknown): { ok: true; value: string } | { ok: false; error: string } {
@@ -38,6 +40,10 @@ export function checkConnectionField(field: ConnectionField, raw: unknown): { ok
     const digits = value.replace(/[\s-]/g, "");
     if (!/^\d{10}$/.test(digits)) return { ok: false, error: "google_ads_customer_id must be 10 digits like 123-456-7890" };
     return { ok: true, value: `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}` };
+  }
+  if (field === "office365_send_as") {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return { ok: false, error: "office365_send_as must be an email address like submissions@yourcompany.com" };
+    return { ok: true, value: value.toLowerCase() };
   }
   const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const domain = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
@@ -217,7 +223,8 @@ export async function adminLicensee(db: Q, env: NodeJS.ProcessEnv = process.env)
     connections_in_force: {
       twilio_main_number: conn.twilio_main_number || String(env.TWILIO_MAIN_LINE_NUMBER ?? "").trim(),
       google_ads_customer_id: conn.google_ads_customer_id || String(env.GOOGLE_ADS_CUSTOMER_ID ?? "").trim(),
-      office365_tenant_id: conn.office365_tenant_id || String(env.MS_GRAPH_TENANT_ID ?? "").trim(),
+      office365_tenant_id: conn.office365_tenant_id || String(env.MSAL_TENANT_ID ?? "").trim() || String(env.MS_GRAPH_TENANT_ID ?? "").trim(),
+      office365_send_as: conn.office365_send_as || String(env.MS_GRAPH_SEND_AS ?? "").trim(),
     },
   };
 }
