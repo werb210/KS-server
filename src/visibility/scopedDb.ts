@@ -2,7 +2,7 @@
 // without rewriting their SQL.
 //
 // For a restricted user, scopedRequest() checks out one connection and creates TEMP views named applications,
-// contacts and companies on it that select only that user's visible rows from public.*. PostgreSQL searches the
+// contacts and companies (and, since v21, the activity tables: messages, conversations, calls, tasks) on it that select only that user's visible rows from public.*. PostgreSQL searches the
 // session's temp schema before public, so every unqualified table name in the SQL reads the filtered view. While the
 // request runs, pool.query (the shared pool every module imports) is routed to that connection through
 // AsyncLocalStorage, so nested services (report data, contact briefs, the pipeline query) are covered too. When the
@@ -17,7 +17,8 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
 import type { PoolClient } from "pg";
 import { pool } from "../db.js";
 import type { Q } from "../plans/state.js";
-import { narrowToOwners, scopeForActingUser, scopeForRequest, teamOwnerIds, teamsInPlan, type RecordScope } from "./scope.js";
+import jwt from "jsonwebtoken";
+import { NOTHING_SCOPE, narrowToOwners, scopeForActingUser, scopeForRequest, teamOwnerIds, teamsInPlan, type RecordScope } from "./scope.js";
 
 type Store = { client: PoolClient; queue: Promise<unknown>; closed: boolean };
 const als = new AsyncLocalStorage<Store>();
@@ -56,21 +57,36 @@ export const scopedPool = {
   },
 };
 
-export function viewSql(ownerIds: string[]): string[] {
+export function viewSql(ownerIds: string[], userId: string | null = null): string[] {
   const ids = ownerIds.filter((id) => UUID_RE.test(id));
   const lit = ids.length ? `ARRAY[${ids.map((id) => `'${id.toLowerCase()}'`).join(",")}]::uuid[]` : `ARRAY[]::uuid[]`;
+  // KS_SERVER_v21_VISIBILITY_GAPS - activity (messages, conversations, calls, call events, tasks) linked to a contact,
+  // company or application the user may not see is hidden too. Activity linked to nothing stays (unknown numbers).
+  // Tasks assigned to the user always stay visible.
+  const contactOk = (col: string) => `(${col} IS NULL OR EXISTS (SELECT 1 FROM public.contacts vc WHERE vc.id = ${col} AND vc.owner_id = ANY(${lit})))`;
+  const companyOk = (col: string) => `(${col} IS NULL OR EXISTS (SELECT 1 FROM public.companies vo WHERE vo.id = ${col} AND vo.owner_id = ANY(${lit})))`;
+  const appOk = (col: string) => `(${col} IS NULL OR EXISTS (SELECT 1 FROM public.applications va WHERE va.id::text = ${col}::text AND va.owner_user_id = ANY(${lit})))`;
+  const me = userId && UUID_RE.test(userId) ? `'${userId.toLowerCase()}'::uuid` : null;
   return [
     `CREATE OR REPLACE TEMP VIEW applications AS SELECT * FROM public.applications WHERE owner_user_id = ANY(${lit})`,
     `CREATE OR REPLACE TEMP VIEW contacts AS SELECT * FROM public.contacts WHERE owner_id = ANY(${lit})`,
     `CREATE OR REPLACE TEMP VIEW companies AS SELECT * FROM public.companies WHERE owner_id = ANY(${lit})`,
+    `CREATE OR REPLACE TEMP VIEW communications_messages AS SELECT * FROM public.communications_messages m WHERE ${contactOk("m.contact_id")} AND ${appOk("m.application_id")}`,
+    `CREATE OR REPLACE TEMP VIEW communications_conversations AS SELECT * FROM public.communications_conversations cc WHERE ${contactOk("cc.contact_id")}`,
+    `CREATE OR REPLACE TEMP VIEW call_logs AS SELECT * FROM public.call_logs cl WHERE ${contactOk("cl.contact_id")} AND ${contactOk("cl.crm_contact_id")} AND ${appOk("cl.application_id")}`,
+    `CREATE OR REPLACE TEMP VIEW call_events AS SELECT * FROM public.call_events ce WHERE ${contactOk("ce.contact_id")} AND ${appOk("ce.application_id")}`,
+    `CREATE OR REPLACE TEMP VIEW voicemails AS SELECT * FROM public.voicemails vm WHERE ${contactOk("vm.contact_id")} AND ${appOk("vm.application_id")}`,
+    `CREATE OR REPLACE TEMP VIEW crm_call_log AS SELECT * FROM public.crm_call_log ccl WHERE ${contactOk("ccl.contact_id")}`,
+    `CREATE OR REPLACE TEMP VIEW tasks AS SELECT * FROM public.tasks t WHERE ${me ? `t.assignee_user_id = ${me} OR ` : ""}(${contactOk("t.contact_id")} AND ${companyOk("t.company_id")})`,
   ];
 }
-export const DROP_VIEWS_SQL = `DROP VIEW IF EXISTS pg_temp.applications, pg_temp.contacts, pg_temp.companies`;
+export const DROP_VIEWS_SQL = `DROP VIEW IF EXISTS pg_temp.applications, pg_temp.contacts, pg_temp.companies, pg_temp.communications_messages, pg_temp.communications_conversations, pg_temp.call_logs, pg_temp.call_events, pg_temp.crm_call_log, pg_temp.voicemails, pg_temp.tasks`;
 
 async function open(scope: RecordScope): Promise<Store> {
   const client = await pool.connect();
   try {
-    for (const sql of viewSql(scope.mode === "all" ? [] : scope.ownerIds)) await client.query(sql);
+    const own = scope.mode === "restricted" && !scope.teamFilter ? scope.userId : null; // a team filter is not "my tasks"
+    for (const sql of viewSql(scope.mode === "all" ? [] : scope.ownerIds, own)) await client.query(sql);
   } catch (err) {
     client.release(err instanceof Error ? err : new Error(String(err)));
     throw err;
@@ -126,5 +142,51 @@ function scopedMiddleware(resolve: (req: Request) => Promise<RecordScope>): Requ
 /** After requireAuth: the rest of the request reads only the user's records (and ?team_id= narrows further). */
 export const scopedRequest: RequestHandler = scopedMiddleware((req) => scopeWithTeamFilter(req));
 
-/** For the assistant's staff routes (service token): the acting staff member comes from the body (staff_user_id). */
-export const scopedAssistantRequest: RequestHandler = scopedMiddleware((req) => scopeForActingUser(pool as unknown as Q, (req as any).body ?? {}));
+/** KS_SERVER_v21_VISIBILITY_GAPS - scopedRequest for reads only (GET/HEAD); writes run as before. */
+export const scopedReads: RequestHandler = (req: Request, res: Response, next: NextFunction) =>
+  req.method === "GET" || req.method === "HEAD" ? scopedRequest(req, res, next) : next();
+
+// KS_SERVER_v21_VISIBILITY_GAPS - who the assistant is acting for. The agent sends the staff member's id
+// (staff_user_id) and hands back the X-Maya-Context token this server signed for that request (HS256, iss
+// "bf-server", aud "agent", kind "maya_context", minted from the signed-in user's own session). The id is trusted
+// only when that signature checks out and names the same person; a bare staff_user_id is never used to widen what
+// the assistant sees (it falls back to the role, which shows a restricted role nothing).
+export type ActingStaff = { id: string | null; mismatch: boolean };
+export function actingStaffFromRequest(req: Request): ActingStaff {
+  const body = ((req as any).body ?? {}) as Record<string, unknown>;
+  const claimed = typeof body.staff_user_id === "string" ? body.staff_user_id.trim() : "";
+  const token = String(req.header("x-maya-context") ?? "").trim();
+  const secret = String(process.env.JWT_SECRET ?? "").trim();
+  if (!token || !secret) return { id: null, mismatch: false };
+  let id: string | null = null;
+  try {
+    const p = jwt.verify(token, secret, { algorithms: ["HS256"], issuer: "bf-server", audience: "agent" }) as Record<string, any>;
+    if (p?.kind === "maya_context" && String(p.audience ?? "").toLowerCase() === "staff" && typeof p.staff?.id === "string") id = p.staff.id.trim() || null;
+  } catch {
+    id = null;
+  }
+  if (!id) return { id: null, mismatch: false };
+  return { id, mismatch: Boolean(claimed) && claimed.toLowerCase() !== id.toLowerCase() };
+}
+
+/** The scope the assistant's staff tools read with: the verified acting user's, else the role's (fail closed). */
+export async function scopeForAssistantRequest(req: Request, db: Q = pool as unknown as Q): Promise<RecordScope> {
+  const body = ((req as any).body ?? {}) as Record<string, unknown>;
+  const acting = actingStaffFromRequest(req);
+  if (acting.mismatch) return NOTHING_SCOPE;
+  if (acting.id) return scopeForActingUser(db, { staff_user_id: acting.id, role: body.role });
+  return scopeForActingUser(db, { role: body.role ?? "Staff" });
+}
+
+/** For the assistant's staff routes (service token): the acting staff member, verified as above. */
+export const scopedAssistantRequest: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
+  const acting = actingStaffFromRequest(req);
+  if (acting.mismatch) {
+    res.status(403).json({ ok: false, error: "staff_identity_mismatch", message: "The acting staff member does not match the signed session." });
+    return;
+  }
+  // Downstream handlers (send-sms, tasks) read staff_user_id: give them the verified one.
+  const body = (req as any).body;
+  if (acting.id && body && typeof body === "object" && !Array.isArray(body)) body.staff_user_id = acting.id;
+  scopedMiddleware((r) => scopeForAssistantRequest(r))(req, res, next);
+};

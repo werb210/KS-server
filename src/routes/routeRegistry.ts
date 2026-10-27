@@ -241,8 +241,10 @@ combinedMayaRoutes.post("/website-chat", mayaProxyRateLimit, safeHandler(async (
     req
   );
 }));
-// KS_SERVER_v20_TEAMS - the assistant's staff tools read only what the acting staff member may see (staff_user_id in
-// the body; without it, a role whose visibility is restricted sees nothing). Only for verified service calls.
+// KS_SERVER_v20_TEAMS - the assistant's staff tools read only what the acting staff member may see. Only for verified
+// service calls. KS_SERVER_v21_VISIBILITY_GAPS - the acting staff member is the one named in the X-Maya-Context this
+// server signed (the agent hands it back with staff_user_id); a staff_user_id that does not match it is refused, and
+// without it a role whose visibility is restricted sees nothing.
 // Tools that read no contact, company or application (Ads, GA4, lender products, automations) are left alone.
 const ASSISTANT_UNSCOPED = /^\/(ads-|ga4|lender-products|automations-overview|audit-recent)/;
 combinedMayaRoutes.use("/staff", (req, res, next) => (verifyMayaService(req) && !ASSISTANT_UNSCOPED.test(req.path) ? scopedAssistantRequest(req, res, next) : next()));

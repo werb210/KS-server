@@ -24,7 +24,7 @@ export type RecordKind = "contact" | "company" | "application";
 
 export type RecordScope =
   | { mode: "all"; visibility: "all"; userId: string | null }
-  | { mode: "restricted"; visibility: "team" | "own"; userId: string | null; ownerIds: string[] };
+  | { mode: "restricted"; visibility: "team" | "own"; userId: string | null; ownerIds: string[]; teamFilter?: boolean };
 
 export const ALL_SCOPE: RecordScope = { mode: "all", visibility: "all", userId: null };
 /** Fail-closed scope: an acting user we cannot identify while restrictions apply sees nothing. */
@@ -175,8 +175,8 @@ export async function teamOwnerIds(db: Q, teamId: string): Promise<string[]> {
 /** The scope narrowed to a team's members (a filter, so it can only ever hide more). */
 export function narrowToOwners(scope: RecordScope, ownerIds: string[]): RecordScope {
   const set = new Set(ownerIds);
-  if (scope.mode === "all") return { mode: "restricted", visibility: "team", userId: scope.userId, ownerIds: [...set] };
-  return { ...scope, ownerIds: scope.ownerIds.filter((id) => set.has(id)) };
+  if (scope.mode === "all") return { mode: "restricted", visibility: "team", userId: scope.userId, ownerIds: [...set], teamFilter: true };
+  return { ...scope, ownerIds: scope.ownerIds.filter((id) => set.has(id)), teamFilter: true };
 }
 
 /** Is one record visible? Records that do not exist are "not visible" (the caller answers 404 either way). */
