@@ -30,7 +30,7 @@ const passthrough = (_req: unknown, _res: unknown, next: () => void) => next();
 
 /** The OTP rate limiters as no-ops (they would otherwise count every test request). */
 export function passthroughLimiters() {
-  return { otpStartLimiter: passthrough, otpVerifyLimiter: passthrough };
+  return { otpStartLimiter: passthrough, otpVerifyLimiter: passthrough, refreshLimiter: passthrough }; // KS_NATIVE_DESKTOP_v1
 }
 
 export async function otpApp() {
