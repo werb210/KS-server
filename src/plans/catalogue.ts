@@ -86,6 +86,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "sso", label: "Single sign-on", plan: "pro" },
   // KS_SERVER_v20_WEBHOOKS - outgoing webhooks (and Zapier Catch Hook triggers), pro.
   { key: "webhooks", label: "Webhooks and Zapier", plan: "pro" },
+  // KS_HUBSPOT_GAPS_1_CALL_QUEUES - callers wait in line for the next free person (main line and phone-menu options).
+  { key: "call_queues", label: "Call queues", plan: "pro" },
   // KS_SERVER_v9_FRAUD - the fraud-protection suite (Todd, Oct 23): starter = 1, 2, 4, 5; growth adds 6, 7, 8;
   // pro has all of them except fraud_3. The key number matches the feature list in src/fraud/catalogue.ts.
   // KS_SERVER_BANK_CONNECT_ADDON - bank connect and fraud_3 (statement vs live bank data) are not plan features: they

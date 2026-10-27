@@ -35,6 +35,7 @@ import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 import { greetingText, matchSpeech, officeOpen, optionsPrompt, type MenuOption, type MenuTarget, type PhoneMenu, type Prompt } from "../phoneMenu/menu.js";
 import { loadMenu, readAudio } from "../phoneMenu/store.js";
 import { handleBlockedCall } from "../voice/blockedNumbers.js"; // KS_SETTINGS_PACK_v1_BLOCKED_NUMBERS
+import { routeToQueue, mainLineQueueId, queueUsable } from "../callQueues/reception.js"; // KS_HUBSPOT_GAPS_1_CALL_QUEUES
 
 const router = Router();
 
@@ -245,6 +246,11 @@ async function routeTarget(v: any, req: Request, menu: PhoneMenu, target: MenuTa
     return;
   }
   if (target.type === "meeting") { v.redirect({ method: "POST" }, `${BASE}/meeting`); return; }
+  // KS_HUBSPOT_GAPS_1_CALL_QUEUES - into a call queue (Pro); a queue that cannot take the call -> no-answer fallback.
+  if (target.type === "queue") {
+    if (!(await routeToQueue(v, { callSid: callSidOf(req), from: callerFrom(req) }, target.queueId))) await routeNoAnswer(v, req, menu, ctx);
+    return;
+  }
   if (target.type === "ai") {
     const g = v.gather({ input: "speech", speechTimeout: "auto", timeout: 6, action: `${BASE}/ai?${q(ctx)}`, method: "POST" });
     emit(g, "ai_prompt");
@@ -338,6 +344,12 @@ router.post("/greeting", twilioWebhookValidation, safeHandler(async (req: Reques
     speak(v, menu.afterHoursGreeting, menu.afterHoursGreeting.mode === "tts" ? menu.afterHoursGreeting.text : "");
     await routeTarget(v, req, menu, menu.afterHours, { ref: "after", fallback: false, forUserId: null });
     return send(res, v);
+  }
+  // KS_HUBSPOT_GAPS_1_CALL_QUEUES - the main line can go straight into a queue (after the greeting).
+  const mainQueue = again ? null : await mainLineQueueId();
+  if (mainQueue && await queueUsable(mainQueue)) {
+    speak(v, menu.greeting, menu.greeting.mode === "tts" ? menu.greeting.text : "");
+    if (await routeToQueue(v, { callSid: callSidOf(req), from: callerFrom(req) }, mainQueue)) return send(res, v);
   }
   if (!menu.options.length) {
     speak(v, menu.greeting, menu.greeting.mode === "tts" ? menu.greeting.text : "");

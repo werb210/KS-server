@@ -150,6 +150,8 @@ import paymentsRoutes from "./payments.js"; // KS_HUBSPOT_GAPS_1_PAYMENTS
 import callScriptsRoutes from "./callScripts.js"; // KS_HUBSPOT_GAPS_1_CALL_SCRIPTS
 import meetingNotesRoutes from "./meetingNotes.js"; // KS_HUBSPOT_GAPS_1_MEETING_NOTES
 import pipelinesRoutes from "./pipelines.js"; // KS_HUBSPOT_GAPS_1_PIPELINES
+import callQueuesRoutes from "./callQueues.js"; // KS_HUBSPOT_GAPS_1_CALL_QUEUES
+import callQueueWebhooksRoutes from "./callQueueWebhooks.js"; // KS_HUBSPOT_GAPS_1_CALL_QUEUES
 import taskDefaultsRoutes from "./taskDefaults.js"; // KS_SETTINGS_PACK_v1_TASK_DEFAULTS
 import planRoutes from "./plan.js"; // KS_SERVER_v6_PLANS
 import provisionRoutes from "./provision.js"; // KS_SERVER_v15_PROVISION
@@ -347,6 +349,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/track", router: emailPixelRoutes }, // BF_SERVER_BLOCK_v797_EMAIL_OPEN_TRACKING (public)
   { path: "/voice", router: voiceCallsRoutes },
   { path: "/webhooks/twilio/reception", router: receptionRoutes }, // BF_SERVER_RECEPTION_v1
+  { path: "/webhooks/twilio/queue", router: callQueueWebhooksRoutes }, // KS_HUBSPOT_GAPS_1_CALL_QUEUES (Twilio-signed)
   { path: "/meetings", router: meetingsRoutes }, // BF_SERVER_MEETING_ROOMS_v736
   { path: "/booking", router: clientBookingRoutes }, // BF_SERVER_CLIENT_BOOKING_v738 (public)
   { path: "/webauthn", router: webauthnRoutes }, // BF_SERVER_WEBAUTHN_v1
@@ -419,6 +422,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/call-scripts", router: callScriptsRoutes }, // call scripts / playbooks (call_scripts, growth+)
   { path: "/meeting-notes", router: meetingNotesRoutes }, // Zoom and Google Meet notes (office_sync, every plan); public Zoom callback
   { path: "/pipelines", router: pipelinesRoutes }, // extra pipelines (custom_pipelines, growth 3 / pro unlimited); list on every plan
+  { path: "/call-queues", router: callQueuesRoutes }, // call queues (call_queues, pro): settings, live panel, availability
 ];
 
 // KS_SERVER_v20_TEAMS - staff mounts whose routes address one application by id (router-relative patterns). The

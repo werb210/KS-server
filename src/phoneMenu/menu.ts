@@ -22,7 +22,9 @@ export type MenuTarget =
   /** userId null: the person who was being rung, else the shared mailbox. */
   | { type: "voicemail"; userId: string | null }
   | { type: "ai" }
-  | { type: "meeting" };
+  | { type: "meeting" }
+  /** KS_HUBSPOT_GAPS_1_CALL_QUEUES - a call queue (Pro). */
+  | { type: "queue"; queueId: string };
 
 export type Prompt = { mode: "tts" | "audio"; text: string; audioId: string | null };
 
@@ -98,7 +100,7 @@ function checkPrompt(raw: unknown, key: string, errors: Errors, audioIds: Set<st
   return { mode, text, audioId: mode === "audio" ? audioId : null };
 }
 
-function checkTarget(raw: unknown, key: string, errors: Errors, userIds: Set<string>, allow: MenuTarget["type"][]): MenuTarget {
+function checkTarget(raw: unknown, key: string, errors: Errors, userIds: Set<string>, allow: MenuTarget["type"][], queueIds: Set<string> = new Set()): MenuTarget {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const type = str(r.type) as MenuTarget["type"];
   if (!allow.includes(type)) {
@@ -116,6 +118,11 @@ function checkTarget(raw: unknown, key: string, errors: Errors, userIds: Set<str
     else if (ids.some((id) => !userIds.has(id))) errors[key] = "Every person in the group must be an active team member.";
     else if (ids.length > 10) errors[key] = "A group can ring at most 10 people.";
     return { type, userIds: ids, strategy: r.strategy === "sequential" ? "sequential" : "simultaneous" };
+  }
+  if (type === "queue") {
+    const id = str(r.queueId);
+    if (!queueIds.has(id)) errors[key] = queueIds.size ? "Choose an active call queue." : "Call queues are on the Pro plan. Choose where else this goes.";
+    return { type, queueId: id };
   }
   if (type === "voicemail") {
     const id = r.userId == null || r.userId === "" ? null : str(r.userId);
@@ -141,13 +148,14 @@ function checkWeekly(raw: unknown, errors: Errors): PhoneMenu["hours"]["weekly"]
 }
 
 /** Checks an edited menu against the brokerage's active users and uploaded recordings. */
-export function validateMenu(raw: unknown, ctx: { userIds: Iterable<string>; audioIds: Iterable<string> }):
+export function validateMenu(raw: unknown, ctx: { userIds: Iterable<string>; audioIds: Iterable<string>; queueIds?: Iterable<string> }):
   { ok: true; value: PhoneMenu } | { ok: false; errors: Errors } {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, any>;
   const errors: Errors = {};
   const users = new Set(ctx.userIds);
   const audio = new Set(ctx.audioIds);
-  const all: MenuTarget["type"][] = ["user", "group", "voicemail", "ai", "meeting"];
+  const queues = new Set(ctx.queueIds ?? []); // KS_HUBSPOT_GAPS_1_CALL_QUEUES
+  const all: MenuTarget["type"][] = ["user", "group", "voicemail", "ai", "meeting", "queue"];
   const greeting = checkPrompt(r.greeting, "greeting", errors, audio);
   const afterHoursGreeting = checkPrompt(r.afterHoursGreeting, "afterHoursGreeting", errors, audio);
   const hours = { enabled: r.hours?.enabled === true, weekly: checkWeekly(r.hours?.weekly, errors) };
@@ -167,14 +175,14 @@ export function validateMenu(raw: unknown, ctx: { userIds: Iterable<string>; aud
     if (label.length > 80) errors[`${key}.label`] = "Keep the label under 80 characters.";
     const keywords = (Array.isArray(o?.keywords) ? o.keywords : String(o?.keywords ?? "").split(","))
       .map((k: unknown) => str(k).toLowerCase()).filter(Boolean).slice(0, 12);
-    options.push({ digit, label, keywords, target: checkTarget(o?.target, `${key}.target`, errors, users, all) });
+    options.push({ digit, label, keywords, target: checkTarget(o?.target, `${key}.target`, errors, users, all, queues) });
   });
   options.sort((a, b) => a.digit.localeCompare(b.digit));
   const ringSeconds = Math.round(Number(r.noAnswer?.ringSeconds ?? 25));
   if (!Number.isFinite(ringSeconds) || ringSeconds < 10 || ringSeconds > 60) errors["noAnswer.ringSeconds"] = "Ring for 10 to 60 seconds.";
   const noAnswer = {
     ringSeconds: Number.isFinite(ringSeconds) ? Math.min(60, Math.max(10, ringSeconds)) : 25,
-    target: checkTarget(r.noAnswer?.target ?? { type: "voicemail", userId: null }, "noAnswer.target", errors, users, ["user", "group", "voicemail", "ai"]),
+    target: checkTarget(r.noAnswer?.target ?? { type: "voicemail", userId: null }, "noAnswer.target", errors, users, ["user", "group", "voicemail", "ai", "queue"], queues),
   };
   const holidays: PhoneMenu["holidays"] = [];
   const rawHolidays = Array.isArray(r.holidays) ? r.holidays : [];

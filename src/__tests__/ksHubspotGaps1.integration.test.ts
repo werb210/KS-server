@@ -21,6 +21,11 @@ import { setZoomFetchForTests } from "../meetingNotes/zoom.js";
 import { runMeetingNotesSync } from "../meetingNotes/sync.js";
 import pipelinesRoutes from "../routes/pipelines.js";
 import portalRoutes from "../routes/portal.js";
+import callQueuesRoutes from "../routes/callQueues.js";
+import callQueueWebhooksRoutes from "../routes/callQueueWebhooks.js";
+import { enqueueCaller, getQueue, setQueueTwilioForTests } from "../callQueues/queues.js";
+
+vi.mock("../middleware/twilioWebhookValidation.js", () => ({ twilioWebhookValidation: (_req: any, _res: any, next: any) => next() }));
 
 const intel = vi.hoisted(() => ({ calls: 0 }));
 vi.mock("../services/teams/meetingIntel.js", () => ({ runMeetingIntel: async () => { intel.calls++; } }));
@@ -30,6 +35,7 @@ const MIGRATIONS = [
   "migrations/2026_11_04_ks_hg1_call_scripts.sql",
   "migrations/2026_11_04_ks_hg1_meeting_notes.sql",
   "migrations/2026_11_04_ks_hg1_pipelines.sql",
+  "migrations/2026_11_04_ks_hg1_call_queues.sql",
 ];
 const tag = randomUUID().slice(0, 8);
 const ADMIN = randomUUID(), S1 = randomUUID(), S2 = randomUUID();
@@ -56,6 +62,8 @@ function app() {
   a.use("/api/meeting-notes", meetingNotesRoutes);
   a.use("/api/pipelines", pipelinesRoutes);
   a.use("/api/portal", portalRoutes);
+  a.use("/api/call-queues", callQueuesRoutes);
+  a.use("/api/webhooks/twilio/queue", callQueueWebhooksRoutes);
   return a;
 }
 const http = () => request(app());
@@ -95,6 +103,13 @@ describe("KS HubSpot gaps 1 (real Postgres)", () => {
   afterAll(async () => {
     setStripeFetchForTests(null);
     setZoomFetchForTests(null);
+    setQueueTwilioForTests(null);
+    await pool.query(`DELETE FROM call_queue_calls WHERE queue_id IN (SELECT id FROM call_queues WHERE name LIKE $1)`, [`%${tag}%`]);
+    await pool.query(`DELETE FROM call_queue_members WHERE queue_id IN (SELECT id FROM call_queues WHERE name LIKE $1)`, [`%${tag}%`]);
+    await pool.query(`DELETE FROM call_queues WHERE name LIKE $1`, [`%${tag}%`]);
+    await pool.query(`DELETE FROM call_queue_agents WHERE user_id = ANY($1::uuid[])`, [[ADMIN, S1, S2]]);
+    await pool.query(`DELETE FROM staff_presence WHERE user_id = ANY($1::uuid[])`, [[ADMIN, S1, S2]]);
+    await pool.query(`DELETE FROM brokerage_settings WHERE key = 'call_queue_main_line'`);
     await pool.query(`DELETE FROM teams_meetings WHERE organizer_user_id = ANY($1::uuid[])`, [[ADMIN, S1, S2]]);
     await pool.query(`DELETE FROM zoom_accounts WHERE user_id = ANY($1::uuid[])`, [[ADMIN, S1, S2]]);
     setPaymentSendDepsForTests(null);
@@ -417,6 +432,112 @@ describe("KS HubSpot gaps 1 (real Postgres)", () => {
       const board2 = await http().get("/api/portal/applications").set("Authorization", tok(ADMIN, "Admin"));
       expect(board2.body.items.map((c: any) => c.id)).toContain(A1);
       expect((await pool.query(`SELECT count(*)::int AS n FROM pipeline_moves WHERE application_id = $1`, [A1])).rows[0].n).toBe(2);
+    });
+  });
+  // ------------------------------------------------------------------ 5. call queues
+  describe("call queues", () => {
+    let queueId = "";
+    const calls: any[] = [];
+    const updates: any[] = [];
+    const flush = () => new Promise((r) => setTimeout(r, 150));
+    const twiml = async (path: string, body: Record<string, string>) => (await http().post(`/api/webhooks/twilio/queue/${path}`).type("form").send(body));
+
+    beforeAll(async () => {
+      setQueueTwilioForTests({
+        createCall: async (args) => { calls.push(args); return { sid: `CA${String(calls.length).padStart(32, "0")}` }; },
+        updateCall: async (sid, args) => { updates.push({ sid, ...args }); },
+        dequeueMember: async () => {},
+      });
+      for (const [id, identity] of [[S1, `sam_${tag}`], [S2, `sue_${tag}`]]) {
+        await pool.query(`INSERT INTO staff_presence (user_id, status, twilio_identity, last_heartbeat) VALUES ($1, 'available', $2, now())
+                          ON CONFLICT (user_id) DO UPDATE SET status = 'available', twilio_identity = $2, last_heartbeat = now(), on_call = false, manual_busy = false`, [id, identity]);
+      }
+    });
+
+    it("is Pro only; Admins build a queue", async () => {
+      await setPlan("growth");
+      expect((await http().get("/api/call-queues").set("Authorization", tok(ADMIN, "Admin"))).status).toBe(402);
+      await setPlan("pro");
+      const bad = await http().post("/api/call-queues").set("Authorization", tok(ADMIN, "Admin")).send({ name: `Sales ${tag}`, member_ids: [] });
+      expect(bad.status).toBe(400);
+      const r = await http().post("/api/call-queues").set("Authorization", tok(ADMIN, "Admin"))
+        .send({ name: `Sales ${tag}`, greeting: "Thanks for calling. Someone will be with you shortly.", hold_message: "Thanks for waiting.", member_ids: [S1, S2], max_wait_seconds: 120, ring_seconds: 15, overflow: "ask" });
+      expect(r.status).toBe(201);
+      queueId = r.body.queue.id;
+      expect((await http().put("/api/call-queues/main-line").set("Authorization", tok(ADMIN, "Admin")).send({ queue_id: queueId })).body.main_line_queue_id).toBe(queueId);
+    });
+
+    it("a caller waits, hears their place in line, and is offered to the longest-idle available member; a missed offer goes to the next", async () => {
+      // Sam has been available longer than Sue.
+      await pool.query(`INSERT INTO call_queue_agents (user_id, available, available_since) VALUES ($1, true, now() - interval '10 minutes'), ($2, true, now() - interval '1 minute')
+                        ON CONFLICT (user_id) DO UPDATE SET available = true, available_since = EXCLUDED.available_since, last_call_ended_at = NULL, last_missed_at = NULL`, [S1, S2]);
+      const { default: VoiceResponse } = await import("twilio/lib/twiml/VoiceResponse.js");
+      const v = new VoiceResponse();
+      expect(await enqueueCaller(pool, v, (await getQueue(pool as any, queueId))!, { callSid: `CAcaller1${tag}`, from: "+14035550111", callerName: "Pat", contactId: C1 })).toBe(true);
+      expect(v.toString()).toContain(`ks-q-${queueId}</Enqueue>`);
+      const id = (await pool.query(`SELECT id::text AS id FROM call_queue_calls WHERE call_sid = $1`, [`CAcaller1${tag}`])).rows[0].id;
+      const wait = await twiml(`wait?qc=${id}`, { QueuePosition: "1", QueueTime: "3", QueueSid: "QU1", CallSid: `CAcaller1${tag}` });
+      expect(wait.text).toContain("Thanks for calling. Someone will be with you shortly.");
+      expect(wait.text).toContain("You are next in line.");
+      expect(wait.text).toContain("<Play>");
+      await flush();
+      expect(calls).toHaveLength(1);
+      expect(String(calls[0].to)).toMatch(new RegExp(`^client:sam_${tag}\\?`));
+      expect(String(calls[0].to)).toContain("callerNumber=%2B14035550111");
+      // Sam does not answer: Sue is offered the caller.
+      expect((await twiml(`agent-status?qc=${id}&user=${S1}`, { CallStatus: "no-answer", CallSid: calls[0] && `CA${"1".padStart(32, "0")}` })).status).toBe(204);
+      await flush();
+      expect(calls).toHaveLength(2);
+      expect(String(calls[1].to)).toMatch(new RegExp(`^client:sue_${tag}\\?`));
+      const live = await http().get("/api/call-queues/live").set("Authorization", tok(ADMIN, "Admin"));
+      const q = live.body.queues.find((x: any) => x.id === queueId);
+      expect(q.waiting[0]).toMatchObject({ position: 1, caller_name: "Pat", ringing: "Sue HG1" });
+      // Sue answers: she is connected to the caller Twilio dequeues.
+      const bridge = await twiml(`bridge?qc=${id}`, { CallSid: `CA${"2".padStart(32, "0")}` });
+      expect(bridge.text).toContain(`<Queue url="/api/webhooks/twilio/queue/connecting?qc=${id}" method="POST">ks-q-${queueId}</Queue>`);
+      await twiml(`connecting?qc=${id}`, { CallSid: `CAcaller1${tag}`, DequeingCallSid: `CA${"2".padStart(32, "0")}` });
+      const connected = (await http().get("/api/call-queues/live").set("Authorization", tok(ADMIN, "Admin"))).body.queues.find((x: any) => x.id === queueId);
+      expect(connected.connected[0]).toMatchObject({ caller_name: "Pat", agent: "Sue HG1" });
+      expect(connected.waiting).toEqual([]);
+      await twiml(`agent-done?qc=${id}&user=${S2}`, { DialCallStatus: "completed" });
+      const row = (await pool.query(`SELECT status, answered_user_id::text AS who, wait_seconds FROM call_queue_calls WHERE id = $1`, [id])).rows[0];
+      expect(row).toMatchObject({ status: "completed", who: S2 });
+      const today = (await http().get("/api/call-queues/live").set("Authorization", tok(ADMIN, "Admin"))).body.queues.find((x: any) => x.id === queueId).today;
+      expect(today.answered).toBe(1);
+    });
+
+    it("past the longest wait the caller can ask for a callback; staff mark it done", async () => {
+      const { default: VoiceResponse } = await import("twilio/lib/twiml/VoiceResponse.js");
+      await pool.query(`UPDATE call_queue_agents SET available = false WHERE user_id = ANY($1::uuid[])`, [[S1, S2]]);
+      await enqueueCaller(pool, new VoiceResponse(), (await getQueue(pool as any, queueId))!, { callSid: `CAcaller2${tag}`, from: "+14035550199", callerName: null, contactId: null });
+      const id = (await pool.query(`SELECT id::text AS id FROM call_queue_calls WHERE call_sid = $1`, [`CAcaller2${tag}`])).rows[0].id;
+      const wait = await twiml(`wait?qc=${id}`, { QueuePosition: "1", QueueTime: "130", QueueSid: "QU1" });
+      expect(wait.text).toContain("<Leave/>");
+      const left = await twiml(`left?qc=${id}`, { QueueResult: "leave", QueueTime: "130" });
+      expect(left.text).toContain("press 1");
+      const choice = await twiml(`overflow-choice?qc=${id}`, { Digits: "1" });
+      expect(choice.text).toContain("will call you back");
+      const live = await http().get("/api/call-queues/live").set("Authorization", tok(ADMIN, "Admin"));
+      expect(live.body.callbacks.map((c: any) => c.from_number)).toContain("+14035550199");
+      expect((await http().post(`/api/call-queues/callbacks/${id}/done`).set("Authorization", tok(S1, "Staff"))).status).toBe(200);
+      expect((await http().post(`/api/call-queues/callbacks/${id}/done`).set("Authorization", tok(S1, "Staff"))).status).toBe(404);
+    });
+
+    it("staff switch themselves available; a caller who hangs up stops the agent's phone ringing", async () => {
+      const me = await http().put("/api/call-queues/me").set("Authorization", tok(S1, "Staff")).send({ available: true });
+      expect(me.body.available).toBe(true);
+      expect((await http().get("/api/call-queues/me").set("Authorization", tok(S1, "Staff"))).body).toMatchObject({ available: true, queues: [`Sales ${tag}`] });
+      const { default: VoiceResponse } = await import("twilio/lib/twiml/VoiceResponse.js");
+      await enqueueCaller(pool, new VoiceResponse(), (await getQueue(pool as any, queueId))!, { callSid: `CAcaller3${tag}`, from: "+14035550177", callerName: null, contactId: null });
+      const id = (await pool.query(`SELECT id::text AS id FROM call_queue_calls WHERE call_sid = $1`, [`CAcaller3${tag}`])).rows[0].id;
+      await twiml(`wait?qc=${id}`, { QueuePosition: "1", QueueTime: "2", QueueSid: "QU1" });
+      await flush();
+      expect((await pool.query(`SELECT status FROM call_queue_calls WHERE id = $1`, [id])).rows[0].status).toBe("offered");
+      await twiml(`left?qc=${id}`, { QueueResult: "hangup" });
+      expect((await pool.query(`SELECT status FROM call_queue_calls WHERE id = $1`, [id])).rows[0].status).toBe("abandoned");
+      expect(updates.at(-1)).toMatchObject({ status: "canceled" });
+      expect((await http().post(`/api/call-queues/${queueId}/archive`).set("Authorization", tok(ADMIN, "Admin"))).status).toBe(200);
+      expect((await pool.query(`SELECT value FROM brokerage_settings WHERE key = 'call_queue_main_line'`)).rows[0].value).toEqual({ queue_id: null });
     });
   });
 });

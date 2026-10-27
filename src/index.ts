@@ -469,6 +469,12 @@ export async function start(): Promise<void> {
     try { const w = startMeetingNotesWorker(pool); workerStops.push(w.stop); console.log("[startup] meeting-notes worker started"); }
     catch (err) { console.error("[startup] meeting-notes worker failed to start:", err); }
 
+    // KS_HUBSPOT_GAPS_1_CALL_QUEUES - call queues: offers nobody answered, callers past the longest wait, dispatch.
+    const { startCallQueueWorker } = await import("./workers/callQueueWorker.js");
+    await workerStagger();
+    try { const w = startCallQueueWorker(pool); workerStops.push(w.stop); console.log("[startup] call-queue worker started"); }
+    catch (err) { console.error("[startup] call-queue worker failed to start:", err); }
+
     // KS_HUBSPOT_GAPS_1_PAYMENTS - payment links: QuickBooks retries and expiry.
     const { startPaymentLinksWorker } = await import("./workers/paymentLinksWorker.js");
     await workerStagger();
