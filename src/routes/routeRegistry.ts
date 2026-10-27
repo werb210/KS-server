@@ -147,6 +147,7 @@ import leadRotationRoutes from "./leadRotation.js"; // KS_SETTINGS_PACK_v1_LEAD_
 import blockedNumbersRoutes from "./blockedNumbers.js"; // KS_SETTINGS_PACK_v1_BLOCKED_NUMBERS
 import surveysRoutes from "./surveys.js"; // KS_SETTINGS_PACK_v1_NPS
 import paymentsRoutes from "./payments.js"; // KS_HUBSPOT_GAPS_1_PAYMENTS
+import callScriptsRoutes from "./callScripts.js"; // KS_HUBSPOT_GAPS_1_CALL_SCRIPTS
 import taskDefaultsRoutes from "./taskDefaults.js"; // KS_SETTINGS_PACK_v1_TASK_DEFAULTS
 import planRoutes from "./plan.js"; // KS_SERVER_v6_PLANS
 import provisionRoutes from "./provision.js"; // KS_SERVER_v15_PROVISION
@@ -413,6 +414,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/webhook-endpoints", router: webhookEndpointsRoutes, feature: "webhooks" }, // KS_SERVER_v20_WEBHOOKS - Admin, pro
   // KS_HUBSPOT_GAPS_1 - HubSpot-parity gaps (each router gates its own routes: public links and webhooks stay open).
   { path: "/payments", router: paymentsRoutes }, // payment links (payment_links, growth+); public /pay and Stripe webhook
+  { path: "/call-scripts", router: callScriptsRoutes }, // call scripts / playbooks (call_scripts, growth+)
 ];
 
 // KS_SERVER_v20_TEAMS - staff mounts whose routes address one application by id (router-relative patterns). The

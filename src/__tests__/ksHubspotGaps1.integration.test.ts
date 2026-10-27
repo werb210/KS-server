@@ -14,9 +14,12 @@ import { deps } from "../system/deps.js";
 import { loadCrmTimeline } from "../routes/crm/timeline.js";
 import paymentsRoutes, { setPaymentSendDepsForTests } from "../routes/payments.js";
 import { setStripeFetchForTests, signStripePayload } from "../payments/stripe.js";
+import callScriptsRoutes from "../routes/callScripts.js";
+import { clearCustomFieldCache } from "../customFields/service.js";
 
 const MIGRATIONS = [
   "migrations/2026_11_04_ks_hg1_payments.sql",
+  "migrations/2026_11_04_ks_hg1_call_scripts.sql",
 ];
 const tag = randomUUID().slice(0, 8);
 const ADMIN = randomUUID(), S1 = randomUUID(), S2 = randomUUID();
@@ -39,6 +42,7 @@ function app() {
   a.use(express.json({ verify: (req, _res, buf) => { (req as any).rawBody = buf; } }));
   a.use(express.urlencoded({ extended: false }));
   a.use("/api/payments", paymentsRoutes);
+  a.use("/api/call-scripts", callScriptsRoutes);
   return a;
 }
 const http = () => request(app());
@@ -78,6 +82,9 @@ describe("KS HubSpot gaps 1 (real Postgres)", () => {
     await pool.query(`DELETE FROM role_record_visibility`);
     await pool.query(`DELETE FROM payment_links WHERE application_id = ANY($1::text[]) OR contact_id = ANY($2::uuid[])`, [[A1, A2], [C1, C2]]);
     await pool.query(`DELETE FROM stripe_connection`);
+    await pool.query(`DELETE FROM call_script_runs WHERE contact_id = ANY($1::uuid[])`, [[C1, C2]]);
+    await pool.query(`DELETE FROM call_scripts WHERE name LIKE $1 OR name LIKE 'Intake - %'`, [`%${tag}%`]);
+    await pool.query(`DELETE FROM custom_field_definitions WHERE name = $1`, [`hg1_band_${tag}`]);
     await pool.query(`DELETE FROM crm_timeline_events WHERE contact_id = ANY($1::uuid[])`, [[C1, C2]]);
     await pool.query(`DELETE FROM applications WHERE id = ANY($1::text[])`, [[A1, A2]]);
     await pool.query(`DELETE FROM contacts WHERE id = ANY($1::uuid[])`, [[C1, C2]]);
@@ -196,6 +203,69 @@ describe("KS HubSpot gaps 1 (real Postgres)", () => {
       expect(r.body.refused.sms).toMatch(/not agreed to texts/);
       expect((await http().post(`/api/payments/links/${r.body.link.id}/cancel`).set("Authorization", tok(ADMIN, "Admin"))).status).toBe(200);
       expect((await http().post(`/api/payments/links/${linkId}/cancel`).set("Authorization", tok(ADMIN, "Admin"))).status).toBe(409);
+    });
+  });
+  // ------------------------------------------------------------------ 2. call scripts
+  describe("call scripts", () => {
+    let scriptId = "";
+    const field = `hg1_band_${tag}`;
+
+    it("are refused on Starter; Admins add the starter intake scripts once", async () => {
+      await setPlan("starter");
+      expect((await http().get("/api/call-scripts").set("Authorization", tok(S1, "Staff"))).status).toBe(402);
+      await setPlan("growth");
+      await pool.query(`DELETE FROM role_record_visibility`);
+      clearVisibilityCache();
+      await pool.query(`DELETE FROM call_scripts WHERE name LIKE 'Intake - %'`);
+      const r = await http().post("/api/call-scripts/starters").set("Authorization", tok(ADMIN, "Admin"));
+      expect(r.body.added).toEqual(["Intake - term loan", "Intake - line of credit", "Intake - equipment"]);
+      expect((await http().post("/api/call-scripts/starters").set("Authorization", tok(ADMIN, "Admin"))).body.added).toEqual([]);
+      expect((await http().post("/api/call-scripts/starters").set("Authorization", tok(S1, "Staff"))).status).toBe(403);
+    });
+
+    it("Admins build a script whose answer maps to a custom field", async () => {
+      await pool.query(`INSERT INTO custom_field_definitions (object_type, name, label, field_type, options) VALUES ('contact', $1, 'Band', 'single_select', $2::jsonb)`,
+        [field, JSON.stringify([{ value: "a", label: "A" }, { value: "b", label: "B" }])]);
+      clearCustomFieldCache();
+      const r = await http().post("/api/call-scripts").set("Authorization", tok(ADMIN, "Admin")).send({
+        name: `Renewal ${tag}`, use_for: "calls",
+        sections: [{ title: "Check-in", body: "Ask how the last deal went.", questions: [
+          { id: "band", label: "Band", type: "single_select", options: ["A", "B"], required: true, maps_to: { object: "contact", field } },
+          { id: "notes", label: "Notes", type: "long_text" },
+        ] }],
+      });
+      expect(r.status).toBe(201);
+      scriptId = r.body.script.id;
+      const list = await http().get("/api/call-scripts").set("Authorization", tok(S1, "Staff"));
+      expect(list.body.scripts.map((x: any) => x.name)).toContain(`Renewal ${tag}`);
+      expect(list.body.custom_fields.contact.map((f: any) => f.name)).toContain(field);
+    });
+
+    it("a finished run lands on the timeline and fills the custom field", async () => {
+      const missing = await http().post("/api/call-scripts/runs").set("Authorization", tok(S1, "Staff")).send({ script_id: scriptId, contact_id: C1, answers: {}, finish: true });
+      expect(missing.status).toBe(400);
+      const started = await http().post("/api/call-scripts/runs").set("Authorization", tok(S1, "Staff")).send({ script_id: scriptId, application_id: A1, answers: { notes: "Going well" } });
+      expect(started.status).toBe(201);
+      expect(started.body.run).toMatchObject({ contact_id: C1, application_id: A1, status: "in_progress" });
+      const done = await http().put(`/api/call-scripts/runs/${started.body.run.id}`).set("Authorization", tok(S1, "Staff")).send({ answers: { band: "B", notes: "Going well" }, finish: true });
+      expect(done.status).toBe(200);
+      expect(done.body.run).toMatchObject({ status: "completed", field_updates: [{ object: "contact", field }], field_errors: [] });
+      expect((await pool.query(`SELECT custom_fields->>$2 AS v FROM contacts WHERE id = $1`, [C1, field])).rows[0].v).toBe("b");
+      const tl = await loadCrmTimeline(true, C1, "BF");
+      const entry = tl.find((t: any) => t.title === `Call script: Renewal ${tag}`);
+      expect(entry?.body).toContain("Band: B");
+      expect((await http().put(`/api/call-scripts/runs/${started.body.run.id}`).set("Authorization", tok(S1, "Staff")).send({ answers: {} })).status).toBe(409);
+      const runs = await http().get(`/api/call-scripts/runs?contact_id=${C1}`).set("Authorization", tok(S1, "Staff"));
+      expect(runs.body.runs[0]).toMatchObject({ script_name: `Renewal ${tag}`, user_name: "Sam HG1" });
+    });
+
+    it("staff limited to their own records cannot run a script on someone else's contact", async () => {
+      await pool.query(`INSERT INTO role_record_visibility (role, visibility) VALUES ('Staff', 'own') ON CONFLICT (role) DO UPDATE SET visibility = 'own'`);
+      clearVisibilityCache();
+      expect((await http().post("/api/call-scripts/runs").set("Authorization", tok(S2, "Staff")).send({ script_id: scriptId, contact_id: C1, answers: {} })).status).toBe(404);
+      expect((await http().get(`/api/call-scripts/runs?contact_id=${C1}`).set("Authorization", tok(S2, "Staff"))).status).toBe(404);
+      await pool.query(`DELETE FROM role_record_visibility`);
+      clearVisibilityCache();
     });
   });
 });
