@@ -463,6 +463,12 @@ export async function start(): Promise<void> {
     try { const w = startNpsSurveyWorker(pool); workerStops.push(w.stop); console.log("[startup] nps-survey worker started"); }
     catch (err) { console.error("[startup] nps-survey worker failed to start:", err); }
 
+    // KS_HUBSPOT_GAPS_1_MEETING_NOTES - Zoom and Google Meet transcripts in, then the AI summary.
+    const { startMeetingNotesWorker } = await import("./workers/meetingNotesWorker.js");
+    await workerStagger();
+    try { const w = startMeetingNotesWorker(pool); workerStops.push(w.stop); console.log("[startup] meeting-notes worker started"); }
+    catch (err) { console.error("[startup] meeting-notes worker failed to start:", err); }
+
     // KS_HUBSPOT_GAPS_1_PAYMENTS - payment links: QuickBooks retries and expiry.
     const { startPaymentLinksWorker } = await import("./workers/paymentLinksWorker.js");
     await workerStagger();

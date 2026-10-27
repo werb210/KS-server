@@ -1,6 +1,6 @@
 // KS_HUBSPOT_GAPS_1 - the HubSpot-parity gaps against real Postgres: the migrations (twice), plan gating, record
 // visibility and the end-to-end flows of each feature with Stripe, Zoom, Google and Twilio stubbed at the edge.
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 import jwt from "jsonwebtoken";
@@ -16,10 +16,17 @@ import paymentsRoutes, { setPaymentSendDepsForTests } from "../routes/payments.j
 import { setStripeFetchForTests, signStripePayload } from "../payments/stripe.js";
 import callScriptsRoutes from "../routes/callScripts.js";
 import { clearCustomFieldCache } from "../customFields/service.js";
+import meetingNotesRoutes from "../routes/meetingNotes.js";
+import { setZoomFetchForTests } from "../meetingNotes/zoom.js";
+import { runMeetingNotesSync } from "../meetingNotes/sync.js";
+
+const intel = vi.hoisted(() => ({ calls: 0 }));
+vi.mock("../services/teams/meetingIntel.js", () => ({ runMeetingIntel: async () => { intel.calls++; } }));
 
 const MIGRATIONS = [
   "migrations/2026_11_04_ks_hg1_payments.sql",
   "migrations/2026_11_04_ks_hg1_call_scripts.sql",
+  "migrations/2026_11_04_ks_hg1_meeting_notes.sql",
 ];
 const tag = randomUUID().slice(0, 8);
 const ADMIN = randomUUID(), S1 = randomUUID(), S2 = randomUUID();
@@ -27,7 +34,7 @@ const tok = (id: string, role: string) => `Bearer ${jwt.sign({ sub: id, id, role
 const C1 = randomUUID(), C2 = randomUUID();
 const A1 = randomUUID(), A2 = randomUUID();
 let savedPlan: Record<string, any> | null = null;
-const ENV_KEYS = ["STRIPE_SECRET_KEY", "STRIPE_CONNECT_CLIENT_ID", "STRIPE_CONNECT_WEBHOOK_SECRET"];
+const ENV_KEYS = ["STRIPE_SECRET_KEY", "STRIPE_CONNECT_CLIENT_ID", "STRIPE_CONNECT_WEBHOOK_SECRET", "ZOOM_CLIENT_ID", "ZOOM_CLIENT_SECRET", "ZOOM_TOKEN_ENCRYPTION_KEY", "GOOGLE_MEET_NOTES_ENABLED"];
 const savedEnv: Record<string, string | undefined> = {};
 
 async function setPlan(plan: "starter" | "growth" | "pro") {
@@ -43,6 +50,7 @@ function app() {
   a.use(express.urlencoded({ extended: false }));
   a.use("/api/payments", paymentsRoutes);
   a.use("/api/call-scripts", callScriptsRoutes);
+  a.use("/api/meeting-notes", meetingNotesRoutes);
   return a;
 }
 const http = () => request(app());
@@ -60,6 +68,10 @@ describe("KS HubSpot gaps 1 (real Postgres)", () => {
     process.env.STRIPE_SECRET_KEY = "sk_test_int";
     process.env.STRIPE_CONNECT_CLIENT_ID = "ca_int";
     process.env.STRIPE_CONNECT_WEBHOOK_SECRET = "whsec_int";
+    process.env.ZOOM_CLIENT_ID = "zoom_int";
+    process.env.ZOOM_CLIENT_SECRET = "zoom_secret";
+    process.env.ZOOM_TOKEN_ENCRYPTION_KEY = "zoom-int-key-for-tests";
+    delete process.env.GOOGLE_MEET_NOTES_ENABLED;
     savedPlan = (await pool.query(`SELECT * FROM licensee_plan WHERE id = 1`)).rows[0] ?? null;
     await setPlan("growth");
     await pool.query(`DELETE FROM role_record_visibility`);
@@ -77,6 +89,9 @@ describe("KS HubSpot gaps 1 (real Postgres)", () => {
 
   afterAll(async () => {
     setStripeFetchForTests(null);
+    setZoomFetchForTests(null);
+    await pool.query(`DELETE FROM teams_meetings WHERE organizer_user_id = ANY($1::uuid[])`, [[ADMIN, S1, S2]]);
+    await pool.query(`DELETE FROM zoom_accounts WHERE user_id = ANY($1::uuid[])`, [[ADMIN, S1, S2]]);
     setPaymentSendDepsForTests(null);
     for (const k of ENV_KEYS) { if (savedEnv[k] === undefined) delete process.env[k]; else process.env[k] = savedEnv[k]; }
     await pool.query(`DELETE FROM role_record_visibility`);
@@ -266,6 +281,65 @@ describe("KS HubSpot gaps 1 (real Postgres)", () => {
       expect((await http().get(`/api/call-scripts/runs?contact_id=${C1}`).set("Authorization", tok(S2, "Staff"))).status).toBe(404);
       await pool.query(`DELETE FROM role_record_visibility`);
       clearVisibilityCache();
+    });
+  });
+  // ------------------------------------------------------------------ 3. Zoom and Google Meet notes
+  describe("meeting notes", () => {
+    it("staff connect their own Zoom; the callback stores the account (tokens encrypted)", async () => {
+      const r = await http().post("/api/meeting-notes/zoom/connect").set("Authorization", tok(S1, "Staff"));
+      expect(r.status).toBe(200);
+      const state = new URL(r.body.url).searchParams.get("state")!;
+      setZoomFetchForTests(async (url) => {
+        if (url.startsWith("https://zoom.us/oauth/token")) return new Response(JSON.stringify({ access_token: "zat_1", refresh_token: "zrt_1", expires_in: 3600, scope: "cloud_recording:read:list_user_recordings" }), { status: 200 });
+        if (url.endsWith("/users/me")) return new Response(JSON.stringify({ id: "zu1", email: "sam@zoom.test" }), { status: 200 });
+        return new Response("{}", { status: 404 });
+      });
+      const back = await http().get(`/api/meeting-notes/zoom/callback?code=zc&state=${encodeURIComponent(state)}`);
+      expect(back.headers.location).toContain("/settings/meeting-notes?zoom=connected");
+      const row = (await pool.query(`SELECT zoom_email, status, access_token_enc FROM zoom_accounts WHERE user_id = $1`, [S1])).rows[0];
+      expect(row).toMatchObject({ zoom_email: "sam@zoom.test", status: "connected" });
+      expect(row.access_token_enc).toMatch(/^v1:/);
+      expect(row.access_token_enc).not.toContain("zat_1");
+      const st = await http().get("/api/meeting-notes/status").set("Authorization", tok(S1, "Staff"));
+      expect(st.body.zoom).toMatchObject({ connected: true, email: "sam@zoom.test", problem: null });
+      expect(st.body.google_meet).toMatchObject({ enabled: false });
+    });
+
+    it("brings transcripts in, matched to the contact by guest email, onto the timeline", async () => {
+      setZoomFetchForTests(async (url) => {
+        if (url.includes("/users/me/recordings")) return new Response(JSON.stringify({ meetings: [
+          { uuid: `zm-${tag}-1`, id: 91, topic: "Acme renewal", start_time: new Date(Date.now() - 3600_000).toISOString(), duration: 30, share_url: "https://zoom.us/rec/share/abc",
+            recording_files: [{ file_type: "TRANSCRIPT", status: "completed", download_url: "https://zoom.us/rec/download/vtt1" }] },
+          { uuid: `zm-${tag}-2`, id: 92, topic: "Unknown caller", start_time: new Date(Date.now() - 7200_000).toISOString(), duration: 10,
+            recording_files: [{ file_type: "TRANSCRIPT", status: "completed", download_url: "https://zoom.us/rec/download/vtt2" }] },
+        ] }), { status: 200 });
+        if (url.includes("/rec/download/")) return new Response("WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nSam: Thanks for joining", { status: 200 });
+        if (url.includes(`/past_meetings/zm-${tag}-1/participants`)) return new Response(JSON.stringify({ participants: [{ name: "Pat", user_email: `ONE-${tag}@example.com` }] }), { status: 200 });
+        if (url.includes("/participants")) return new Response(JSON.stringify({ participants: [] }), { status: 200 });
+        return new Response("{}", { status: 404 });
+      });
+      const before = intel.calls;
+      const r = await http().post("/api/meeting-notes/sync").set("Authorization", tok(S1, "Staff"));
+      expect(r.body.imported).toEqual({ zoom: 2, google_meet: 0 });
+      expect(intel.calls).toBe(before + 1); // the AI summary runs on the new transcripts
+      expect((await runMeetingNotesSync(pool, { userId: S1 })).zoom).toBe(0); // never twice
+      const tl = await loadCrmTimeline(true, C1, "BF");
+      const m = tl.find((t: any) => t.title === "Zoom meeting: Acme renewal");
+      expect(m?.body).toContain("Thanks for joining");
+      expect(m?.extra).toBe("https://zoom.us/rec/share/abc");
+      const unmatched = await http().get("/api/meeting-notes/meetings?unmatched=1").set("Authorization", tok(S1, "Staff"));
+      expect(unmatched.body.meetings.map((x: any) => x.subject)).toEqual(["Unknown caller"]);
+      expect(unmatched.body.meetings[0].provider_label).toBe("Zoom");
+      const id = unmatched.body.meetings[0].id;
+      expect((await http().put(`/api/meeting-notes/meetings/${id}/contact`).set("Authorization", tok(S2, "Staff")).send({ contact_id: C2 })).status).toBe(404); // not Sue's meeting
+      expect((await http().put(`/api/meeting-notes/meetings/${id}/contact`).set("Authorization", tok(S1, "Staff")).send({ contact_id: C2 })).status).toBe(200);
+      expect((await loadCrmTimeline(true, C2, "BF")).map((t: any) => t.title)).toContain("Zoom meeting: Unknown caller");
+    });
+
+    it("disconnecting stops the sync", async () => {
+      setZoomFetchForTests(async () => new Response("", { status: 200 }));
+      expect((await http().post("/api/meeting-notes/zoom/disconnect").set("Authorization", tok(S1, "Staff"))).body.ok).toBe(true);
+      expect((await pool.query(`SELECT status, access_token_enc FROM zoom_accounts WHERE user_id = $1`, [S1])).rows[0]).toEqual({ status: "disconnected", access_token_enc: null });
     });
   });
 });

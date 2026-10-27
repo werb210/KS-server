@@ -44,9 +44,17 @@ export function gmailReadEnabled(e: NodeJS.ProcessEnv = process.env): boolean {
   return /^(true|1|yes|on)$/i.test(env("GOOGLE_GMAIL_READ_ENABLED", e));
 }
 
+/** KS_HUBSPOT_GAPS_1_MEETING_NOTES - Google Meet transcripts (Meet REST API, a sensitive scope), only with
+ *  GOOGLE_MEET_NOTES_ENABLED=true once the scope is on the OAuth consent screen. */
+export const SCOPE_MEET_READONLY = "https://www.googleapis.com/auth/meetings.space.readonly";
+export function meetNotesEnabled(e: NodeJS.ProcessEnv = process.env): boolean {
+  return /^(true|1|yes|on)$/i.test(env("GOOGLE_MEET_NOTES_ENABLED", e));
+}
+
 /** The scopes the consent screen asks for. gmail.readonly is added only when the read switch is on. */
 export function requestedScopes(e: NodeJS.ProcessEnv = process.env): string[] {
-  return gmailReadEnabled(e) ? [...BASE_SCOPES, SCOPE_GMAIL_READONLY] : [...BASE_SCOPES];
+  const base = gmailReadEnabled(e) ? [...BASE_SCOPES, SCOPE_GMAIL_READONLY] : [...BASE_SCOPES];
+  return meetNotesEnabled(e) ? [...base, SCOPE_MEET_READONLY] : base; // KS_HUBSPOT_GAPS_1_MEETING_NOTES
 }
 
 export type GoogleOAuthConfig = { clientId: string; clientSecret: string; redirectUri: string; returnUrl: string };

@@ -213,7 +213,7 @@ export async function loadCrmTimeline(isContact: boolean, id: string, silo: stri
         -- BF_SERVER_TIMELINE_KINDS_v1 - was 'recording', which the portal does not
         -- render at all (blank card). 'meeting' already renders title/body/extra.
         SELECT 'meeting' AS kind, tm.id::text, COALESCE(tm.ended_at, tm.scheduled_end_at, tm.created_at) AS ts,
-               ('Teams meeting: ' || COALESCE(tm.subject, '(no subject)')) AS title,
+               ((CASE COALESCE(tm.provider, 'teams') WHEN 'zoom' THEN 'Zoom meeting: ' WHEN 'google_meet' THEN 'Google Meet: ' ELSE 'Teams meeting: ' END) || COALESCE(tm.subject, '(no subject)')) AS title, -- KS_HUBSPOT_GAPS_1_MEETING_NOTES
                COALESCE(tm.maya_summary, left(tm.transcript_text, 2000)) AS body,
                COALESCE(tm.recording_url, tm.join_url) AS extra
           FROM teams_meetings tm
@@ -282,7 +282,7 @@ export async function loadCrmTimeline(isContact: boolean, id: string, silo: stri
         -- BF_SERVER_TIMELINE_KINDS_v1 - was 'recording', which the portal does not
         -- render at all (blank card). 'meeting' already renders title/body/extra.
         SELECT 'meeting' AS kind, tm.id::text, COALESCE(tm.ended_at, tm.scheduled_end_at, tm.created_at) AS ts,
-               ('Teams meeting: ' || COALESCE(tm.subject, '(no subject)')) AS title,
+               ((CASE COALESCE(tm.provider, 'teams') WHEN 'zoom' THEN 'Zoom meeting: ' WHEN 'google_meet' THEN 'Google Meet: ' ELSE 'Teams meeting: ' END) || COALESCE(tm.subject, '(no subject)')) AS title, -- KS_HUBSPOT_GAPS_1_MEETING_NOTES
                COALESCE(tm.maya_summary, left(tm.transcript_text, 2000)) AS body,
                COALESCE(tm.recording_url, tm.join_url) AS extra
           FROM teams_meetings tm

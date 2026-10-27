@@ -148,6 +148,7 @@ import blockedNumbersRoutes from "./blockedNumbers.js"; // KS_SETTINGS_PACK_v1_B
 import surveysRoutes from "./surveys.js"; // KS_SETTINGS_PACK_v1_NPS
 import paymentsRoutes from "./payments.js"; // KS_HUBSPOT_GAPS_1_PAYMENTS
 import callScriptsRoutes from "./callScripts.js"; // KS_HUBSPOT_GAPS_1_CALL_SCRIPTS
+import meetingNotesRoutes from "./meetingNotes.js"; // KS_HUBSPOT_GAPS_1_MEETING_NOTES
 import taskDefaultsRoutes from "./taskDefaults.js"; // KS_SETTINGS_PACK_v1_TASK_DEFAULTS
 import planRoutes from "./plan.js"; // KS_SERVER_v6_PLANS
 import provisionRoutes from "./provision.js"; // KS_SERVER_v15_PROVISION
@@ -415,6 +416,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   // KS_HUBSPOT_GAPS_1 - HubSpot-parity gaps (each router gates its own routes: public links and webhooks stay open).
   { path: "/payments", router: paymentsRoutes }, // payment links (payment_links, growth+); public /pay and Stripe webhook
   { path: "/call-scripts", router: callScriptsRoutes }, // call scripts / playbooks (call_scripts, growth+)
+  { path: "/meeting-notes", router: meetingNotesRoutes }, // Zoom and Google Meet notes (office_sync, every plan); public Zoom callback
 ];
 
 // KS_SERVER_v20_TEAMS - staff mounts whose routes address one application by id (router-relative patterns). The
