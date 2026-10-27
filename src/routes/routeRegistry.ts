@@ -161,6 +161,8 @@ import phoneNumbersRoutes from "./phoneNumbers.js"; // KS_SERVER_PHONE_PROVISION
 import dataExportRoutes from "./dataExport.js"; // KS_SERVER_v8_DATA_EXPORT
 import dataImportRoutes from "./dataImport.js"; // KS_SERVER_v16_DATA_IMPORT
 import fraudRoutes from "./fraud.js"; // KS_SERVER_v9_FRAUD
+import kycRoutes from "./kyc.js"; // KS_SERVER_v22_KYC
+import clientKycRoutes from "./clientKyc.js"; // KS_SERVER_v22_KYC
 import retentionRoutes from "./retention.js"; // KS_SERVER_v14_RETENTION
 import pgiRoutes from "./pgi.js"; // KS_SERVER_v11_PGI
 import betaRoutes from "./beta.js"; // KS_SERVER_BETA_v1
@@ -403,6 +405,8 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/export", router: dataExportRoutes }, // KS_SERVER_v8_DATA_EXPORT - Admin
   { path: "/data-import", router: dataImportRoutes }, // KS_SERVER_v16_DATA_IMPORT - Admin: the Import data wizard
   { path: "/fraud", router: fraudRoutes }, // KS_SERVER_v9_FRAUD - staff; individual checks gated per route
+  { path: "/kyc", router: kycRoutes }, // KS_SERVER_v22_KYC - staff (growth+, id_verification), Admin settings, public vendor webhook
+  { path: "/client/kyc", router: clientKycRoutes }, // KS_SERVER_v22_KYC - the applicant's own verifications (OTP phone)
   { path: "/retention", router: retentionRoutes }, // KS_SERVER_v14_RETENTION - staff status; Admin holds and report
   { path: "/pgi", router: pgiRoutes }, // KS_SERVER_v11_PGI - PGI referrals to the insurance partner (every plan)
   { path: "/beta", router: betaRoutes }, // KS_SERVER_BETA_v1 - beta feature flags and Labs (flags public, rest staff/Admin)
@@ -450,6 +454,7 @@ export const RECORD_GUARDED_MOUNTS: Record<string, GuardRule[]> = {
   "/application-origin": APP_FIRST,
   "/banking": [{ pattern: /^\/applications\/([^/]+)(?:\/|$)/, kind: "application" }],
   "/fraud": [{ pattern: /^\/applications\/([^/]+)(?:\/|$)/, kind: "application" }],
+  "/kyc": [{ pattern: /^\/applications\/([^/]+)(?:\/|$)/, kind: "application" }], // KS_SERVER_v22_KYC
   "/retention": [{ pattern: /^\/applications\/([^/]+)(?:\/|$)/, kind: "application" }],
   "/pgi": [{ pattern: /^\/referrals\/([^/]+)(?:\/|$)/, kind: "application" }],
   "/lender-referrals": [{ pattern: /^\/by-application\/([^/]+)(?:\/|$)/, kind: "application" }],

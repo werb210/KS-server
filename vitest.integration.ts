@@ -25,6 +25,7 @@ export const INTEGRATION_TEST_FILES: string[] = [
   "src/__tests__/ksPlans.v6.integration.test.ts", // KS_SERVER_v6_PLANS - needs Postgres
   "src/__tests__/ksUsageOps.v8.integration.test.ts", // KS_SERVER_v8_USAGE - needs Postgres
   "src/__tests__/ksFraud.v9.integration.test.ts", // KS_SERVER_v9_FRAUD - needs Postgres
+  "src/__tests__/ksKyc.v22.integration.test.ts", // KS_SERVER_v22_KYC - needs Postgres
   "src/__tests__/ksCrmFieldsTeamsWebhooks.v20.integration.test.ts", // KS_SERVER_v20 - needs Postgres
   "src/__tests__/ksVisibilityGaps.v21.integration.test.ts", // KS_SERVER_v21_VISIBILITY_GAPS - needs Postgres
   "src/__tests__/ksHubspotGaps1.integration.test.ts", // KS_HUBSPOT_GAPS_1 - needs Postgres

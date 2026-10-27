@@ -246,9 +246,11 @@ describe("GET /api/plan usage and GET /api/plan/usage-report", () => {
     });
     expect(Object.keys(r.body).sort()).toEqual([
       "addons", "allowances", "assistant_chats", "campaign_emails", "effective_plan", "extra_storage_blocks", "generated_at",
-      "licensee_id", "marketing_addon", "marketing_texts", "minutes", "overage", "period", "plan", "seats", "signings",
+      "id_checks", "id_checks_included", // KS_SERVER_v22_KYC - ID checks used and included this month
+      "licensee_id", "marketing_addon", "marketing_texts", "minutes", "overage", "overage_id_checks", "period", "plan", "seats", "signings",
       "storage_bytes", "texts", "trial",
     ]);
+    expect(r.body).toMatchObject({ id_checks: 0, id_checks_included: 0, overage_id_checks: 0 }); // starter includes none
   });
 });
 
