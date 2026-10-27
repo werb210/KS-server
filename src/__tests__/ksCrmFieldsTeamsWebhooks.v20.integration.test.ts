@@ -277,11 +277,19 @@ describe("KS v20 custom fields, teams and webhooks (real Postgres)", () => {
       const sent: any[] = [];
       const transport: Transport = async (req) => { sent.push(req); return { status: 200, body: "ok" }; };
       let n = 0;
-      for (const d of await claimDue(db, 50)) { if (d.endpoint_id === endpointId) { await deliverOne(db, d, { transport }); n++; } }
+      // KS_SERVER_TEST_ISOLATION - other files write contacts in parallel, so this endpoint can have more than one batch
+      // due. Drain every batch, then judge only the deliveries that were due when draining finished.
+      for (let round = 0; round < 20; round += 1) {
+        const batch = await claimDue(db, 50);
+        if (!batch.length) break;
+        for (const d of batch) { if (d.endpoint_id === endpointId) { await deliverOne(db, d, { transport }); n++; } }
+      }
       expect(n).toBeGreaterThanOrEqual(6);
       for (const s of sent) expect(verifySignature(secret, s.headers["X-Webhook-Signature"], s.body)).toEqual({ ok: true });
       const log = await http().get(`/api/webhook-endpoints/${endpointId}/deliveries`).set("Authorization", tok(ADMIN, "Admin"));
-      expect(log.body.deliveries.every((d: any) => d.status === "succeeded")).toBe(true);
+      const settled = log.body.deliveries.filter((d: any) => d.status !== "pending");
+      expect(settled.length).toBeGreaterThanOrEqual(6);
+      expect(settled.every((d: any) => d.status === "succeeded")).toBe(true);
       const first = log.body.deliveries[0];
       const re = await http().post(`/api/webhook-endpoints/deliveries/${first.id}/resend`).set("Authorization", tok(ADMIN, "Admin"));
       expect(re.status).toBe(202);
