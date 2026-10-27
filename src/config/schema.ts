@@ -231,6 +231,14 @@ export const EnvSchema = z
     MS_GRAPH_SEND_AS: z.string().optional(), // email address(es); read in routes/portal.ts
     MS_GRAPH_TENANT_ID: z.string().optional(), // identifier; read in routes/portal.ts
     O365_OAUTH_REDIRECT_URI: z.string().optional(), // URL; read in routes/o365OAuth.ts
+    // KS_SERVER_M365_ONE_CLICK - Keystone's own apps, written by KS-Ops at provisioning (modules/o365/m365App.ts)
+    KS_M365_CLIENT_ID: z.string().optional(), // identifier, Keystone's multi-tenant Entra app; read in modules/o365/m365App.ts
+    KS_M365_CLIENT_SECRET: z.string().optional(), // credential (secret); read in modules/o365/m365App.ts
+    KS_GOOGLE_OAUTH_CLIENT_ID: z.string().optional(), // identifier, Keystone's Google OAuth client; read in services/workspace/googleConfig.ts
+    KS_GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(), // credential (secret); read in services/workspace/googleConfig.ts
+    KS_OAUTH_BROKER_URL: z.string().optional(), // URL, Keystone's redirect broker on KS-Ops (…/api/oauth/callback); read in licensee/oauthBroker.ts
+    O365_CONSENT_REDIRECT_URI: z.string().optional(), // URL (default the broker, else {KS_SERVER_URL}/api/o365-oauth/admin-consent/callback); read in routes/o365OAuth.ts
+    O365_CONSENT_RETURN_URL: z.string().optional(), // URL (default {KS_PORTAL_URL}/settings/connections); read in routes/o365OAuth.ts
     // KS_SERVER_v12_GOOGLE_WORKSPACE - Google Workspace connect (docs/GOOGLE_WORKSPACE.md)
     GOOGLE_OAUTH_CLIENT_ID: z.string().optional(), // identifier; read in services/workspace/googleConfig.ts
     GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(), // credential (secret); read in services/workspace/googleConfig.ts
@@ -246,7 +254,7 @@ export const EnvSchema = z
     QBO_TOKEN_ENCRYPTION_KEY: z.string().optional(), // credential (secret), 32 bytes base64; read in services/workspace/tokenCrypto.ts
     KS_WORKSPACE_PROVIDER: z.string().optional(), // setting m365|google|both (default m365); read in licensee/settings.ts
     // KS_SERVER_SSO_API_KEYS - staff SSO (reuses MSAL_CLIENT_ID/SECRET and GOOGLE_OAUTH_CLIENT_ID/SECRET; unset = buttons hidden)
-    SSO_MICROSOFT_TENANT: z.string().optional(), // Entra tenant GUID to pin SSO to (default MSAL_TENANT_ID when it is a GUID, else any work account); read in sso/oidc.ts
+    SSO_MICROSOFT_TENANT: z.string().optional(), // Entra tenant GUID to pin SSO to (default the connected tenant / MSAL_TENANT_ID when it is a GUID, else any work account); read in sso/oidc.ts
     SSO_MICROSOFT_REDIRECT_URI: z.string().optional(), // URL (default {KS_SERVER_URL}/api/auth/sso/microsoft/callback); read in sso/oidc.ts
     SSO_GOOGLE_REDIRECT_URI: z.string().optional(), // URL (default {KS_SERVER_URL}/api/auth/sso/google/callback); read in sso/oidc.ts
     SSO_RETURN_URL: z.string().optional(), // URL (default {KS_PORTAL_URL}/login); read in sso/oidc.ts

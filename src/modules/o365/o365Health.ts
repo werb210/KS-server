@@ -45,10 +45,10 @@ export function clearO365Failure(userId: string): void {
 export function explainO365Failure(f: O365Failure | null): string {
   if (!f) return "Office 365 could not be reached.";
   const code = String(f.code ?? "");
-  if (f.stage === "not_configured") return "Office 365 is not configured on the server: MSAL_TENANT_ID, MSAL_CLIENT_ID or MSAL_CLIENT_SECRET is missing from the server's App Service settings.";
+  if (f.stage === "not_configured") return "Microsoft 365 is not connected for your company yet. An administrator connects it once in Settings > Connections."; // KS_SERVER_M365_ONE_CLICK
   if (f.stage === "no_refresh_token") return "Your Office 365 connection has expired and cannot renew itself. Reconnect Office 365.";
-  if (/^AADSTS7000215$|^AADSTS7000222$|^AADSTS7000218$/.test(code)) return "The server's Microsoft app secret is wrong or expired (MSAL_CLIENT_SECRET in the server's App Service settings). Create a new client secret in Azure and update it.";
-  if (/^AADSTS65001$/.test(code) || code === "consent_required") return "Microsoft needs consent for a permission the portal asks for. An Azure admin must grant consent for the app, then reconnect Office 365.";
+  if (/^AADSTS7000215$|^AADSTS7000222$|^AADSTS7000218$/.test(code)) return "The Microsoft app key on this server is wrong or has expired. Keystone support renews it; nothing is needed from you.";
+  if (/^AADSTS65001$/.test(code) || code === "consent_required") return "Microsoft 365 needs your administrator's approval again. An administrator clicks Reconnect in Settings > Connections, then you reconnect Office 365.";
   if (/^AADSTS(700082|70008|50173|50076|50079|9002313|700084)$/.test(code) || code === "invalid_grant" || code === "interaction_required") return "Your Microsoft sign-in is no longer valid (expired, password changed, or MFA required). Reconnect Office 365.";
   if (f.status === 401 || code === "InvalidAuthenticationToken") return "Office 365 rejected the saved sign-in. Reconnect Office 365.";
   if (f.status === 403 || code === "ErrorAccessDenied" || code === "Authorization_RequestDenied") return "The Office 365 connection does not have permission for this mailbox or calendar. Reconnect Office 365 and accept all requested permissions.";

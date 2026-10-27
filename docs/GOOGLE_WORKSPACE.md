@@ -72,7 +72,7 @@ Google verifies only domains you have proven you own.
 
 1. Open <https://search.google.com/search-console> (same account).
 2. Add the **Keystone website domain** as a *Domain property*, and add the TXT record it gives you at the domain's DNS host.
-3. Do the same for every domain the licensee servers run on (see section 4.2).
+3. Do the same for the domain KS-Ops runs on (its sign-in redirect address lives there; see section 3.5).
 
 ### 3.4 OAuth consent screen ("Google Auth Platform")
 
@@ -85,7 +85,7 @@ Go to **APIs & Services → OAuth consent screen**. Newer consoles call this **G
    - **App home page:** the Keystone website home page, for example `https://<keystone website>/`
    - **Privacy policy:** a page on the Keystone website. It must say what Google data Keystone uses and why: email it sends, calendar events, tasks, and the folders it creates. It must also say that the data is not sold or used for advertising, and include Google's **Limited Use** statement. *(The privacy policy page and the home page have to exist on the Keystone website before you submit for verification.)*
    - **Terms of service:** optional
-   - **Authorized domains:** the Keystone website domain, plus the domain the licensee servers run on (section 4.2)
+   - **Authorized domains:** the Keystone website domain, plus the domain KS-Ops runs on (section 3.5)
    - **Developer contact email:** `borealfinancial@gmail.com`
 2. **Audience**
    - **User type:** **External**. Each brokerage's staff sign in with their own Google accounts.
@@ -106,10 +106,11 @@ Go to **APIs & Services → OAuth consent screen**. Newer consoles call this **G
 1. Go to **APIs & Services → Credentials → Create credentials → OAuth client ID**.
 2. **Application type:** *Web application*. **Name:** `Keystone servers`.
 3. Leave **Authorized JavaScript origins** empty. The browser never talks to Google directly.
-4. Under **Authorized redirect URIs**, add one line for **each licensee server**:
-   `https://<that licensee's KS-server address>/api/google/oauth/callback`
-   Also add the development server:
-   `https://ks-server-dev-chb5htbwaue2hygk.canadacentral-01.azurewebsites.net/api/google/oauth/callback` (for testing only)
+4. Under **Authorized redirect URIs**, add **one** line, Keystone's redirect broker on KS-Ops (KS_SERVER_M365_ONE_CLICK):
+   `https://<KS-Ops address>/api/oauth/callback/google`
+   KS-Ops checks the signed state and forwards each sign-in to the right licensee's server, so new licensees need no
+   new redirect URI. The KS-Ops address must be on a domain verified in Search Console (step 3.3); `azurewebsites.net`
+   cannot be verified.
 5. Choose **Create**, then copy the **Client ID** and **Client secret**. Section 4 says where they go.
 
 ### 3.6 Submit for Google's standard verification
@@ -132,38 +133,35 @@ Go to **APIs & Services → OAuth consent screen**. Newer consoles call this **G
 
 ## 4. Where to put the keys
 
-### 4.1 App settings on each licensee's KS-server
+**On KS-Ops only** (KS_SERVER_M365_ONE_CLICK): set `KS_GOOGLE_OAUTH_CLIENT_ID` and `KS_GOOGLE_OAUTH_CLIENT_SECRET` on the
+`ks-ops` App Service. The provisioning step `workspace_apps` writes them, with `KS_OAUTH_BROKER_URL`, to every
+licensee's KS-server. Nobody types them per licensee, and brokerages never create a Google project. KS-Ops
+`docs/PROVISIONING.md` has the one-time checklist.
 
-Go to **Azure → that licensee's KS-server App Service → Settings → Environment variables (Configuration)**. If the licensee's GitHub environment (`ks-<code>`) feeds the deploy, put the values there too.
+Settings a KS-server reads:
 
 | Setting | Value | Required |
 |---|---|---|
-| `GOOGLE_OAUTH_CLIENT_ID` | Client ID from step 3.5 | yes |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | Client secret from step 3.5 | yes |
-| `GOOGLE_TOKEN_ENCRYPTION_KEY` | 32 random bytes in base64. Generate with `openssl rand -base64 32`. **Use a different key for each licensee and never change it.** Changing it disconnects everyone, and each person then reconnects once. | yes |
-| `GOOGLE_OAUTH_REDIRECT_URI` | Normally leave blank. The default is `{KS_SERVER_URL}/api/google/oauth/callback`, and it must match a redirect URI added in step 3.5 exactly. | no |
+| `KS_GOOGLE_OAUTH_CLIENT_ID`, `KS_GOOGLE_OAUTH_CLIENT_SECRET` | Keystone's client, written by KS-Ops | yes (unless the two below are set) |
+| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | Only for a server with its **own** client (for example a brokerage on its own Internal Workspace app). When set, they win over Keystone's. | no |
+| `GOOGLE_TOKEN_ENCRYPTION_KEY` | 32 random bytes in base64. The provisioning script generates one per licensee and keeps it. **Never change it**: changing it disconnects everyone, and each person then reconnects once. | yes |
+| `KS_OAUTH_BROKER_URL` | Written by KS-Ops: `https://<KS-Ops address>/api/oauth/callback`. With it the redirect URI is `<that>/google`; without it, `{KS_SERVER_URL}/api/google/oauth/callback`. | no |
+| `GOOGLE_OAUTH_REDIRECT_URI` | Normally leave blank (overrides both of the above). | no |
 | `GOOGLE_OAUTH_RETURN_URL` | Normally leave blank. The default is `{KS_PORTAL_URL}/settings/profile`, where the user lands after connecting. | no |
 | `GOOGLE_GMAIL_READ_ENABLED` | Leave **unset or `false`**. Set it to `true` only after the CASA assessment (section 5). | no |
 | `KS_WORKSPACE_PROVIDER` | `m365`, `google` or `both`. This is only the starting value; the admin setting overrides it. | no |
 
-The server must also know its own public address: `KS_SERVER_URL` is already set for Microsoft and Twilio callbacks. Restart the App Service after saving.
+If no client or the encryption key is missing, Google stays switched off on that server. The portal greys out the
+button and Settings > Connections says Keystone sets it up.
 
-If the client ID, the client secret or the encryption key is missing, Google stays switched off on that server and the portal greys out the button.
+There is no "connect the whole domain" option: Keystone does not use domain-wide delegation. Each person clicks
+**Connect Google** once.
 
-### 4.2 One Google OAuth client for every licensee (recommended)
-
-**Recommendation: use one Google Cloud project and one OAuth client, owned by `borealfinancial@gmail.com`, for all licensees.** Each licensee server gets its own redirect URI on that client.
-
-- **Why this works:** the callback is handled by each licensee's own server, at `/api/google/oauth/callback`. Each server keeps its own users' tokens in its own database, encrypted with its own key. Sharing the client ID does not share any data.
-- **Why it is simplest:**
-  - You go through Google's verification **once**, and every licensee benefits.
-  - Adding a licensee means adding one redirect URI in step 3.5 and pasting the same ID and secret into their server.
-  - Brokers see one consistent "Keystone" consent screen.
-- **The one catch: domains.** Google accepts redirect URIs only on **authorized, verified domains**. You cannot verify `*.azurewebsites.net`. So give every licensee server a hostname under a domain the company owns and has verified in Search Console. For example, add an Azure custom domain such as `<licensee-code>.api.<keystone domain>`, then set `KS_SERVER_URL` to it. After that, adding a licensee does not require a new verification.
-- **What doesn't work as well:**
-  - A separate Google project for each licensee means a separate verification each time.
-  - Putting redirect URIs on licensees' own domains would require the company to verify domains it does not own.
-- **Option for a single brokerage on Google Workspace:** that brokerage can create its **own** project, with User type **Internal**, inside its own Workspace. Internal apps used only by the organisation's own accounts skip Google's public verification, and normally the security assessment too. This is the quickest path for a brokerage that wants Gmail inbox sync. Confirm Google's current rules before relying on this. The only change on its server is to paste that brokerage's own client ID and secret.
+**Option for a single brokerage on Google Workspace:** that brokerage can have its **own** project with User type
+**Internal**, inside its own Workspace. Internal apps used only by the organisation's own accounts skip Google's public
+verification and normally the security assessment too. It is the quickest path for a brokerage that wants Gmail inbox
+sync. Set that brokerage's own `GOOGLE_OAUTH_CLIENT_ID` / `_SECRET` on its server. Confirm Google's current rules
+before relying on this.
 
 ## 5. Gmail inbox sync: switching it on later
 

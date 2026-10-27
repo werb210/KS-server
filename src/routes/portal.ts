@@ -80,6 +80,7 @@ const router = Router();
 // KS_SERVER_v20_TEAMS - one application (and its documents) by id, for every /api/portal sub-router behind this one.
 router.use(recordGuard(PORTAL_RULES, { requireFirst: true }));
 import { smsFromFor, smsSenderFor, usTextingHold } from "../lib/smsFrom.js"; // BF_SERVER_US_SMS_TOLLFREE_v755
+import { m365AppOnly, m365SendAsMailbox } from "../modules/o365/m365App.js"; // KS_SERVER_M365_ONE_CLICK
 
 // BF_SERVER_DOC_WAIVERS_ROUTES_v1 — Request Items checklist (dynamic Step-5 required set) +
 // admin-only per-application document waivers.
@@ -2699,18 +2700,20 @@ router.get(
   portalLimiter,
   requireAuthorization({ roles: [ROLES.ADMIN, ROLES.STAFF] }),
   safeHandler(async (_req: any, res: any) => {
+    // KS_SERVER_M365_ONE_CLICK - the values in force: the connected tenant and Keystone's app (or this server's
+    // own MS_GRAPH_* registration), and the shared mailbox from Settings > Connections (else MS_GRAPH_SEND_AS).
+    const creds = m365AppOnly();
+    const sendAs = m365SendAsMailbox();
+    const tenant = creds?.tenant ?? "";
+    const clientId = creds?.clientId ?? "";
+    const clientSecret = creds?.clientSecret ?? "";
     const envCheck: Record<string, "set" | "missing"> = {
-      MS_GRAPH_TENANT_ID:    process.env.MS_GRAPH_TENANT_ID    && process.env.MS_GRAPH_TENANT_ID.trim()    ? "set" : "missing",
-      MS_GRAPH_CLIENT_ID:    process.env.MS_GRAPH_CLIENT_ID    && process.env.MS_GRAPH_CLIENT_ID.trim()    ? "set" : "missing",
-      MS_GRAPH_CLIENT_SECRET:process.env.MS_GRAPH_CLIENT_SECRET&& process.env.MS_GRAPH_CLIENT_SECRET.trim()? "set" : "missing",
-      MS_GRAPH_SEND_AS:      process.env.MS_GRAPH_SEND_AS      && process.env.MS_GRAPH_SEND_AS.trim()      ? "set" : "missing",
+      MS_GRAPH_TENANT_ID:    tenant ? "set" : "missing",
+      MS_GRAPH_CLIENT_ID:    clientId ? "set" : "missing",
+      MS_GRAPH_CLIENT_SECRET:clientSecret ? "set" : "missing",
+      MS_GRAPH_SEND_AS:      sendAs ? "set" : "missing",
     };
     const missing = Object.entries(envCheck).filter(([, v]) => v === "missing").map(([k]) => k);
-
-    const sendAs = (process.env.MS_GRAPH_SEND_AS ?? "").trim();
-    const tenant = (process.env.MS_GRAPH_TENANT_ID ?? "").trim();
-    const clientId = (process.env.MS_GRAPH_CLIENT_ID ?? "").trim();
-    const clientSecret = (process.env.MS_GRAPH_CLIENT_SECRET ?? "").trim();
 
     let tokenStep:
       | { ok: true; expiresInSec: number }
@@ -2783,22 +2786,24 @@ router.get(
     // Build a one-line human diagnosis.
     let diagnosis: string;
     if (missing.length > 0) {
-      diagnosis = `Missing env vars: ${missing.join(", ")}. Configure these in Azure App Service → Environment variables.`;
+      diagnosis = missing.includes("MS_GRAPH_SEND_AS") && missing.length === 1
+        ? "No shared mailbox is set for outgoing email. An administrator adds it in Settings > Connections."
+        : "Microsoft 365 is not connected. An administrator connects it in Settings > Connections.";
     } else if (tokenStep && (tokenStep as any).ok === false) {
       const ts = tokenStep as { ok: false; status?: number; error: string };
       if (ts.status === 401 || /AADSTS7000215/i.test(ts.error)) {
-        diagnosis = "Token acquisition FAILED: client secret is wrong or expired. Generate a new client secret in the App registration and update MS_GRAPH_CLIENT_SECRET.";
+        diagnosis = "Microsoft refused the app key on this server (wrong or expired). Keystone support renews it; nothing is needed from you.";
       } else if (/AADSTS90002/i.test(ts.error) || /tenant.*not.*found/i.test(ts.error)) {
-        diagnosis = "Token acquisition FAILED: tenant ID is wrong (Azure AD does not recognize this tenant). Verify MS_GRAPH_TENANT_ID.";
+        diagnosis = "Microsoft does not recognise the connected organisation. An administrator reconnects Microsoft 365 in Settings > Connections.";
       } else if (/AADSTS700016/i.test(ts.error) || /application.*not.*found/i.test(ts.error)) {
-        diagnosis = "Token acquisition FAILED: client ID is wrong, or the App registration does not exist in this tenant. Verify MS_GRAPH_CLIENT_ID.";
+        diagnosis = "Keystone is not (or no longer) approved in your Microsoft 365. An administrator reconnects Microsoft 365 in Settings > Connections.";
       } else {
         diagnosis = `Token acquisition FAILED: ${ts.error}`;
       }
     } else if (mailboxStep && (mailboxStep as any).ok === false) {
       const ms = mailboxStep as { ok: false; status?: number; error: string };
       if (ms.status === 403 || /Authorization_RequestDenied/i.test(ms.error) || /Insufficient privileges/i.test(ms.error)) {
-        diagnosis = "Token works BUT the App registration is missing required Graph permissions. In Azure AD → App registrations → API permissions, grant Application permissions: User.Read.All (to look up the sender) and Mail.Send. Then click 'Grant admin consent'.";
+        diagnosis = "Connected, but Microsoft 365 did not grant the mail permissions. An administrator clicks Reconnect in Settings > Connections and approves again.";
       } else if (ms.status === 404) {
         diagnosis = `Token works BUT the mailbox '${sendAs}' does not exist in this tenant. Either the address is wrong, or no mailbox has been created for it. Create the user/mailbox in Microsoft 365 admin center.`;
       } else {

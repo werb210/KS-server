@@ -1,6 +1,6 @@
 // KS_SERVER_v6_PLANS - plan emails: the upgrade request to Keystone sales, and the trial / storage notices to the
 // licensee's admins. Sent through Microsoft Graph when it is configured, else SendGrid's transactional sender.
-import { sendViaGraph } from "../services/email/graphSendService.js";
+import { isConfigured, sendViaGraph } from "../services/email/graphSendService.js";
 import { sendgridConfigured, sendTransactional } from "../services/sendgridService.js";
 
 export type PlanMail = { to: string[]; subject: string; html: string; text: string };
@@ -13,9 +13,9 @@ export function salesEmail(env: NodeJS.ProcessEnv = process.env): string {
   return String(env.KS_SALES_EMAIL ?? "").trim() || DEFAULT_SALES_EMAIL;
 }
 
+// KS_SERVER_M365_ONE_CLICK - the brokerage's connected Microsoft 365 and shared mailbox (see graphSendService).
 function graphConfigured(): boolean {
-  return ["MS_GRAPH_TENANT_ID", "MS_GRAPH_CLIENT_ID", "MS_GRAPH_CLIENT_SECRET", "MS_GRAPH_SEND_AS"]
-    .every((k) => String(process.env[k] ?? "").trim() !== "");
+  return isConfigured().ok;
 }
 
 export const sendPlanMail: PlanMailer = async (mail) => {

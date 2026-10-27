@@ -13,6 +13,7 @@ import {
   googleOAuthConfig, parseScopes, requestedScopes, type GoogleOAuthConfig,
 } from "./googleConfig.js";
 import { decryptToken, encryptToken } from "./tokenCrypto.js";
+import { markWorkspaceSync } from "../../modules/o365/m365Consent.js";
 
 export type Db = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount?: number | null }> };
 
@@ -230,6 +231,7 @@ export async function getGoogleForUser(db: Db, userId: string | null | undefined
       const fresh = await refreshAndPersist(db, uid);
       if (fresh) { current = fresh; resp = await call(current); }
     }
+    if (resp.ok) markWorkspaceSync(db, "google"); // KS_SERVER_M365_ONE_CLICK - "last successful sync" on Connections
     return resp;
   };
   return {

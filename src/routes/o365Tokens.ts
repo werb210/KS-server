@@ -2,6 +2,7 @@ import express from "express";
 import { pool } from "../db.js";
 import { safeHandler } from "../middleware/safeHandler.js";
 import { requireAuth } from "../middleware/auth.js";
+import { DELEGATED_SCOPE_STRING, m365Delegated, tokenEndpoint } from "../modules/o365/m365App.js"; // KS_SERVER_M365_ONE_CLICK
 import { clearO365Failure, explainO365Failure, lastO365Failure, parseMicrosoftError, recordO365Failure, type O365Failure } from "../modules/o365/o365Health.js"; // BF_SERVER_O365_VISIBILITY_v274
 
 let lastTokenEndpointFailure: Omit<O365Failure, "at"> | null = null;
@@ -9,21 +10,20 @@ let lastTokenEndpointFailure: Omit<O365Failure, "at"> | null = null;
 const router = express.Router();
 
 async function refreshMicrosoftAccessToken(refresh: string): Promise<{ accessToken: string; refreshToken: string | null; expiresAt: Date } | null> {
-  const tenant = process.env.MSAL_TENANT_ID;
-  const client = process.env.MSAL_CLIENT_ID;
-  const secret = process.env.MSAL_CLIENT_SECRET;
-  if (!tenant || !client || !secret) {
+  // KS_SERVER_M365_ONE_CLICK - the connected tenant (saved by the admin consent, else MSAL_TENANT_ID) and the app.
+  const ms = m365Delegated();
+  if (!ms) {
     lastTokenEndpointFailure = { stage: "not_configured" };
     return null;
   }
   const body = new URLSearchParams({
-    client_id: client,
-    client_secret: secret,
+    client_id: ms.clientId,
+    client_secret: ms.clientSecret,
     refresh_token: refresh,
     grant_type: "refresh_token",
-    scope: "User.Read Mail.Send Mail.ReadWrite Mail.ReadWrite.Shared Mail.Send.Shared Calendars.ReadWrite Tasks.ReadWrite Contacts.ReadWrite offline_access",
+    scope: DELEGATED_SCOPE_STRING,
   });
-  const r = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
+  const r = await fetch(tokenEndpoint(ms.tenant), {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,

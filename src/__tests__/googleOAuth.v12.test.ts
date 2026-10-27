@@ -144,7 +144,8 @@ describe("Google connect start", () => {
     expect(r.body.error).toBe("google_oauth_not_configured");
     const s = await request(app).get("/api/google/status");
     expect(s.body).toMatchObject({ configured: false, connected: false });
-    expect(String(s.body.configProblem)).toMatch(/not set up/);
+    // KS_SERVER_M365_ONE_CLICK - plain English; Keystone sets the client up, so no setting names are shown.
+    expect(String(s.body.configProblem)).toMatch(/not available on this server yet/);
   });
 });
 

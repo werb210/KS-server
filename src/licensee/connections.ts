@@ -12,7 +12,8 @@ export function googleAdsCustomerIdSetting(env: NodeJS.ProcessEnv = process.env)
   return lastLoadedConnections()?.google_ads_customer_id || String(env.GOOGLE_ADS_CUSTOMER_ID ?? "").trim();
 }
 
-/** The Office 365 tenant: licensee setting office365_tenant_id, else MS_GRAPH_TENANT_ID. */
+/** The Office 365 tenant: licensee setting office365_tenant_id (saved by the admin consent), else MSAL_TENANT_ID,
+ *  else MS_GRAPH_TENANT_ID. KS_SERVER_M365_ONE_CLICK */
 export function office365TenantSetting(env: NodeJS.ProcessEnv = process.env): string {
-  return lastLoadedConnections()?.office365_tenant_id || String(env.MS_GRAPH_TENANT_ID ?? "").trim();
+  return lastLoadedConnections()?.office365_tenant_id || String(env.MSAL_TENANT_ID ?? "").trim() || String(env.MS_GRAPH_TENANT_ID ?? "").trim();
 }

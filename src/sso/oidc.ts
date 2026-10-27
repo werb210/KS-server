@@ -7,11 +7,17 @@
 //     email is accepted only when the tenant is pinned (Admin setting or SSO_MICROSOFT_TENANT) and the token is from
 //     it - that organisation owns its sign-in names - or when Microsoft marks the email domain as verified (xms_edov).
 //   * tenant / domain: the Admin's Microsoft tenant restriction (tid) and Google hosted-domain restriction (hd).
-// Reuses the app registrations the mail/calendar connections already use (MSAL_CLIENT_ID / MSAL_CLIENT_SECRET and
-// GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET). When those are unset the provider is simply not offered.
+// Reuses the apps the mail/calendar connections already use: Microsoft from modules/o365/m365App.ts (Keystone's
+// multi-tenant app, or MSAL_CLIENT_ID / MSAL_CLIENT_SECRET on servers with their own) and Google from
+// services/workspace/googleConfig.ts. When neither is set up the provider is simply not offered.
+// KS_SERVER_M365_ONE_CLICK - the Microsoft tenant is pinned to the one the brokerage's admin connected (saved setting,
+// else MSAL_TENANT_ID), and with Keystone's redirect broker (KS_OAUTH_BROKER_URL) the redirect URI is the broker's.
 import { createHash, createPublicKey, randomBytes, type KeyObject } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { portalUrl, serverUrl } from "../licensee/urls.js";
+import { m365App, m365Tenant } from "../modules/o365/m365App.js";
+import { googleClientCredentials } from "../services/workspace/googleConfig.js";
+import { redirectUriFor } from "../licensee/oauthBroker.js";
 
 export const SSO_PROVIDERS = ["microsoft", "google"] as const;
 export type SsoProvider = (typeof SSO_PROVIDERS)[number];
@@ -50,29 +56,28 @@ export type ProviderConfig = {
   redirectUri: string;
   /** Microsoft only: the tenant segment of the authority (a GUID, or "organizations"). */
   authorityTenant?: string;
-  /** Microsoft only: a tenant pinned by the server's own settings (SSO_MICROSOFT_TENANT / MSAL_TENANT_ID GUID). */
+  /** Microsoft only: the pinned tenant (SSO_MICROSOFT_TENANT, else the connected tenant / MSAL_TENANT_ID, a GUID). */
   serverTenant?: string | null;
 };
 
 /** The server-side configuration for a provider, or null when its env vars are not set (provider not offered). */
 export function providerConfig(provider: SsoProvider, e: NodeJS.ProcessEnv = process.env): ProviderConfig | null {
   if (provider === "google") {
-    const clientId = env("GOOGLE_OAUTH_CLIENT_ID", e);
-    const clientSecret = env("GOOGLE_OAUTH_CLIENT_SECRET", e);
-    if (!clientId || !clientSecret) return null;
+    const g = googleClientCredentials(e);
+    if (!g) return null;
     return {
-      provider, clientId, clientSecret,
-      redirectUri: env("SSO_GOOGLE_REDIRECT_URI", e) || serverUrl() + "/api/auth/sso/google/callback",
+      provider, clientId: g.clientId, clientSecret: g.clientSecret,
+      redirectUri: env("SSO_GOOGLE_REDIRECT_URI", e) || redirectUriFor("google", serverUrl() + "/api/auth/sso/google/callback", e),
     };
   }
-  const clientId = env("MSAL_CLIENT_ID", e);
-  const clientSecret = env("MSAL_CLIENT_SECRET", e);
-  if (!clientId || !clientSecret) return null;
-  const pinned = env("SSO_MICROSOFT_TENANT", e) || env("MSAL_TENANT_ID", e);
+  const app = m365App(e);
+  if (!app) return null;
+  const { clientId, clientSecret } = app;
+  const pinned = env("SSO_MICROSOFT_TENANT", e) || m365Tenant(e);
   const serverTenant = isTenantId(pinned) ? pinned.toLowerCase() : null;
   return {
     provider, clientId, clientSecret,
-    redirectUri: env("SSO_MICROSOFT_REDIRECT_URI", e) || serverUrl() + "/api/auth/sso/microsoft/callback",
+    redirectUri: env("SSO_MICROSOFT_REDIRECT_URI", e) || redirectUriFor("microsoft", serverUrl() + "/api/auth/sso/microsoft/callback", e),
     authorityTenant: serverTenant ?? "organizations",
     serverTenant,
   };

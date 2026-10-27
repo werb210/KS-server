@@ -8,6 +8,7 @@ import type { Pool } from "pg";
 import { getGraphForUser, type GraphClient } from "../modules/o365/graphClient.js";
 import { fileInboundAttachments } from "../services/contactDocuments.js";
 import { claimedTick } from "./claim.js"; // BF_SERVER_v789_WORKER_CLAIM
+import { m365AppOnly } from "../modules/o365/m365App.js"; // KS_SERVER_M365_ONE_CLICK
 
 // BF_INBOUND_ATTACHMENT_ATTEMPT_LEDGER_v189
 // A message that files nothing writes no contact_documents row, so the old
@@ -54,13 +55,13 @@ const INITIAL_DELAY_MS = 30 * 1000; // let startup settle before the first pass
 // BF_INBOUND_ATTACHMENT_SHARED_MAILBOX_v1 - app-only (client-credentials) Graph token, used to
 // read shared mailboxes (info@, submissions@, ...). Requires the Mail.Read APPLICATION permission
 // on the "Boreal Financial Server" app registration; without it the mailbox reads 403 and we skip.
-let appToken: { token: string; expiresAt: number } | null = null;
+let appToken: { token: string; expiresAt: number; tenant: string } | null = null;
 async function getAppOnlyToken(): Promise<string | null> {
-  if (appToken && appToken.expiresAt > Date.now() + 60000) return appToken.token;
-  const tenant = process.env.MS_GRAPH_TENANT_ID ?? "";
-  const clientId = process.env.MS_GRAPH_CLIENT_ID ?? "";
-  const clientSecret = process.env.MS_GRAPH_CLIENT_SECRET ?? "";
-  if (!tenant || !clientId || !clientSecret) return null;
+  // KS_SERVER_M365_ONE_CLICK - the connected tenant and Keystone's app (modules/o365/m365App.ts).
+  const creds = m365AppOnly();
+  if (!creds) return null;
+  const { tenant, clientId, clientSecret } = creds;
+  if (appToken && appToken.tenant === tenant && appToken.expiresAt > Date.now() + 60000) return appToken.token;
   try {
     const url = `https://login.microsoftonline.com/${encodeURIComponent(tenant)}/oauth2/v2.0/token`;
     const body = new URLSearchParams({
@@ -74,7 +75,7 @@ async function getAppOnlyToken(): Promise<string | null> {
     const json = (await resp.json()) as { access_token?: string; expires_in?: number };
     const token = String(json.access_token ?? "");
     if (!token) return null;
-    appToken = { token, expiresAt: Date.now() + Number(json.expires_in ?? 3600) * 1000 };
+    appToken = { token, expiresAt: Date.now() + Number(json.expires_in ?? 3600) * 1000, tenant };
     return token;
   } catch {
     return null;
