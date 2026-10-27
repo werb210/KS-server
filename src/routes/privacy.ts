@@ -1,5 +1,6 @@
 // KS_SETTINGS_PACK_v1_PRIVACY - cookie consent and privacy requests. Every plan.
 //   POST /api/privacy/consent { visitorId, surface, choice, categories }   public: record a banner choice
+//   GET  /api/privacy/region                                               public: { region: QC|other|unknown } (Law 25)
 //   GET  /api/privacy/requests                                             Admin: the requests (open first, by due date)
 //   POST /api/privacy/requests { contact_id, kind, details?, received_via?, requested_at? }   Admin: record one
 //   GET  /api/privacy/requests/:id                                         Admin: one request (+ the deletion plan)
@@ -20,6 +21,7 @@ import {
   REQUEST_KINDS, carryOutDeletion, closeRequest, contactLabel, correctContact, createRequest, exportContact, getRequest, listRequests,
   parseConsent, parseCorrection, planDeletion, recordConsent, type RequestKind,
 } from "../privacy/privacy.js";
+import { regionResolver } from "../privacy/region.js";
 
 const router = Router();
 const adminOnly = [auth, requireAuthorization({ roles: [ROLES.ADMIN] })];
@@ -33,6 +35,18 @@ router.post("/consent", consentLimiter, safeHandler(async (req: any, res: any) =
   try { ip = clientIpFromRequest(req); } catch { ip = ""; }
   await recordConsent(db(), parsed.value, { ip, userAgent: String(req.headers?.["user-agent"] ?? "") });
   return res.status(201).json({ ok: true });
+}));
+
+// KS_PRIVACY_QUEBEC_CONSENT_v1 - public: { region: "QC" | "other" | "unknown" } for the visitor's IP, so the client
+// app knows whether Google tags must wait for consent (Quebec, Law 25). The address is never logged or returned.
+const regionLimiter = rateLimit({ windowMs: 60_000, limit: 60, standardHeaders: true, legacyHeaders: false, keyGenerator: rateLimitKeyFromRequest });
+router.get("/region", regionLimiter, safeHandler(async (req: any, res: any) => {
+  let ip = "";
+  try { ip = clientIpFromRequest(req); } catch { ip = ""; }
+  const region = await regionResolver().resolve(ip);
+  // Per-visitor answer: browsers may keep it a few minutes, shared caches never.
+  res.setHeader("Cache-Control", "private, max-age=300");
+  return res.json({ region });
 }));
 
 router.get("/requests", ...adminOnly, safeHandler(async (_req: any, res: any) => {
