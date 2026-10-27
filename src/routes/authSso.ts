@@ -30,6 +30,7 @@ import {
 } from "../sso/oidc.js";
 import { loadSsoAvailability } from "../sso/settings.js";
 import { unwrapState, wrapState } from "../licensee/oauthBroker.js"; // KS_SERVER_M365_ONE_CLICK
+import { refreshFieldsForSignIn } from "../auth/staffRefresh.js"; // KS_NATIVE_DESKTOP_v1_SLIDING_REFRESH
 
 const router = Router();
 const db = () => pool as unknown as Q;
@@ -259,7 +260,9 @@ router.post("/exchange", ssoExchangeLimiter, safeHandler(async (req: any, res: a
   const { openSession } = await import("../security/sessions.js");
   const fwd = String(req.headers?.["x-forwarded-for"] ?? "").split(",")[0]?.trim();
   const ksid = await openSession(db() as any, { userId: String(user.id), method: "sso", ip: fwd || req.ip || null, userAgent: String(req.headers?.["user-agent"] ?? "") });
-  return res.status(200).json({ status: "ok", data: { token: mintStaffSessionToken(user, ksid) } });
+  // KS_NATIVE_DESKTOP_v1_SLIDING_REFRESH - and a refresh token, so the portal keeps the session going (up to 30 days).
+  const refreshFields = await refreshFieldsForSignIn(db() as any, { userId: String(user.id), ksid, tokenVersion: user.tokenVersion ?? 0 });
+  return res.status(200).json({ status: "ok", data: { token: mintStaffSessionToken(user, ksid), ...refreshFields } });
 }));
 
 export type { SsoProvider };

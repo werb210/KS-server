@@ -17,6 +17,7 @@ import { safeHandler } from "../middleware/safeHandler.js"; // BF_SERVER_v789_SA
 import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 import { portalUrl, hostOf } from "../licensee/urls.js"; // KS_SERVER_v4_BRANDING
 import { SSO_REQUIRED_MESSAGE, ssoRequiredFor } from "../sso/settings.js"; // KS_SERVER_SSO_API_KEYS
+import { refreshFieldsForSignIn } from "../auth/staffRefresh.js"; // KS_NATIVE_DESKTOP_v1_SLIDING_REFRESH
 
 const router = Router();
 const RP_ID = process.env.WEBAUTHN_RP_ID || hostOf(portalUrl()); // KS_SERVER_v4_BRANDING - this copy's portal, not Boreal's
@@ -154,7 +155,9 @@ router.post("/login/verify", safeHandler(async (req: any, res) => {
   const { openSession } = await import("../security/sessions.js");
   const fwd = String(req.headers?.["x-forwarded-for"] ?? "").split(",")[0]?.trim();
   const ksid = await openSession(pool as any, { userId: String(cred.user_id), method: "passkey", ip: fwd || req.ip || null, userAgent: String(req.headers?.["user-agent"] ?? "") });
-  return res.json({ status: "ok", data: { token: mintStaffToken(user, ksid) } });
+  // KS_NATIVE_DESKTOP_v1_SLIDING_REFRESH - and a refresh token, so the portal keeps the session going (up to 30 days).
+  const refreshFields = await refreshFieldsForSignIn(pool as any, { userId: String(cred.user_id), ksid, tokenVersion: (user as any).tokenVersion ?? 0 });
+  return res.json({ status: "ok", data: { token: mintStaffToken(user, ksid), ...refreshFields } });
 }));
 
 export default router;
