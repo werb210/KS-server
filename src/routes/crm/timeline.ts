@@ -200,6 +200,11 @@ export async function loadCrmTimeline(isContact: boolean, id: string, silo: stri
          WHERE contact_id = $1
            AND event_type IN ('sequence_step_sent','email_open','email_click','email_bounce','email_dropped','email_spamreport','email_unsubscribe','email_group_unsubscribe','sms_link_clicked','attribution','email_marketing_sent','client_notice_sent','sms_marketing_sent','email_cascade_sent','email_notice_sent','automation')
         UNION ALL
+        -- KS_HUBSPOT_GAPS_1 - payment links and call script answers: system rows titled by the event itself.
+        SELECT 'system' AS kind, id::text, created_at AS ts, payload->>'title' AS title, payload->>'detail' AS body, NULL::text AS extra
+          FROM crm_timeline_events
+         WHERE contact_id = $1
+           AND event_type IN ('payment_link_sent','payment_link_cancelled','payment_received','payment_processing','payment_failed')        UNION ALL
         -- BF_SERVER_TEAMS_TRANSCRIPT_POLLER_v1 - Teams meetings with their
         -- recording link + transcript. Reuses kind 'recording', which the portal
         -- already renders with body + a URL in extra, so no new UI plumbing.

@@ -146,6 +146,7 @@ import neverLogRoutes from "./neverLog.js"; // KS_SETTINGS_PACK_v1_NEVER_LOG
 import leadRotationRoutes from "./leadRotation.js"; // KS_SETTINGS_PACK_v1_LEAD_ROTATION
 import blockedNumbersRoutes from "./blockedNumbers.js"; // KS_SETTINGS_PACK_v1_BLOCKED_NUMBERS
 import surveysRoutes from "./surveys.js"; // KS_SETTINGS_PACK_v1_NPS
+import paymentsRoutes from "./payments.js"; // KS_HUBSPOT_GAPS_1_PAYMENTS
 import taskDefaultsRoutes from "./taskDefaults.js"; // KS_SETTINGS_PACK_v1_TASK_DEFAULTS
 import planRoutes from "./plan.js"; // KS_SERVER_v6_PLANS
 import provisionRoutes from "./provision.js"; // KS_SERVER_v15_PROVISION
@@ -410,6 +411,8 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/custom-fields", router: customFieldsRoutes, feature: "custom_fields" }, // KS_SERVER_v20_CRM_FIELDS - every plan
   { path: "/teams", router: salesTeamsRoutes }, // KS_SERVER_v20_TEAMS - growth+ gated per route (GET /me answers on every plan)
   { path: "/webhook-endpoints", router: webhookEndpointsRoutes, feature: "webhooks" }, // KS_SERVER_v20_WEBHOOKS - Admin, pro
+  // KS_HUBSPOT_GAPS_1 - HubSpot-parity gaps (each router gates its own routes: public links and webhooks stay open).
+  { path: "/payments", router: paymentsRoutes }, // payment links (payment_links, growth+); public /pay and Stripe webhook
 ];
 
 // KS_SERVER_v20_TEAMS - staff mounts whose routes address one application by id (router-relative patterns). The

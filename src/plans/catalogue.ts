@@ -73,6 +73,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "toll_free_number", label: "Toll-free number", plan: "growth" },
   // KS_SETTINGS_PACK_v1_NPS - the post-funding survey and review request (Growth and Pro).
   { key: "nps_survey", label: "Post-funding survey and review requests", plan: "growth" },
+  // KS_HUBSPOT_GAPS_1_PAYMENTS - payment links and pre-authorized debit for broker fees through the brokerage's own Stripe.
+  { key: "payment_links", label: "Payment links and bank debit for fees (your own Stripe account)", plan: "growth" },
   // pro
   { key: "multiple_lines", label: "Multiple business lines and a direct line for each person", plan: "pro" },
   { key: "ad_attribution", label: "Ad attribution", plan: "pro" },
