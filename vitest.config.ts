@@ -27,6 +27,17 @@ export default defineConfig({
     sequence: {
       shuffle: false,
     },
+    // KS_SERVER_SERIAL_DB_TESTS - in the integration run the real-database files share one database and several of them
+    // rewrite the same rows (the licensee_plan row, Admin users). Run those files one at a time and everything else in
+    // parallel as before, so they cannot change each other's state mid-test.
+    ...(process.env.VITEST_INTEGRATION === "true"
+      ? {
+          projects: [
+            { extends: true, test: { name: "db-serial", include: INTEGRATION_TEST_FILES, fileParallelism: false } },
+            { extends: true, test: { name: "parallel", exclude: [...INTEGRATION_TEST_FILES, "**/node_modules/**", "**/dist/**", "**/.claude/**", "src/__tests__/db.real.integration.test.ts"] } },
+          ],
+        }
+      : {}),
   },
   resolve: {
     alias: {
