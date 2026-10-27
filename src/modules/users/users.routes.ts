@@ -2,6 +2,7 @@ import { Router, type Request } from "express";
 import { AppError } from "../../middleware/errors.js";
 import { changeUserRole, setUserStatus } from "./users.service.js";
 import { normalizeRole } from "../../auth/roles.js";
+import { ensureMarketingSeat } from "../../services/users.service.js"; // KS_SERVER_MARKETING_ADDON
 
 const router = Router();
 
@@ -28,6 +29,7 @@ router.post("/:id/role", async (req: any, res: any, next: any) => {
     if (!normalizedRole) {
       throw new AppError("invalid_role", "Role is invalid.", 400);
     }
+    await ensureMarketingSeat(String(req.params.id), { role: normalizedRole }); // KS_SERVER_MARKETING_ADDON
     await changeUserRole({
       userId: req.params.id,
       role: normalizedRole,
@@ -72,6 +74,7 @@ router.post("/:id/enable", async (req: any, res: any, next: any) => {
     if (!targetId) {
       throw new AppError("validation_error", "id is required.", 400);
     }
+    await ensureMarketingSeat(String(targetId), { active: true }); // KS_SERVER_MARKETING_ADDON
     await setUserStatus({
       userId: targetId,
       active: true,

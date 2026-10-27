@@ -15,8 +15,9 @@ export const STORAGE_USED_SQL = `SELECT
   + COALESCE((SELECT SUM(size_bytes) FROM collateral_assets WHERE size_bytes > 0), 0)::bigint
   + COALESCE((SELECT SUM(size_bytes) FROM application_packages WHERE size_bytes > 0), 0)::bigint AS used_bytes`;
 
-/** A seat is an active, not deleted Admin or Staff user. */
-export const ACTIVE_STAFF_WHERE = `role IN ('Admin', 'Staff') AND active = true AND COALESCE(is_active, true) = true
+/** A seat is an active, not deleted Admin, Staff or Marketing user. KS_SERVER_MARKETING_ADDON - Marketing users are
+ *  normal paid seats switched to that role (Todd, Oct 26), so they count and share the pooled allowances. */
+export const ACTIVE_STAFF_WHERE = `role IN ('Admin', 'Staff', 'Marketing') AND active = true AND COALESCE(is_active, true) = true
    AND COALESCE(disabled, false) = false AND deleted_at IS NULL AND COALESCE(status, 'ACTIVE') = 'ACTIVE'`;
 
 export const SEATS_SQL = `SELECT COUNT(*)::int AS seats FROM users WHERE ${ACTIVE_STAFF_WHERE}`;

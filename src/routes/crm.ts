@@ -30,6 +30,7 @@ import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILE
 import { logWarn } from "../observability/logger.js"; // BF_SERVER_v789_WAITLIST_NO_TAKEOVER
 import { emitAutomationEvent } from "../modules/automation/automationEngine.js"; // BF_SERVER_v786_WORKFLOW_GRAPH
 import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
+import { requireMarketingTool, visitorHistoryDays } from "../plans/marketingGate.js"; // KS_SERVER_MARKETING_ADDON
 import { lockedAmong, refuseIfLocked } from "../retention/retention.js"; // KS_SERVER_v14_RETENTION
 import { CRM_RULES, recordGuard } from "../visibility/recordGuard.js"; // KS_SERVER_v20_TEAMS
 import { ownerFilterSql, scopeForRequest, visibleIds } from "../visibility/scope.js"; // KS_SERVER_v20_TEAMS
@@ -222,7 +223,8 @@ router.get("/contacts/:id/ad-attribution", requireFeature("ad_attribution"), saf
 // recording for the CRM "Clarity" button. Returns the most recent application's
 // stored player URL, scoped to the caller's silo; null when none has been
 // captured yet (older contacts, cookieless/ad-blocked sessions).
-router.get("/contacts/:id/clarity-recording", requireFeature("visitor_tracking"), safeHandler(async (req: any, res: any) => {
+// KS_SERVER_MARKETING_ADDON - session replay: Growth and Pro, or the Marketing add-on (Admins and Marketing seats).
+router.get("/contacts/:id/clarity-recording", requireMarketingTool("session_replay"), safeHandler(async (req: any, res: any) => {
   const contactId = String(req.params.id ?? "");
   const silo = resolveSiloFromRequest(req);
   const { rows } = await pool.query(
@@ -1860,11 +1862,15 @@ router.get("/contacts/:id/documents/:docId/download", safeHandler(async (req: an
 // brought them, every page + dwell time, the drop-off page, and their wizard path.
 router.get("/contacts/:id/journey", requireAuth, requireFeature("visitor_tracking"), safeHandler(async (req: any, res: any) => {
   const contactId = String(req.params.id);
+  // KS_SERVER_MARKETING_ADDON - visits within the plan's visitor history (30 / 90 / 365 days; full with the add-on).
+  const historyDays = await visitorHistoryDays(req);
   const sess = await pool.query(
     `SELECT session_id, first_seen_at, last_seen_at, landing_page, referrer, gclid,
             utm_source, utm_medium, utm_campaign, utm_term, utm_content
-       FROM visitor_sessions WHERE contact_id = $1 ORDER BY first_seen_at ASC`,
-    [contactId],
+       FROM visitor_sessions WHERE contact_id = $1
+        AND ($2::int IS NULL OR last_seen_at >= now() - ($2::int * interval '1 day'))
+      ORDER BY first_seen_at ASC`,
+    [contactId, historyDays],
   );
   // BF_SERVER_JOURNEY_APP_STEPS_v77
   // Beacon data only exists for visitors whose session was stitched. The wizard step is
@@ -1902,7 +1908,7 @@ router.get("/contacts/:id/journey", requireAuth, requireFeature("visitor_trackin
   const applications = submittedApps.length ? submittedApps : allApplications.slice(0, 1);
   const draftsCollapsed = allApplications.length - applications.length;
 
-  if (!sess.rows.length) return respondOk(res, { sessions: [], events: [], applications, draftsCollapsed });
+  if (!sess.rows.length) return respondOk(res, { sessions: [], events: [], applications, draftsCollapsed, historyDays });
   const ids = sess.rows.map((r: any) => r.session_id);
   const ev = await pool.query(
     `SELECT session_id, event_type, path, title, step, dwell_ms, occurred_at, meta
@@ -1919,6 +1925,7 @@ router.get("/contacts/:id/journey", requireAuth, requireFeature("visitor_trackin
   const wizardSteps = ev.rows.filter((e: any) => e.event_type === "wizard_step");
   const submitted = ev.rows.some((e: any) => e.event_type === "application_submitted");
   respondOk(res, {
+    historyDays, // KS_SERVER_MARKETING_ADDON
     sessions: sess.rows,
     events: ev.rows,
     applications, // BF_SERVER_JOURNEY_APP_STEPS_v77

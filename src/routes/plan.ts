@@ -2,6 +2,7 @@
 //   GET  /api/plan                   any signed-in staff: plan, trial, features, allowances, storage, trial usage
 //   POST /api/plan/trial             Admin: start the free 14-day trial (409 { reason } when not available)
 //   POST /api/plan/upgrade-request   Admin: { plan, extra_storage_blocks? } - emails Keystone sales
+//                                    or { addon: "marketing" } - asks for the Marketing add-on (KS_SERVER_MARKETING_ADDON)
 //   PUT  /api/plan                   operations only (X-KS-Ops-Key = KS_OPS_KEY): { plan?, extra_storage_blocks?, status?, addons? }
 //                                    addons = { bank_connect?: boolean } (KS_SERVER_BANK_CONNECT_ADDON; not a plan feature)
 //                                    beta_features = [...] this copy's whole beta list (KS_SERVER_BETA_v1, see beta/flags.ts)
@@ -25,6 +26,7 @@ import { getPlanState, setPlan, startTrial, trialUsage, type Q } from "../plans/
 import { buildUsageReport, isPeriod, licenseeTimeZone, periodOf } from "../plans/usage.js"; // KS_SERVER_v8_USAGE
 import { postToOps, opsConfig } from "../plans/opsLink.js"; // KS_SERVER_v8_OPS_LINK
 import { parseAddonPatch } from "../plans/addons.js"; // KS_SERVER_BANK_CONNECT_ADDON
+import { MARKETING_ADDON } from "../plans/marketing.js"; // KS_SERVER_MARKETING_ADDON
 import { parseBetaPatch, setBetaFeatures } from "../beta/flags.js"; // KS_SERVER_BETA_v1
 
 const router = Router();
@@ -63,6 +65,8 @@ router.post("/trial", ...adminOnly, safeHandler(async (req, res) => {
 }));
 
 router.post("/upgrade-request", ...adminOnly, safeHandler(async (req: any, res) => {
+  // KS_SERVER_MARKETING_ADDON - the Marketing add-on is asked for the same way (sales email + copy to operations).
+  if (req.body?.addon !== undefined && req.body?.plan === undefined) return addonRequest(req, res);
   const requested = String(req.body?.plan ?? "").trim().toLowerCase();
   if (!isPlan(requested)) return res.status(400).json({ ok: false, error: "invalid_plan" });
   const blocks = blocksOf(req.body?.extra_storage_blocks);
@@ -116,6 +120,36 @@ router.post("/upgrade-request", ...adminOnly, safeHandler(async (req: any, res) 
   if (!r.ok) console.warn("[plan] upgrade request email failed; operations has the copy", r.error);
   return res.json({ ok: true });
 }));
+
+/** KS_SERVER_MARKETING_ADDON - an Admin asks for the Marketing add-on: Keystone sales get an email and operations a
+ *  copy; Keystone switches it on (PUT /api/plan addons.marketing) and adds it to the bill. */
+async function addonRequest(req: any, res: any) {
+  const addon = String(req.body?.addon ?? "").trim().toLowerCase();
+  if (addon !== "marketing") return res.status(400).json({ ok: false, error: "invalid_addon", message: "Only the Marketing add-on can be asked for here." });
+  const now = new Date();
+  const state = await getPlanState(db(), now.getTime());
+  if (state.addons?.marketing === true) return res.status(409).json({ ok: false, error: "addon_already_on", message: "The Marketing add-on is already on." });
+  const who = String(req.user?.email ?? userIdOf(req));
+  const company = brandName();
+  const mail = bodies([
+    `${company} has asked for the Marketing add-on ($${MARKETING_ADDON.price} a month, flat).`,
+    [`Licensee: ${company}`, `Requested by: ${who}`, `Plan: ${state.plan} (trial: ${trialStatus(state, now)})`].join("\n"),
+    "Switch it on in KS-Ops (PATCH addons.marketing = true): it is pushed to the licensee and added to the subscription.",
+  ]);
+  const r = await sendPlanMail({ to: [salesEmail()], subject: `Add-on request: ${company} - Marketing add-on`, ...mail });
+  let relayed = false;
+  if (opsConfig()) {
+    const relay = await postToOps("requests", { kind: "addon", addon: "marketing", current_plan: state.plan, requested_by: who, requested_at: now.toISOString() });
+    if (!relay.ok) console.warn("[plan] add-on request copy to operations failed", relay.error);
+    relayed = relay.ok;
+  }
+  if (!r.ok && !relayed) {
+    console.warn("[plan] add-on request email failed", r.error);
+    return res.status(502).json({ ok: false, error: "email_failed" });
+  }
+  if (!r.ok) console.warn("[plan] add-on request email failed; operations has the copy", r.error);
+  return res.json({ ok: true });
+}
 
 /** The ops-key gate shared by PUT /api/plan and GET /api/plan/usage-report. Sends the error and returns false. */
 function opsAuthorized(req: any, res: any): boolean {

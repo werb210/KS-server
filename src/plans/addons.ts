@@ -6,9 +6,12 @@
 //
 //   bank_connect  the applicant "Connect Bank (View-Only)" step (Flinks), the staff request item, fraud check 3
 //                 (uploaded statement vs live bank data) and the FLINKS_* provider. Default off.
+//   marketing     KS_SERVER_MARKETING_ADDON - the Marketing add-on ($49 a month, any plan; src/plans/marketing.ts). Unlike
+//                 bank_connect it is sold openly: the Plan page and the catalogue show what it adds, and the tools it
+//                 adds say "Marketing add-on" when it is off. Both trials include it (marketingAddonActive).
 import type { PlanState } from "./catalogue.js";
 
-export const ADDONS = ["bank_connect"] as const;
+export const ADDONS = ["bank_connect", "marketing"] as const;
 export type AddonKey = (typeof ADDONS)[number];
 export type Addons = Partial<Record<AddonKey, boolean>>;
 

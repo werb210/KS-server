@@ -275,6 +275,54 @@ Dialler quick replies (KS_SERVER_QUICK_REPLIES_EVERY_PLAN): `GET /api/templates/
 built-in quick replies; the brokerage's saved templates and snippets are added on Growth and up (they stay a Growth+
 feature everywhere else).
 
+## Marketing add-on and e-signing allowance (KS_SERVER_MARKETING_ADDON)
+
+Every plan markets to its own client list (`src/plans/marketing.ts`, Todd Oct 26). Per brokerage, per month:
+
+| | Starter | Growth | Pro | Marketing add-on (any plan) |
+| --- | --- | --- | --- | --- |
+| Campaign emails | 500 | 1,000 | 2,500 | +10,000, then $10 per 10,000 (or part) on the next bill |
+| People per text-to-many send | 50 | 250 | 500 | 1,000 (+1,000 bonus marketing texts a month) |
+| Sequences running at once | 2 | 5 | 10 | unlimited |
+| Visitor-tracking history | 30 days | 90 days | 365 days | full, plus session replay |
+| Website lead forms | 1 | 1 | 1 | unlimited, plus the AI chat widget and tracking script |
+
+- The add-on (`addons.marketing`, pushed by KS-Ops with the plan, `PUT /api/plan { addons: { marketing } }`) is $49 a
+  month, flat, any plan; Pro does not include it. Both trials include it (the in-app Pro trial, and the staff free
+  trial: service status `trial`). `GET /api/plan` has a `marketing` block (the add-on, the limits in force, every
+  plan's limits, which tools come from the plan or the add-on) and `signings`.
+- Advanced tools (`requireMarketingTool`, `src/plans/marketingGate.ts`): website kit extras, session replay, full visitor
+  history, full Google Ads tools (attribution, ad-waste, Customer Match, Monday ads email, AI suggestions), lead
+  scoring, A/B subject test, best send time, funded-deal campaign report. A tool the plan already has (session replay
+  on Growth and Pro, Google Ads tools on Pro) works as before. Via the add-on: Admins plus the first 3 active
+  Marketing users (402 `marketing_addon_required` / 403 `marketing_seat_required`). User Management refuses a 4th
+  active Marketing user while the add-on is on (409 `marketing_seat_limit`). Marketing users count as seats.
+- Google Ads results (`GET /api/marketing/google-ads`, `/google-ads/history`), LinkedIn Ads results and Google
+  Analytics are on every plan. Campaign templates (`/api/marketing/templates`, the branded email) are on every plan;
+  message templates and snippets (`/api/templates`) and automations stay Growth and up.
+- Meters (`usage_events`, `src/plans/meters.ts`): `campaign_email` (blasts, text fallback emails, sequences),
+  `marketing_text`, `signing` (every SignNow invite, metered in `src/signnow/signnowClient.ts`: one per signer per
+  document or group, so a re-sent invite or new link is not counted twice: application, Accord, fee agreements,
+  term sheets, SBA forms, personal net worth statements, referrer and broker agreements). Without the add-on a
+  campaign that does not fit in what is left is refused (409 `campaign_email_limit`) and sends stop at the allowance;
+  sequence and fallback emails wait for the 1st. Signings are never blocked: 4 a month are included, each one over is
+  $2.50. The usage report to KS-Ops carries `campaign_emails`, `marketing_texts`, `signings`, `marketing_addon` and
+  the overage; 80% / 100% emails go out for signings and campaign emails like minutes and texts.
+- Campaign sends: `campaign_sends` (one row per job and person; SendGrid `cs_id` fills opened, clicked, unsubscribed).
+  `POST /api/marketing/email/send(-template)` takes `abTest { subjectB, testPercent 10-50, waitHours 1-24 }` or
+  `sendTime: "best"` (add-on). The send-queue worker runs them in phases (`src/marketing/campaignRunner.ts`).
+  `GET /api/marketing/campaign-report?days=90`: sent, opened, clicked, unsubscribed per email and text campaign on
+  every plan; with the add-on, applications and funded deals (and amount) by the people reached within 90 days.
+- Website kit: staff `GET/PUT /api/website-kit` (settings, forms, snippet; audited); public `/api/kit/:key/kit.js`,
+  `POST /api/kit/:key/forms/:formId` (a CRM lead: tags, lead rotation "website", express consent, timeline, staff
+  notified), `/chat` (the brokerage's assistant), `/track` and `/consent`. The kit answers only the website addresses
+  the Admin listed, and tracks nothing until the visitor agreed (its banner, or the site calling
+  `WebsiteKit.consent(true)`).
+- Lead scoring (`src/marketing/leadScoring.ts`, worker every 30 minutes while the add-on is on): rules (phone, business,
+  owner title, tags, stage, status, amount) plus 90 days of engagement (opens, clicks, text clicks, visits, form
+  submissions, applications). `POST /api/lead-scores/lookup`, `GET /api/lead-scores/top` (staff),
+  `GET/PUT /api/lead-scores/settings` (Admins and Marketing seats, audited).
+
 ## Ops Control Plane
 
 Admin-only ops control plane endpoints live under `/api/admin/ops`:

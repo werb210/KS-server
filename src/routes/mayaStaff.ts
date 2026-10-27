@@ -1641,6 +1641,12 @@ router.post(
         }
         const fingerprint = marketingSendFingerprint({ channel: "sms", silo, tag, body });
         const total = await countSmsRecipients(pool, silo, tag);
+        // KS_SERVER_MARKETING_ADDON - the plan's "send one text to many" limit applies to the assistant too.
+        const { currentMarketingLimits } = await import("../plans/marketingGate.js");
+        const textLimit = (await currentMarketingLimits(pool as any)).text_to_many;
+        if (total > textLimit) {
+          return res.status(409).json({ ok: false, error: "text_to_many_limit", recipients: total, limit: textLimit, summary: `This text would reach ${total} people; one text campaign can go to at most ${textLimit} on this plan. Choose a smaller segment.` });
+        }
         if (!confirm) {
           const pending_action_id = staffUserId ? await createMarketingPreview(staffUserId, silo, { channel: "sms", silo, tag, fingerprint, recipients: total }) : null;
           const summary = `PREVIEW: this SMS would reach ${total} recipient(s)${tag ? ` in segment '${tag}'` : " (entire opted-in SMS audience)"}. Nothing was sent. Confirm to send.`;
@@ -1675,6 +1681,14 @@ router.post(
       if (!tag || !tag.trim()) return res.status(400).json({ ok: false, error: "audience_required" });
       const fingerprint = marketingSendFingerprint({ channel: "email", silo, tag, subject, html });
       const total = await countEmailRecipients(pool, silo, tag);
+      // KS_SERVER_MARKETING_ADDON - without the Marketing add-on a campaign must fit in the month's campaign emails.
+      {
+        const { campaignEmailBudget, campaignEmailLimitMessage } = await import("../plans/marketingGate.js");
+        const budget = await campaignEmailBudget(pool as any);
+        if (budget.remaining !== null && total > budget.remaining) {
+          return res.status(409).json({ ok: false, error: "campaign_email_limit", recipients: total, remaining: budget.remaining, allowance: budget.allowance, summary: campaignEmailLimitMessage(budget, total) });
+        }
+      }
       if (!confirm) {
         const pending_action_id = staffUserId ? await createMarketingPreview(staffUserId, silo, { channel: "email", silo, tag, fingerprint, recipients: total }) : null;
         const summary = `PREVIEW: this email would reach ${total} recipient(s)${tag ? ` in segment '${tag}'` : " (entire opted-in email audience)"}. Nothing was sent. Confirm to send.`;

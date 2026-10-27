@@ -113,6 +113,8 @@ import signnowRoutes from "./signnow.js";
 import submissionOrchestrationRoutes from "./submissionOrchestration.js"; // BF_SERVER_v74_BLOCK_1_7
 import emailRoutes from "./email.js";
 import smsRedirectRoutes from "./smsRedirect.js"; // BF_SERVER_SMS_REDIRECT_v1 (public)
+import { websiteKitAdminRoutes, websiteKitPublicRoutes } from "./websiteKit.js"; // KS_SERVER_MARKETING_ADDON
+import leadScoreRoutes from "./leadScores.js"; // KS_SERVER_MARKETING_ADDON
 import sendgridWebhookRoutes from "./sendgridWebhook.js"; // BF_SERVER_SENDGRID_WEBHOOK_v1 (public)
 import websiteRoutes from "./website.js";
 import mayaRoutes, { proxyMayaToAgent, mayaProxyRateLimit } from "./maya.js";
@@ -414,6 +416,11 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/blocked-numbers", router: blockedNumbersRoutes }, // Admin: blocked callers and texters
   { path: "/surveys", router: surveysRoutes }, // public answers; Admin settings and report gated per route (nps_survey)
   { path: "/task-defaults", router: taskDefaultsRoutes }, // staff: follow-up task defaults and the prompt
+  // KS_SERVER_MARKETING_ADDON - the website kit (staff settings, and the public kit on the brokerage's own website) and
+  // lead scoring. Each router checks its own roles and add-on tools.
+  { path: "/website-kit", router: websiteKitAdminRoutes },
+  { path: "/kit", router: websiteKitPublicRoutes }, // public: answers only the website addresses the Admin listed
+  { path: "/lead-scores", router: leadScoreRoutes },
   { path: "/custom-fields", router: customFieldsRoutes, feature: "custom_fields" }, // KS_SERVER_v20_CRM_FIELDS - every plan
   { path: "/teams", router: salesTeamsRoutes }, // KS_SERVER_v20_TEAMS - growth+ gated per route (GET /me answers on every plan)
   { path: "/webhook-endpoints", router: webhookEndpointsRoutes, feature: "webhooks" }, // KS_SERVER_v20_WEBHOOKS - Admin, pro
