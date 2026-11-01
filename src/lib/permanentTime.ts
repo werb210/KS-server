@@ -1,16 +1,13 @@
 // BF_SERVER_v864_OOO_UNTIL - time-zone helpers for a user's own zone (the browser sends its IANA name).
 // Alberta, Manitoba and most of British Columbia stopped changing their clocks in 2026: Alberta stays on UTC-6,
 // Manitoba on UTC-5 and B.C. on UTC-7 all year. Servers, browsers and phones with older time-zone data still move
-// America/Edmonton, America/Winnipeg and America/Vancouver back an hour on 2026-11-01, so each is computed as a zone
+// the Alberta, Manitoba and B.C. zones back an hour on 2026-11-01, so each is computed as a zone
 // with the same offset all year (same rule as KS-server src/lib/brokerageTime.ts; Alberta's is src/lib/albertaTime.ts).
 // Etc/GMT+N is UTC-N (the IANA sign is inverted).
 import { ALBERTA_TZ } from "./albertaTime.js";
 
-export const PERMANENT_ZONES: Readonly<Record<string, string>> = {
-  "America/Edmonton": ALBERTA_TZ, // UTC-6 all year
-  "America/Winnipeg": "Etc/GMT+5", // UTC-5 all year
-  "America/Vancouver": "Etc/GMT+7", // UTC-7 all year
-};
+export { PERMANENT_ZONES } from "./brokerageTime.js"; // one map of the permanent-time provinces (brokerageTime.ts)
+import { PERMANENT_ZONES } from "./brokerageTime.js";
 
 export function isValidTimeZone(raw: unknown): boolean {
   const tz = String(raw ?? "").trim();
