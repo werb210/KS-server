@@ -411,10 +411,11 @@ router.post("/mail/send", safeHandler(async (req: any, res: any) => {
 
   // KS_SERVER_v12_GOOGLE_WORKSPACE - the Gmail send. Scheduling needs a server-side draft (Gmail compose scope),
   // which gmail.send does not grant, so it is refused rather than sent early.
+  let gmailSent: { id: string | null; threadId: string | null } | null = null; // KS_SERVER_GMAIL_INBOX - keeps the thread
   if (gmail) {
     if (scheduleAt) return res.status(400).json({ error: "schedule_not_supported", detail: "Scheduled send is not available with Google Workspace yet. Send now, or connect Microsoft 365." });
     try {
-      await sendGmail(gmail, {
+      gmailSent = await sendGmail(gmail, {
         from: gmail.email || null,
         to, cc, bcc,
         subject: mergedSubject,
@@ -586,6 +587,15 @@ router.post("/mail/send", safeHandler(async (req: any, res: any) => {
       }
     }
   } catch (_e) { console.error("[crm_email_log] immediate-send logging failed:", _e); }
+
+  // KS_SERVER_GMAIL_INBOX - the Gmail thread of a portal send, so the client's reply joins the same conversation.
+  if (gmailSent?.threadId) {
+    try {
+      await pool.query(`UPDATE crm_email_log SET gmail_thread_id = $2 WHERE pixel_token = $1`, [pixelToken, gmailSent.threadId]);
+    } catch (err) {
+      console.warn("[crm_email_log] gmail thread id not saved", { message: (err as Error)?.message });
+    }
+  }
 
   res.json({ ok: true });
 }));

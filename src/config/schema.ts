@@ -245,6 +245,10 @@ export const EnvSchema = z
     GOOGLE_OAUTH_REDIRECT_URI: z.string().optional(), // URL (default {KS_SERVER_URL}/api/google/oauth/callback); read in services/workspace/googleConfig.ts
     GOOGLE_OAUTH_RETURN_URL: z.string().optional(), // URL (default {KS_PORTAL_URL}/settings/profile); read in services/workspace/googleConfig.ts
     GOOGLE_TOKEN_ENCRYPTION_KEY: z.string().optional(), // credential (secret), 32 bytes base64; read in services/workspace/tokenCrypto.ts
+    KS_GOOGLE_GMAIL_READ_ENABLED: z.string().optional(), // KS_SERVER_GMAIL_INBOX - written by KS-Ops; true only after CASA
+    KS_GOOGLE_PUBSUB_TOPIC: z.string().optional(), // KS_SERVER_GMAIL_INBOX - optional Gmail push (projects/<p>/topics/<t>)
+    KS_GOOGLE_PUBSUB_PUSH_TOKEN: z.string().optional(), // KS_SERVER_GMAIL_INBOX - shared secret on the push subscription URL
+    KS_GMAIL_HISTORY_DAYS: z.string().optional(), // KS_SERVER_GMAIL_INBOX - first sync looks back this many days (default 30)
     GOOGLE_GMAIL_READ_ENABLED: z.string().optional(), // true/false switch, default false (restricted scope, needs CASA); read in services/workspace/googleConfig.ts
     // KS_SERVER_v13_QUICKBOOKS - QuickBooks Online fee invoices (docs/QUICKBOOKS.md); unset = feature off
     QBO_CLIENT_ID: z.string().optional(), // identifier; read in services/quickbooks/qboConfig.ts

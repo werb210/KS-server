@@ -96,6 +96,9 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "webhooks", label: "Webhooks and Zapier", plan: "pro" },
   // KS_HUBSPOT_GAPS_1_CALL_QUEUES - callers wait in line for the next free person (main line and phone-menu options).
   { key: "call_queues", label: "Call queues", plan: "pro" },
+  // KS_SERVER_CUSTOM_ROLES - custom roles built from a permission matrix (per area view/create/edit/delete/export and
+  // own/team/all record visibility), pro. The built-in roles stay on every plan.
+  { key: "custom_roles", label: "Custom roles and permissions", plan: "pro" },
   // KS_SERVER_v9_FRAUD - the fraud-protection suite (Todd, Oct 23): starter = 1, 2, 4, 5; growth adds 6, 7, 8;
   // pro has all of them except fraud_3. The key number matches the feature list in src/fraud/catalogue.ts.
   // KS_SERVER_BANK_CONNECT_ADDON - bank connect and fraud_3 (statement vs live bank data) are not plan features: they

@@ -169,6 +169,9 @@ import apiKeysRoutes from "./apiKeys.js"; // KS_SERVER_SSO_API_KEYS
 import publicApiRoutes from "../publicApi/router.js"; // KS_SERVER_SSO_API_KEYS
 import customFieldsRoutes from "./customFields.js"; // KS_SERVER_v20_CRM_FIELDS
 import salesTeamsRoutes from "./salesTeams.js"; // KS_SERVER_v20_TEAMS
+import rolesRoutes from "./roles.js"; // KS_SERVER_CUSTOM_ROLES
+import gmailRoutes from "./gmail.js"; // KS_SERVER_GMAIL_INBOX
+import gmailPushRoutes from "./gmailPush.js"; // KS_SERVER_GMAIL_INBOX
 import webhookEndpointsRoutes from "./webhookEndpoints.js"; // KS_SERVER_v20_WEBHOOKS
 import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
 import { requireAuth, requireAuthAllowClient } from "../middleware/auth.js";
@@ -365,6 +368,8 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/r", router: smsRedirectRoutes }, // BF_SERVER_SMS_REDIRECT_v1 (public)
   { path: "/webhooks/sendgrid", router: sendgridWebhookRoutes }, // BF_SERVER_SENDGRID_WEBHOOK_v1 (public)
   { path: "/o365-oauth", router: o365OAuthRoutes },
+  { path: "/google/gmail", router: gmailRoutes }, // KS_SERVER_GMAIL_INBOX - a Google user's inbox (409 while reading is off)
+  { path: "/gmail-push", router: gmailPushRoutes }, // KS_SERVER_GMAIL_INBOX - Gmail push via Pub/Sub (public, token)
   { path: "/google", router: googleOAuthRoutes }, // KS_SERVER_v12_GOOGLE_WORKSPACE - connect/status/disconnect (callback public)
   { path: "/connections", router: connectionsRoutes }, // KS_SERVER_M365_ONE_CLICK - Settings > Connections status (Admins)
   { path: "/quickbooks", router: quickbooksRoutes }, // KS_SERVER_v13_QUICKBOOKS - connect (Admin), fee invoices (callback public)
@@ -430,6 +435,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/meeting-notes", router: meetingNotesRoutes }, // Zoom and Google Meet notes (office_sync, every plan); public Zoom callback
   { path: "/pipelines", router: pipelinesRoutes }, // extra pipelines (custom_pipelines, growth 3 / pro unlimited); list on every plan
   { path: "/call-queues", router: callQueuesRoutes }, // call queues (call_queues, pro): settings, live panel, availability
+  { path: "/roles", router: rolesRoutes }, // KS_SERVER_CUSTOM_ROLES - GET /me every plan; custom roles pro (gated per route)
 ];
 
 // KS_SERVER_v20_TEAMS - staff mounts whose routes address one application by id (router-relative patterns). The
