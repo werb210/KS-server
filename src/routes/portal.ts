@@ -1423,6 +1423,7 @@ router.patch(
     const allowedManualStatuses = new Set<string>([
       ApplicationStage.ADDITIONAL_STEPS_REQUIRED,
       ApplicationStage.ACCEPTED,
+      ApplicationStage.FUNDED, // KS_BROKER_TOOLS_1_FUNDING_CONDITIONS
       ApplicationStage.REJECTED,
       // BF_SERVER_PARK_RESTORE_v49 - Fraud and Hold are reachable from any
       // stage, and any working stage is reachable back out of them.
@@ -1529,6 +1530,28 @@ router.patch(
       ...(req.ip ? { ip: req.ip } : {}),
       ...(req.get("user-agent") ? { userAgent: req.get("user-agent") as string } : {}),
     };
+    // KS_BROKER_TOOLS_1_FUNDING_CONDITIONS - Funded only when every funding condition is cleared or waived. An Admin
+    // may override with a reason (override_reason); the override is written to the audit log.
+    let fundingGate: { outstanding: number; overridden: boolean } | null = null;
+    if (status === ApplicationStage.FUNDED) {
+      const { checkFundingGate, FundingBlockedError } = await import("../brokerTools/conditions.js");
+      try {
+        fundingGate = await checkFundingGate(pool as any, applicationId, {
+          isAdmin: req.user.role === ROLES.ADMIN,
+          overrideReason: typeof req.body?.override_reason === "string" ? req.body.override_reason : null,
+        });
+      } catch (err) {
+        if (err instanceof FundingBlockedError) {
+          res.status(409).json({
+            ok: false, error: "funding_conditions_outstanding", message: err.message,
+            outstanding: err.outstanding.map((c) => ({ id: c.id, title: c.title, owner: c.owner, status: c.status, due_date: c.due_date })),
+            can_override: req.user.role === ROLES.ADMIN,
+          });
+          return;
+        }
+        throw err;
+      }
+    }
     await transitionPipelineState({
       applicationId,
       nextState: status,
@@ -1561,6 +1584,17 @@ router.patch(
       // KS_SERVER_v13_QUICKBOOKS - funded: the fee invoice moves to the funded amount and is marked paid.
       const { queueFeeInvoice } = await import("../services/feeAgreement/mediaFeeAgreement.js");
       await queueFeeInvoice(applicationId, "funded");
+    }
+    // KS_BROKER_TOOLS_1_FUNDING_CONDITIONS - the day the money moved, and the audit trail of the gate.
+    if (status === ApplicationStage.FUNDED && fundingGate) {
+      await runQuery(`UPDATE applications SET funded_at = now(), updated_at = now() WHERE id::text = ($1)::text`, [applicationId]);
+      const { audit } = await import("../brokerTools/common.js");
+      await audit(req, fundingGate.overridden ? "funding_conditions.override" : "funding_conditions.cleared_to_fund", {
+        application_id: applicationId, outstanding: fundingGate.outstanding,
+        reason: fundingGate.overridden ? String(req.body?.override_reason ?? "").trim().slice(0, 1000) : null,
+      }, { type: "application", id: applicationId });
+      const { afterFunded } = await import("../brokerTools/hooks.js");
+      await afterFunded(applicationId);
     }
     res.status(200).json({ ok: true, applicationId, status });
   })
