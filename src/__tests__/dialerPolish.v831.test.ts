@@ -239,6 +239,9 @@ describe("reception targets (KS_SETTINGS_PACK_v1_PHONE_MENU)", () => {
     expect(mod.receptionUserId).toBeUndefined();
     const { defaultMenu } = await import("../phoneMenu/menu.js");
     const menu = defaultMenu("Acme Capital", [{ id: "44444444-4444-4444-8444-444444444444", first_name: "Sam", last_name: "Lee" }]);
-    expect(menu.options).toEqual([{ digit: "1", label: "Sam Lee", keywords: [], target: { type: "user", userId: "44444444-4444-4444-8444-444444444444" } }]);
+    expect(menu.options).toEqual([
+      { digit: "1", label: "Sam Lee", keywords: [], target: { type: "user", userId: "44444444-4444-4444-8444-444444444444" } },
+      { digit: "3", label: "a meeting", keywords: ["meeting", "conference"], target: { type: "meeting" } }, // KS_SERVER_v864_CONFERENCE_KEY
+    ]);
   });
 });
