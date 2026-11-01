@@ -25,8 +25,17 @@ const adminOnly = [auth, requireAuthorization({ roles: [ROLES.ADMIN] })];
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_AUDIO_BYTES, files: 1 } });
 const db = (): Q => pool as unknown as Q;
 
+/** KS_HUBSPOT_GAPS_1_CALL_QUEUES - the call queues a menu option may point to (none when the plan has no queues). */
+async function menuQueues(): Promise<Array<{ id: string; name: string }>> {
+  const { checkFeature } = await import("../plans/catalogue.js");
+  const { getPlanState } = await import("../plans/state.js");
+  if (!checkFeature(await getPlanState(db() as any), "call_queues").allowed) return [];
+  const { listQueues } = await import("../callQueues/queues.js");
+  return (await listQueues(db() as any)).map((q) => ({ id: q.id, name: q.name }));
+}
+
 router.get("/", ...adminOnly, safeHandler(async (_req: any, res: any) => {
-  const [loaded, users, audio] = await Promise.all([loadMenu(db()), activeMenuUsers(db()), listAudio(db())]);
+  const [loaded, users, audio, queues] = await Promise.all([loadMenu(db()), activeMenuUsers(db()), listAudio(db()), menuQueues()]);
   const status = officeOpen(loaded.menu, new Date());
   res.setHeader("Cache-Control", "no-store");
   return res.json({
@@ -36,6 +45,7 @@ router.get("/", ...adminOnly, safeHandler(async (_req: any, res: any) => {
     updated_at: loaded.updatedAt,
     users: users.map((u) => ({ id: u.id, name: displayName(u), role: u.role ?? null })),
     audio,
+    queues, // KS_HUBSPOT_GAPS_1_CALL_QUEUES
     stale_user_ids: staleUserIds(loaded.menu, new Set(users.map((u) => u.id))),
     time_zone: brokerageZoneName(),
     zone_label: zoneLabel(),
@@ -46,8 +56,8 @@ router.get("/", ...adminOnly, safeHandler(async (_req: any, res: any) => {
 }));
 
 router.put("/", ...adminOnly, safeHandler(async (req: any, res: any) => {
-  const [users, audio] = await Promise.all([activeMenuUsers(db()), audioIds(db())]);
-  const checked = validateMenu(req.body?.menu, { userIds: users.map((u) => u.id), audioIds: audio });
+  const [users, audio, queues] = await Promise.all([activeMenuUsers(db()), audioIds(db()), menuQueues()]);
+  const checked = validateMenu(req.body?.menu, { userIds: users.map((u) => u.id), audioIds: audio, queueIds: queues.map((q) => q.id) });
   if (!checked.ok) return res.status(400).json({ ok: false, error: "validation_error", errors: checked.errors });
   await saveMenu(db(), checked.value, actorId(req));
   await auditFor(req, "phone_menu.updated", {

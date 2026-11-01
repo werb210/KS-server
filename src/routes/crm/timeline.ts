@@ -200,6 +200,11 @@ export async function loadCrmTimeline(isContact: boolean, id: string, silo: stri
          WHERE contact_id = $1
            AND event_type IN ('sequence_step_sent','email_open','email_click','email_bounce','email_dropped','email_spamreport','email_unsubscribe','email_group_unsubscribe','sms_link_clicked','attribution','email_marketing_sent','client_notice_sent','sms_marketing_sent','email_cascade_sent','email_notice_sent','automation')
         UNION ALL
+        -- KS_HUBSPOT_GAPS_1 - payment links and call script answers: system rows titled by the event itself.
+        SELECT 'system' AS kind, id::text, created_at AS ts, payload->>'title' AS title, payload->>'detail' AS body, NULL::text AS extra
+          FROM crm_timeline_events
+         WHERE contact_id = $1
+           AND event_type IN ('payment_link_sent','payment_link_cancelled','payment_received','payment_processing','payment_failed','call_script')        UNION ALL
         -- BF_SERVER_TEAMS_TRANSCRIPT_POLLER_v1 - Teams meetings with their
         -- recording link + transcript. Reuses kind 'recording', which the portal
         -- already renders with body + a URL in extra, so no new UI plumbing.
@@ -208,7 +213,7 @@ export async function loadCrmTimeline(isContact: boolean, id: string, silo: stri
         -- BF_SERVER_TIMELINE_KINDS_v1 - was 'recording', which the portal does not
         -- render at all (blank card). 'meeting' already renders title/body/extra.
         SELECT 'meeting' AS kind, tm.id::text, COALESCE(tm.ended_at, tm.scheduled_end_at, tm.created_at) AS ts,
-               ('Teams meeting: ' || COALESCE(tm.subject, '(no subject)')) AS title,
+               ((CASE COALESCE(tm.provider, 'teams') WHEN 'zoom' THEN 'Zoom meeting: ' WHEN 'google_meet' THEN 'Google Meet: ' ELSE 'Teams meeting: ' END) || COALESCE(tm.subject, '(no subject)')) AS title, -- KS_HUBSPOT_GAPS_1_MEETING_NOTES
                COALESCE(tm.maya_summary, left(tm.transcript_text, 2000)) AS body,
                COALESCE(tm.recording_url, tm.join_url) AS extra
           FROM teams_meetings tm
@@ -277,7 +282,7 @@ export async function loadCrmTimeline(isContact: boolean, id: string, silo: stri
         -- BF_SERVER_TIMELINE_KINDS_v1 - was 'recording', which the portal does not
         -- render at all (blank card). 'meeting' already renders title/body/extra.
         SELECT 'meeting' AS kind, tm.id::text, COALESCE(tm.ended_at, tm.scheduled_end_at, tm.created_at) AS ts,
-               ('Teams meeting: ' || COALESCE(tm.subject, '(no subject)')) AS title,
+               ((CASE COALESCE(tm.provider, 'teams') WHEN 'zoom' THEN 'Zoom meeting: ' WHEN 'google_meet' THEN 'Google Meet: ' ELSE 'Teams meeting: ' END) || COALESCE(tm.subject, '(no subject)')) AS title, -- KS_HUBSPOT_GAPS_1_MEETING_NOTES
                COALESCE(tm.maya_summary, left(tm.transcript_text, 2000)) AS body,
                COALESCE(tm.recording_url, tm.join_url) AS extra
           FROM teams_meetings tm

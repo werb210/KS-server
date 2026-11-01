@@ -463,6 +463,24 @@ export async function start(): Promise<void> {
     try { const w = startNpsSurveyWorker(pool); workerStops.push(w.stop); console.log("[startup] nps-survey worker started"); }
     catch (err) { console.error("[startup] nps-survey worker failed to start:", err); }
 
+    // KS_HUBSPOT_GAPS_1_MEETING_NOTES - Zoom and Google Meet transcripts in, then the AI summary.
+    const { startMeetingNotesWorker } = await import("./workers/meetingNotesWorker.js");
+    await workerStagger();
+    try { const w = startMeetingNotesWorker(pool); workerStops.push(w.stop); console.log("[startup] meeting-notes worker started"); }
+    catch (err) { console.error("[startup] meeting-notes worker failed to start:", err); }
+
+    // KS_HUBSPOT_GAPS_1_CALL_QUEUES - call queues: offers nobody answered, callers past the longest wait, dispatch.
+    const { startCallQueueWorker } = await import("./workers/callQueueWorker.js");
+    await workerStagger();
+    try { const w = startCallQueueWorker(pool); workerStops.push(w.stop); console.log("[startup] call-queue worker started"); }
+    catch (err) { console.error("[startup] call-queue worker failed to start:", err); }
+
+    // KS_HUBSPOT_GAPS_1_PAYMENTS - payment links: QuickBooks retries and expiry.
+    const { startPaymentLinksWorker } = await import("./workers/paymentLinksWorker.js");
+    await workerStagger();
+    try { const w = startPaymentLinksWorker(pool); workerStops.push(w.stop); console.log("[startup] payment-links worker started"); }
+    catch (err) { console.error("[startup] payment-links worker failed to start:", err); }
+
     // KS_SETTINGS_PACK_v1_BOOKING - booking reminders 24 h and 1 h before.
     const { startBookingRemindersWorker } = await import("./workers/bookingRemindersWorker.js");
     await workerStagger();

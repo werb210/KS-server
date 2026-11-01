@@ -73,6 +73,12 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "toll_free_number", label: "Toll-free number", plan: "growth" },
   // KS_SETTINGS_PACK_v1_NPS - the post-funding survey and review request (Growth and Pro).
   { key: "nps_survey", label: "Post-funding survey and review requests", plan: "growth" },
+  // KS_HUBSPOT_GAPS_1_PAYMENTS - payment links and pre-authorized debit for broker fees through the brokerage's own Stripe.
+  { key: "payment_links", label: "Payment links and bank debit for fees (your own Stripe account)", plan: "growth" },
+  // KS_HUBSPOT_GAPS_1_CALL_SCRIPTS - call scripts (playbooks) beside the dialler and on records.
+  { key: "call_scripts", label: "Call scripts (playbooks)", plan: "growth" },
+  // KS_HUBSPOT_GAPS_1_PIPELINES - extra pipelines with custom stages: Growth 3 pipelines in all, Pro unlimited.
+  { key: "custom_pipelines", label: "Extra pipelines with custom stages (Growth 3, Pro unlimited)", plan: "growth" },
   // pro
   { key: "multiple_lines", label: "Multiple business lines and a direct line for each person", plan: "pro" },
   { key: "ad_attribution", label: "Ad attribution", plan: "pro" },
@@ -80,6 +86,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "sso", label: "Single sign-on", plan: "pro" },
   // KS_SERVER_v20_WEBHOOKS - outgoing webhooks (and Zapier Catch Hook triggers), pro.
   { key: "webhooks", label: "Webhooks and Zapier", plan: "pro" },
+  // KS_HUBSPOT_GAPS_1_CALL_QUEUES - callers wait in line for the next free person (main line and phone-menu options).
+  { key: "call_queues", label: "Call queues", plan: "pro" },
   // KS_SERVER_v9_FRAUD - the fraud-protection suite (Todd, Oct 23): starter = 1, 2, 4, 5; growth adds 6, 7, 8;
   // pro has all of them except fraud_3. The key number matches the feature list in src/fraud/catalogue.ts.
   // KS_SERVER_BANK_CONNECT_ADDON - bank connect and fraud_3 (statement vs live bank data) are not plan features: they
