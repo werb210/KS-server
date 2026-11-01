@@ -41,6 +41,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "iphone_dialler", label: "iPhone dialler", plan: "starter" },
   // KS_SERVER_PLAN_FIXES - the iPad staff portal app is on every plan (Todd, Oct 26); the Apple Watch app stays growth+.
   { key: "ipad_app", label: "iPad staff portal app", plan: "starter" },
+  // KS_ANDROID_STAFF_v1 - the Android staff app (the portal plus its "Phone" dialler, phones and tablets) on every plan, like the iPad app.
+  { key: "android_staff_app", label: "Android staff app (portal and phone)", plan: "starter" },
   // KS_SERVER_PLAN_FIXES - inbox sync reads Outlook (Microsoft 365) only for now; Gmail can send, inbox reading comes later.
   { key: "office_sync", label: "Email sync: Outlook (Microsoft 365) inbox sync; Gmail sends only for now", plan: "starter" },
   { key: "ai_assistant", label: "AI assistant", plan: "starter" },
