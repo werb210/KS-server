@@ -2,7 +2,9 @@
 // in plain English: connected or not, to which organisation, by whom and when, which permissions, the last call that
 // worked, and what to do when something is wrong.
 import { m365Status, type Db, type M365Status } from "../modules/o365/m365Consent.js";
-import { BASE_SCOPES, gmailReadEnabled, googleClientCredentials, googleConfigProblem } from "../services/workspace/googleConfig.js";
+import {
+  BASE_SCOPES, GMAIL_READ_PENDING_MESSAGE, gmailReadEnabled, googleClientCredentials, googleConfigProblem, requestedScopes, SCOPE_GMAIL_READONLY,
+} from "../services/workspace/googleConfig.js";
 import { brokerConfig } from "./oauthBroker.js";
 
 const GOOGLE_SCOPE_LABELS: Record<string, string> = {
@@ -13,6 +15,7 @@ const GOOGLE_SCOPE_LABELS: Record<string, string> = {
   "https://www.googleapis.com/auth/calendar.events": "Google Calendar events and Meet links",
   "https://www.googleapis.com/auth/tasks": "Google Tasks",
   "https://www.googleapis.com/auth/drive.file": "client folders Keystone creates in Google Drive",
+  "https://www.googleapis.com/auth/gmail.readonly": "read the inbox, so client email reaches the CRM", // KS_SERVER_GMAIL_INBOX
 };
 
 export type GoogleConnectionStatus = {
@@ -27,20 +30,27 @@ export type GoogleConnectionStatus = {
   first_connected_at: string | null;
   permissions: Array<{ name: string; label: string }>;
   gmail_reading: false | true;
+  /** KS_SERVER_GMAIL_INBOX - plain words about inbox reading: pending Google's review, or who still has to reconnect. */
+  gmail_reading_note: string;
+  /** People connected who have not yet allowed inbox reading (reconnect once). 0 while reading is off. */
+  gmail_reading_reconnect: number;
   last_sync_at: string | null;
 };
 
 export async function googleStatus(db: Db): Promise<GoogleConnectionStatus> {
   const creds = googleClientCredentials();
   const problem = googleConfigProblem();
-  const permissions = BASE_SCOPES.map((name) => ({ name, label: GOOGLE_SCOPE_LABELS[name] ?? name }));
+  const readOn = gmailReadEnabled();
+  const permissions = (readOn ? requestedScopes() : [...BASE_SCOPES]).map((name) => ({ name, label: GOOGLE_SCOPE_LABELS[name] ?? name }));
   const [acc, row] = await Promise.all([
     db.query(
       `SELECT count(*) FILTER (WHERE status = 'connected')::int AS ok,
               count(*) FILTER (WHERE status <> 'connected')::int AS bad,
               min(connected_at) AS first_at,
-              array_remove(array_agg(DISTINCT lower(split_part(google_email, '@', 2))), '') AS domains
+              array_remove(array_agg(DISTINCT lower(split_part(google_email, '@', 2))), '') AS domains,
+              count(*) FILTER (WHERE status = 'connected' AND position($1 in scopes) = 0)::int AS no_read
          FROM google_workspace_accounts`,
+      [SCOPE_GMAIL_READONLY],
     ),
     db.query(`SELECT google_last_sync_at FROM licensee_settings WHERE id = 1`),
   ]);
@@ -55,7 +65,13 @@ export async function googleStatus(db: Db): Promise<GoogleConnectionStatus> {
     staff_needing_reconnect: bad,
     first_connected_at: acc.rows[0]?.first_at ? new Date(acc.rows[0].first_at).toISOString() : null,
     permissions,
-    gmail_reading: gmailReadEnabled(),
+    gmail_reading: readOn,
+    gmail_reading_reconnect: readOn ? Number(acc.rows[0]?.no_read ?? 0) : 0,
+    gmail_reading_note: !readOn
+      ? `${GMAIL_READ_PENDING_MESSAGE} Sending from Gmail, Calendar, Tasks and Drive folders work now.`
+      : Number(acc.rows[0]?.no_read ?? 0) > 0
+        ? `Gmail inbox reading is on. ${Number(acc.rows[0]?.no_read)} connected ${Number(acc.rows[0]?.no_read) === 1 ? "person has" : "people have"} not allowed it yet: they click Reconnect Google in My Profile.`
+        : "Gmail inbox reading is on: client email reaches the CRM timeline.",
     last_sync_at: row.rows[0]?.google_last_sync_at ? new Date(row.rows[0].google_last_sync_at).toISOString() : null,
   };
   if (problem) return { ...base, state: "not_available", headline: "Google Workspace is not available on this server yet.", fix: "Keystone sets this up for you. Contact Keystone support if it stays like this." };
@@ -97,6 +113,7 @@ export async function opsConnectionsView(db: Db) {
       domains: c.google.domains,
       staff_connected: c.google.staff_connected,
       last_sync_at: c.google.last_sync_at,
+      gmail_reading: c.google.gmail_reading, // KS_SERVER_GMAIL_INBOX
     },
     broker: c.broker,
   };

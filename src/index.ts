@@ -425,7 +425,7 @@ export async function start(): Promise<void> {
     catch (err) { console.error("[startup] google-tasks worker failed to start:", err); }
 
     // KS_SERVER_v12_GOOGLE_WORKSPACE - Gmail inbox sync is built but OFF: it starts only with
-    // GOOGLE_GMAIL_READ_ENABLED=true (after Google's CASA assessment for the restricted gmail.readonly scope).
+    // KS_GOOGLE_GMAIL_READ_ENABLED=true (written by KS-Ops after Google's CASA assessment; GOOGLE_GMAIL_READ_ENABLED also works).
     const { gmailReadEnabled } = await import("./services/workspace/googleConfig.js");
     if (gmailReadEnabled()) {
       const { startGmailSyncWorker } = await import("./workers/gmailSyncWorker.js");

@@ -39,9 +39,14 @@ export const RESTRICTED_SCOPES: readonly string[] = [
 
 const env = (name: string, e: NodeJS.ProcessEnv): string => String(e[name] ?? "").trim();
 
-/** True only for an explicit "true"/"1"/"yes"/"on". Anything else (unset included) is off. */
+/**
+ * True only for an explicit "true"/"1"/"yes"/"on". Anything else (unset included) is off.
+ * KS_SERVER_GMAIL_INBOX - KS_GOOGLE_GMAIL_READ_ENABLED is the switch KS-Ops writes to every licensee server (it is
+ * turned on once, for everyone, after Google's CASA assessment of Keystone's Google client). The older
+ * GOOGLE_GMAIL_READ_ENABLED still works, for a server with its own Google client.
+ */
 export function gmailReadEnabled(e: NodeJS.ProcessEnv = process.env): boolean {
-  return /^(true|1|yes|on)$/i.test(env("GOOGLE_GMAIL_READ_ENABLED", e));
+  return /^(true|1|yes|on)$/i.test(env("KS_GOOGLE_GMAIL_READ_ENABLED", e)) || /^(true|1|yes|on)$/i.test(env("GOOGLE_GMAIL_READ_ENABLED", e));
 }
 
 /** KS_HUBSPOT_GAPS_1_MEETING_NOTES - Google Meet transcripts (Meet REST API, a sensitive scope), only with
@@ -50,6 +55,9 @@ export const SCOPE_MEET_READONLY = "https://www.googleapis.com/auth/meetings.spa
 export function meetNotesEnabled(e: NodeJS.ProcessEnv = process.env): boolean {
   return /^(true|1|yes|on)$/i.test(env("GOOGLE_MEET_NOTES_ENABLED", e));
 }
+
+/** KS_SERVER_GMAIL_INBOX - what Connections and My Profile say while inbox reading is off. */
+export const GMAIL_READ_PENDING_MESSAGE = "Gmail inbox reading is pending Google's security review.";
 
 /** The scopes the consent screen asks for. gmail.readonly is added only when the read switch is on. */
 export function requestedScopes(e: NodeJS.ProcessEnv = process.env): string[] {

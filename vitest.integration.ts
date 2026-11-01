@@ -29,6 +29,7 @@ export const INTEGRATION_TEST_FILES: string[] = [
   "src/__tests__/ksVisibilityGaps.v21.integration.test.ts", // KS_SERVER_v21_VISIBILITY_GAPS - needs Postgres
   "src/__tests__/ksHubspotGaps1.integration.test.ts", // KS_HUBSPOT_GAPS_1 - needs Postgres
   "src/__tests__/ksCustomRoles.integration.test.ts", // KS_SERVER_CUSTOM_ROLES - needs Postgres
+  "src/__tests__/ksGmailInbox.integration.test.ts", // KS_SERVER_GMAIL_INBOX - needs Postgres
   "src/__tests__/ksDemo.v10.integration.test.ts", // KS_SERVER_v10_DEMO - needs Postgres
   "src/__tests__/ksPgi.v11.integration.test.ts", // KS_SERVER_v11_PGI - needs Postgres
   "src/__tests__/ksRetention.v14.integration.test.ts", // KS_SERVER_v14_RETENTION - needs Postgres

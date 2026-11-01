@@ -8,7 +8,7 @@ This page covers:
 2. The company setting
 3. Setting up Google Cloud (a one-time job, done under the company Google account)
 4. Where to put the keys
-5. Gmail inbox sync: how to switch it on later, and the yearly security assessment it needs
+5. Gmail inbox reading: how to switch it on later, and the yearly security assessment (CASA) it needs
 6. Known limits
 7. How it works (for developers)
 
@@ -26,10 +26,13 @@ Today Keystone asks Google only for "sensitive" permissions. Those need Google's
 | **Tasks**: every portal task appears in Google Tasks. Ticking one off in Google completes it in the portal | `tasks` | Tasks, calendar tasks |
 | **Client folders** in Google Drive, shared with the brokerage's Google Workspace domain | `drive.file` (Keystone sees only the files and folders it created) | The CRM contact's folder card |
 
-**Built but switched off: Gmail inbox sync.** Reading mail needs `gmail.readonly`, which Google classes as **restricted**. Restricted permissions need a yearly third-party security assessment (CASA, see section 5). While the switch is off:
+**Built but switched off: Gmail inbox reading.** Reading mail needs `gmail.readonly`, which Google classes as **restricted**. Restricted permissions need a yearly third-party security assessment (CASA, see section 5). While the switch (`KS_GOOGLE_GMAIL_READ_ENABLED`) is off:
 
 - Keystone never asks Google for `gmail.readonly`.
-- The sync never runs.
+- The sync never runs, and the Gmail inbox routes answer "Gmail inbox reading is pending Google's security review".
+- Settings > Connections and My Profile show the same sentence.
+
+Keystone asks only for `gmail.readonly`, never `gmail.modify` or full mail access: reading is enough for the sync, the inbox view and filing attachments.
 
 > **One rule for people who connect both accounts:** Microsoft 365 is used whenever it is connected. Google is used only when Microsoft 365 is not connected. To move someone fully to Google, disconnect Microsoft 365 in their profile.
 
@@ -148,7 +151,9 @@ Settings a KS-server reads:
 | `KS_OAUTH_BROKER_URL` | Written by KS-Ops: `https://<KS-Ops address>/api/oauth/callback`. With it the redirect URI is `<that>/google`; without it, `{KS_SERVER_URL}/api/google/oauth/callback`. | no |
 | `GOOGLE_OAUTH_REDIRECT_URI` | Normally leave blank (overrides both of the above). | no |
 | `GOOGLE_OAUTH_RETURN_URL` | Normally leave blank. The default is `{KS_PORTAL_URL}/settings/profile`, where the user lands after connecting. | no |
-| `GOOGLE_GMAIL_READ_ENABLED` | Leave **unset or `false`**. Set it to `true` only after the CASA assessment (section 5). | no |
+| `KS_GOOGLE_GMAIL_READ_ENABLED` | Written by KS-Ops (the same value for every licensee). Leave **unset or `false`** until Google has approved the CASA assessment (section 5). `GOOGLE_GMAIL_READ_ENABLED` is the older name and also works. | no |
+| `KS_GOOGLE_PUBSUB_TOPIC`, `KS_GOOGLE_PUBSUB_PUSH_TOKEN` | Optional Gmail push (section 5.4). Without them the sync polls every 2 minutes. | no |
+| `KS_GMAIL_HISTORY_DAYS` | How far back the first sync looks (default 30 days, at most 500 messages). | no |
 | `KS_WORKSPACE_PROVIDER` | `m365`, `google` or `both`. This is only the starting value; the admin setting overrides it. | no |
 
 If no client or the encryption key is missing, Google stays switched off on that server. The portal greys out the
@@ -163,38 +168,78 @@ verification and normally the security assessment too. It is the quickest path f
 sync. Set that brokerage's own `GOOGLE_OAUTH_CLIENT_ID` / `_SECRET` on its server. Confirm Google's current rules
 before relying on this.
 
-## 5. Gmail inbox sync: switching it on later
+## 5. Gmail inbox reading: switching it on later
 
 ### 5.1 What the switch does
 
-`GOOGLE_GMAIL_READ_ENABLED` is off by default.
+`KS_GOOGLE_GMAIL_READ_ENABLED` is off by default. KS-Ops writes it to every licensee server (provisioning step
+`workspace_apps`), so it is switched on once, for everyone, when Keystone's Google client passes the assessment.
 
 | | Off (today) | On (`true`) |
 |---|---|---|
 | Consent screen asks for | the 7 scopes above | the same 7 **plus `gmail.readonly`** |
-| Gmail sync worker | never started; `syncGmailOnce()` returns without touching the database or Google | starts on boot and polls every 3 minutes |
-| Mail **from** a CRM contact | not seen | written to the contact's timeline (`communications_messages`, inbound email), exactly like Outlook mail. Sequences stop on a reply, the "message received" automation fires, and the user gets a "New email" notification |
-| Mail sent **from Gmail itself** (phone, gmail.com) to a CRM contact | not seen | written to the timeline (`crm_email_log`), like Outlook's Sent Items. Mail sent from the portal is skipped because it was logged when it was sent |
+| Settings > Connections, My Profile | "Gmail inbox reading is pending Google's security review" | how many people still need to reconnect |
+| Gmail sync worker | never started; nothing touches the database or Google | every 2 minutes (and at once on a Gmail push, if set up) |
+| First sync ("history sync") | | the last 30 days (`KS_GMAIL_HISTORY_DAYS`), at most 500 messages; no notification storm |
+| Later syncs | | Gmail's history API from the stored history id; if Google no longer has it (about a week), a 7-day catch-up |
+| Mail **from** a CRM contact | not seen | on the contact's timeline (`communications_messages`, inbound email, linked to the contact's latest application), exactly like Outlook mail. Sequences stop on a reply, the "message received" automation fires, and the person gets a "New email" notification |
+| Attachments on that mail | not seen | filed to the contact's documents (like Outlook's inbound attachment worker), up to 25 MB each, inline images skipped |
+| Mail sent **from Gmail itself** (phone, gmail.com) to a CRM contact | not seen | on the timeline (`crm_email_log`, with the Gmail thread), like Outlook's Sent Items. Portal sends are skipped because they were logged when sent |
+| Read receipts ("Read: subject") | not seen | mark the original email opened, like the Outlook read-receipt worker |
+| Portal inbox for Google users | the Outlook inbox only | Communications > Gmail: threads, messages, attachments, "Save to CRM" (`/api/google/gmail`) |
 
-Turning it on does not grant the new permission by itself. Each person must **reconnect Google once** so the consent screen can ask for read access. Until they do, the sync skips their account.
+Only messages that match a CRM contact are stored (`gmail_messages`, for de-duplication and threads). Keystone never
+copies the rest of a mailbox; the inbox view reads it live from Gmail, as the Outlook inbox reads it from Microsoft.
+The never-log list applies throughout.
+
+Turning it on does not grant the new permission by itself. Each person must **reconnect Google once** so the consent
+screen can ask for read access. Until they do, the sync skips them and Connections counts them.
 
 ### 5.2 The yearly security assessment (CASA)
 
-Restricted Gmail scopes require Google's **Cloud Application Security Assessment (CASA)**:
+Restricted Gmail scopes need two things from Google: **restricted-scope verification** (Google reviews the app, the
+privacy policy and a demo video) and a **CASA** assessment (Cloud Application Security Assessment), done by an
+independent lab authorized by the App Defense Alliance. What we found in October 2026 (check the current rules in
+Google's verification email before paying anyone):
 
-- **Who does it:** an independent lab authorized by the App Defense Alliance. Google's verification email lists them.
-- **Cost:** roughly **US$500 to US$5,000 a year**, depending on the lab and the assessment tier. Google usually asks a small app for Tier 2, a lab-verified scan.
-- **How often:** **every 12 months**. Google emails a reminder before the letter of assessment expires. If it lapses, Google can block the restricted scope until it is renewed.
-- **How long it takes:** usually a few weeks. Most of that is the lab's questionnaire and scan, then fixing anything it finds.
+- **Tier:** a small app that asks for one restricted scope per user (no domain-wide delegation) is normally asked for
+  **Tier 2**: Keystone runs the lab's approved scan, the lab validates it, and Keystone answers a self-assessment
+  questionnaire of about 50 questions. Tier 3 (a full lab penetration test) is asked of bigger or riskier apps.
+- **Cost (Tier 2):** published prices run from about **US$540 to US$1,500 a year**. TAC Security (the lab Google
+  points many developers to) lists Tier 2 at about $540 to $720 (the higher price includes unlimited re-scans);
+  Netsentries about $700 to $1,500; Leviathan about $800 to $1,200; others are $1,000 and up. Tier 3, if Google asks for
+  it, is about $4,500 to $8,000.
+- **Time:** app verification is usually under a week when the demo video and justifications are ready; CASA Tier 2
+  takes about 1 to 3 weeks (5 to 20 working days, longer if the scan finds things to fix); Google can take up to a
+  week to act on the lab's letter.
+- **Every 12 months:** both the verification and the CASA letter must be renewed yearly. Google emails about 90 days
+  before, but the approval simply expires if nothing is done. Renewal is quicker when the app has not changed much.
+- **Until it is approved:** at most 100 users, an "unverified app" warning, and testing tokens that expire after 7 days.
+  That is why the switch stays off.
 
 ### 5.3 Steps to switch it on
 
-1. In the consent screen, under **Data access**, add `https://www.googleapis.com/auth/gmail.readonly`. Explain why: "Show brokers' replies from clients on the CRM timeline."
-2. Submit for restricted-scope verification. Update the demo video to show a client's email appearing on the timeline.
-3. Do the CASA assessment with an authorized lab when Google asks, and send Google the letter of assessment.
-4. After Google approves, set `GOOGLE_GMAIL_READ_ENABLED=true` on each licensee's KS-server and restart it.
-5. Ask Google users to reconnect: Settings → My Profile → Disconnect Google → Connect Google.
-6. Put a yearly reminder in the calendar for the CASA renewal.
+1. In the consent screen, under **Data access**, add `https://www.googleapis.com/auth/gmail.readonly` (only this one).
+   Justification: "Brokers see clients' replies and documents on the CRM timeline, and read their inbox inside the CRM."
+2. Submit for restricted-scope verification. Update the demo video to show a client's email arriving on the timeline,
+   its attachment filed to the client, and the Gmail inbox in the portal.
+3. When Google emails that a CASA assessment is needed, pick an authorized lab (TAC Security is the cheapest Tier 2
+   option we found), forward Google's email to it, run its scan against the KS-server and portal, answer the
+   questionnaire and fix any findings. The lab sends Google the letter of validation.
+4. After Google approves, set `KS_GOOGLE_GMAIL_READ_ENABLED=true` on **KS-Ops**, then re-run the `workspace_apps` step
+   for each licensee (or set it on each server, see KS-Ops `docs/PROVISIONING.md`) and restart the servers.
+5. Ask Google users to reconnect: Settings > My Profile > Reconnect Google. Connections shows who still has to.
+6. Put a yearly reminder in the calendar (about 3 months before the approval date) for the renewal.
+
+### 5.4 Optional: Gmail push
+
+Polling every 2 minutes is enough. For near-instant mail, per licensee server:
+
+1. In Keystone's Google Cloud project, create a Pub/Sub topic and give `gmail-api-push@system.gserviceaccount.com` the
+   **Pub/Sub Publisher** role on it.
+2. Create a push subscription to `https://<licensee server>/api/gmail-push?token=<a long random value>`.
+3. Set `KS_GOOGLE_PUBSUB_TOPIC=projects/<project>/topics/<topic>` and `KS_GOOGLE_PUBSUB_PUSH_TOKEN=<that value>` on
+   the server. The worker starts each person's Gmail watch and renews it daily (a watch lasts 7 days).
 
 ## 6. Known limits (Google only)
 
@@ -205,7 +250,7 @@ These Microsoft 365 features have no Google equivalent yet:
   - Outlook drafts and **scheduled send** are not available, because `gmail.send` cannot store drafts. The composer hides those buttons for Google users.
   - Delivery receipts are not supported. Read receipts are requested with the standard header, and the recipient's mail app decides whether to send one.
   - Attachments are capped at 25 MB per email, the same as Outlook.
-- **Inbox:** the portal's Inbox screen still reads Outlook. With Google, client email reaches the CRM through the inbox sync above, once it is switched on.
+- **Inbox:** once reading is switched on, Google users get Communications > Gmail (threads, messages, attachments, "Save to CRM"). It is read-only: no flags, folders, moving or deleting from the portal, because Keystone asks only for `gmail.readonly`. Shared mailboxes are Microsoft-only.
 - **Meetings:**
   - Google Meet meetings get a Meet link, but there are no automatic recordings, transcripts or AI summaries. Those come from the Teams transcript worker.
   - Meeting rooms and app-level (tenant-wide) calendar access stay Microsoft-only.
@@ -243,6 +288,12 @@ These Microsoft 365 features have no Google equivalent yet:
   - Google Tasks: `workers/googleTasksWorker.ts`
   - Drive folders: `googleFeatures.ts`
 
-**Gmail inbox sync:** `workers/gmailSyncWorker.ts`. It is started from `index.ts` only when `GOOGLE_GMAIL_READ_ENABLED=true`.
+**Gmail inbox reading** (KS_SERVER_GMAIL_INBOX): `modules/gmail/gmailApi.ts` (Gmail calls and message parsing),
+`modules/gmail/gmailSync.ts` (history sync, history API, timeline, attachments, receipts), `modules/gmail/gmailPush.ts`
+(Pub/Sub watch), `routes/gmail.ts` (`/api/google/gmail`), `routes/gmailPush.ts` (`/api/gmail-push`), the worker
+`workers/gmailSyncWorker.ts` (started from `index.ts` only when the switch is on), migration
+`2026_11_06_ks_gmail_inbox.sql`.
 
-**Tests:** `src/__tests__/googleOAuth.v12.test.ts` and `src/__tests__/googleWorkspace.v12.test.ts`. They include the check that the restricted scope is never requested while the switch is off.
+**Tests:** `src/__tests__/googleOAuth.v12.test.ts`, `src/__tests__/googleWorkspace.v12.test.ts`,
+`src/modules/gmail/__tests__/gmailInbox.test.ts` and `src/__tests__/ksGmailInbox.integration.test.ts`. They include the
+check that the restricted scope is never requested, and nothing reads mail, while the switch is off.

@@ -11,6 +11,7 @@ import { createHash, randomBytes } from "node:crypto";
 import {
   GOOGLE_AUTH_URL, GOOGLE_REVOKE_URL, GOOGLE_TOKEN_URL, GOOGLE_USERINFO_URL,
   googleOAuthConfig, parseScopes, requestedScopes, type GoogleOAuthConfig,
+  GMAIL_READ_PENDING_MESSAGE, SCOPE_GMAIL_READONLY, // KS_SERVER_GMAIL_INBOX
 } from "./googleConfig.js";
 import { decryptToken, encryptToken } from "./tokenCrypto.js";
 import { markWorkspaceSync } from "../../modules/o365/m365Consent.js";
@@ -248,6 +249,10 @@ export type GoogleStatus = {
   configured: boolean;
   configProblem: string | null;
   gmailReadEnabled: boolean;
+  /** KS_SERVER_GMAIL_INBOX - granted gmail.readonly (inbox reading works for this person). */
+  gmailReadGranted?: boolean;
+  /** KS_SERVER_GMAIL_INBOX - what My Profile says about inbox reading. */
+  gmailReadNote?: string;
   connected: boolean;
   status: "connected" | "reauth_required" | "not_connected";
   email: string | null;
@@ -259,7 +264,13 @@ export async function googleStatusForUser(db: Db, userId: string, problem: strin
   const row = problem ? null : await readAccount(db, userId);
   if (!row) return { ...base, connected: false, status: "not_connected", email: null, scopes: [] };
   const status = row.status === "connected" ? "connected" : "reauth_required";
-  return { ...base, connected: status === "connected", status, email: row.google_email ?? null, scopes: parseScopes(row.scopes) };
+  const scopes = parseScopes(row.scopes);
+  // KS_SERVER_GMAIL_INBOX
+  const granted = readEnabled && scopes.includes(SCOPE_GMAIL_READONLY);
+  const gmailReadNote = !readEnabled
+    ? GMAIL_READ_PENDING_MESSAGE
+    : granted ? "Client email in your Gmail reaches the CRM timeline." : "Reconnect Google once to let Keystone read your inbox, so client email reaches the CRM.";
+  return { ...base, gmailReadGranted: granted, gmailReadNote, connected: status === "connected", status, email: row.google_email ?? null, scopes };
 }
 
 /** Disconnect: revoke at Google, then forget the tokens. */
