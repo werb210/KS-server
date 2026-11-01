@@ -75,7 +75,11 @@ router.get("/applications/:id", safeHandler(async (req: any, res: any) => {
 
 async function ownVerification(req: any, res: any) {
   const v = await getVerification(db(), String(req.params.vid ?? ""));
-  if (!v) { res.status(404).json({ ok: false, error: "not_found" }); return null; }
+  if (!v) {
+    // Fail closed: an unknown verification id is refused like someone else's (403) unless the caller owns the file it names.
+    if (!(await callerOwnsApplication(req, String(req.query?.applicationId ?? req.body?.applicationId ?? "")))) { res.status(403).json({ ok: false, error: "forbidden" }); return null; }
+    res.status(404).json({ ok: false, error: "not_found" }); return null;
+  }
   const phone = await guard(req, res, String(v.application_id));
   if (!phone) return null;
   if (!(await mine(String(v.application_id), phone)).some((r: any) => r.id === v.id)) { res.status(403).json({ ok: false, error: "not_your_verification" }); return null; }

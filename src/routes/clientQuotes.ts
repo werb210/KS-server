@@ -24,11 +24,17 @@ const MESSAGES: Record<string, string> = {
   tick_to_agree: "Please tick the box to confirm.",
 };
 
+const applicationHint = (req: any) => String(req.query?.applicationId ?? req.body?.applicationId ?? "");
+
 const inPlan = async () => checkFeature(await getPlanState(pool as unknown as Q), "quotes").allowed;
 
 async function ownQuote(req: any, res: any) {
   const q = await loadQuote(db(), String(req.params.qid ?? ""));
-  if (!q || q.status === "draft") { res.status(404).json({ ok: false, error: "not_found" }); return null; }
+  if (!q || q.status === "draft") {
+    // Fail closed: an unknown quote id is refused like someone else's (403) unless the caller owns the file it names.
+    if (!(await callerOwnsApplication(req, q ? String(q.application_id) : applicationHint(req)))) { res.status(403).json({ ok: false, error: "forbidden" }); return null; }
+    res.status(404).json({ ok: false, error: "not_found" }); return null;
+  }
   if (!(await callerOwnsApplication(req, q.application_id))) { res.status(403).json({ ok: false, error: "forbidden" }); return null; }
   if (!(await inPlan())) { res.status(404).json({ ok: false, error: "not_found" }); return null; }
   return q;
