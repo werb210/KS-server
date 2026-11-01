@@ -6,11 +6,19 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 
 // KS_SERVER_v13_QUICKBOOKS - the key's env name is a parameter so QuickBooks tokens use QBO_TOKEN_ENCRYPTION_KEY.
 // KS_HUBSPOT_GAPS_1_MEETING_NOTES - Zoom tokens use ZOOM_TOKEN_ENCRYPTION_KEY.
-export type TokenKeyName = "GOOGLE_TOKEN_ENCRYPTION_KEY" | "QBO_TOKEN_ENCRYPTION_KEY" | "ZOOM_TOKEN_ENCRYPTION_KEY";
+// KS_SERVER_LENDER_API - lender connection credentials (broker API keys, portal passwords) use LENDER_CREDENTIALS_ENCRYPTION_KEY.
+export type TokenKeyName = "GOOGLE_TOKEN_ENCRYPTION_KEY" | "QBO_TOKEN_ENCRYPTION_KEY" | "ZOOM_TOKEN_ENCRYPTION_KEY" | "LENDER_CREDENTIALS_ENCRYPTION_KEY";
+
+const MISSING_KEY_ERROR: Record<TokenKeyName, string> = {
+  GOOGLE_TOKEN_ENCRYPTION_KEY: "google_token_key_missing",
+  QBO_TOKEN_ENCRYPTION_KEY: "qbo_token_key_missing",
+  ZOOM_TOKEN_ENCRYPTION_KEY: "zoom_token_key_missing",
+  LENDER_CREDENTIALS_ENCRYPTION_KEY: "lender_credentials_key_missing",
+};
 
 function keyBytes(e: NodeJS.ProcessEnv = process.env, keyName: TokenKeyName = "GOOGLE_TOKEN_ENCRYPTION_KEY"): Buffer {
   const raw = String(e[keyName] ?? "").trim();
-  if (!raw) throw new Error(keyName === "GOOGLE_TOKEN_ENCRYPTION_KEY" ? "google_token_key_missing" : keyName === "ZOOM_TOKEN_ENCRYPTION_KEY" ? "zoom_token_key_missing" : "qbo_token_key_missing");
+  if (!raw) throw new Error(MISSING_KEY_ERROR[keyName]);
   if (/^[0-9a-f]{64}$/i.test(raw)) return Buffer.from(raw, "hex");
   const b64 = Buffer.from(raw, "base64");
   if (b64.length === 32 && /^[A-Za-z0-9+/=_-]+$/.test(raw)) return b64;

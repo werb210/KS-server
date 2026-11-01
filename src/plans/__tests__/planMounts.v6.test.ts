@@ -34,6 +34,7 @@ describe("plan-gated mounts", () => {
       "/api-keys": "api_access", // KS_SERVER_SSO_API_KEYS
       "/custom-fields": "custom_fields", // KS_SERVER_v20_CRM_FIELDS (every plan)
       "/webhook-endpoints": "webhooks", // KS_SERVER_v20_WEBHOOKS
+      "/lender-connections": "lender_api", // KS_SERVER_LENDER_API
     });
     const api = Router();
     registerApiRouteMounts(api);
@@ -48,7 +49,7 @@ describe("plan-gated mounts", () => {
   });
 
   it("answers 402 on a starter copy", async () => {
-    for (const [path, feature] of [["/api/templates", "templates"], ["/api/admin/referrers", "referrer_portal"], ["/api/referrer/me", "referrer_portal"], ["/api/broker/me", "broker_portal"], ["/api/broker-imports", "broker_portal"], ["/api/watch/face", "watch_app"], ["/api/reporting", "full_reports"], ["/api/sso-settings", "sso"], ["/api/api-keys", "api_access"], ["/api/webhook-endpoints", "webhooks"]]) {
+    for (const [path, feature] of [["/api/templates", "templates"], ["/api/admin/referrers", "referrer_portal"], ["/api/referrer/me", "referrer_portal"], ["/api/broker/me", "broker_portal"], ["/api/broker-imports", "broker_portal"], ["/api/watch/face", "watch_app"], ["/api/reporting", "full_reports"], ["/api/sso-settings", "sso"], ["/api/api-keys", "api_access"], ["/api/webhook-endpoints", "webhooks"], ["/api/lender-connections", "lender_api"]]) {
       const r = await request(app).get(path);
       expect(r.status, path).toBe(402);
       expect(r.body).toMatchObject({ ok: false, error: "feature_not_in_plan", feature });

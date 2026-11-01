@@ -256,6 +256,8 @@ export const EnvSchema = z
     QBO_REDIRECT_URI: z.string().optional(), // URL (default {KS_SERVER_URL}/api/quickbooks/oauth/callback); read in services/quickbooks/qboConfig.ts
     QBO_ENVIRONMENT: z.string().optional(), // sandbox|production (default sandbox); read in services/quickbooks/qboConfig.ts
     QBO_TOKEN_ENCRYPTION_KEY: z.string().optional(), // credential (secret), 32 bytes base64; read in services/workspace/tokenCrypto.ts
+    // KS_SERVER_LENDER_API - seals lender connection credentials (broker API keys, portal passwords); unset = cannot save them
+    LENDER_CREDENTIALS_ENCRYPTION_KEY: z.string().optional(), // credential (secret), 32 bytes base64; read in lenderConnectors/store.ts
     KS_WORKSPACE_PROVIDER: z.string().optional(), // setting m365|google|both (default m365); read in licensee/settings.ts
     // KS_SERVER_SSO_API_KEYS - staff SSO (reuses MSAL_CLIENT_ID/SECRET and GOOGLE_OAUTH_CLIENT_ID/SECRET; unset = buttons hidden)
     SSO_MICROSOFT_TENANT: z.string().optional(), // Entra tenant GUID to pin SSO to (default the connected tenant / MSAL_TENANT_ID when it is a GUID, else any work account); read in sso/oidc.ts

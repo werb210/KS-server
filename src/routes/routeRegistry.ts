@@ -98,6 +98,8 @@ import pipelineRoutes from "./pipeline.js";
 import telephonyRoutes from "../telephony/routes/telephonyRoutes.js";
 import realtimeRoutes from "../voice/realtimeRoutes.js";
 import webhooksRoutes from "./webhooks.js";
+import lenderConnectionsRoutes from "./lenderConnections.js"; // KS_SERVER_LENDER_API
+import lenderWebhooksRoutes from "./lenderWebhooks.js"; // KS_SERVER_LENDER_API
 import graphWebhooksRoutes from "./graphWebhooks.js"; // BF_SERVER_GRAPH_WEBHOOKS_v1
 import webauthnRoutes from "./webauthn.js"; // BF_SERVER_WEBAUTHN_v1
 import receptionRoutes from "./reception.js"; // BF_SERVER_RECEPTION_v1
@@ -448,6 +450,10 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/pipelines", router: pipelinesRoutes }, // extra pipelines (custom_pipelines, growth 3 / pro unlimited); list on every plan
   { path: "/call-queues", router: callQueuesRoutes }, // call queues (call_queues, pro): settings, live panel, availability
   { path: "/roles", router: rolesRoutes }, // KS_SERVER_CUSTOM_ROLES - GET /me every plan; custom roles pro (gated per route)
+  // KS_SERVER_LENDER_API - lender API connections (Admin settings, staff Submit by API / sync), growth and up; the
+  // lenders' webhooks are public (address secret + signature) and check the plan inside.
+  { path: "/lender-connections", router: lenderConnectionsRoutes, feature: "lender_api" },
+  { path: "/lender-webhooks", router: lenderWebhooksRoutes },
 ];
 
 // KS_SERVER_v20_TEAMS - staff mounts whose routes address one application by id (router-relative patterns). The
@@ -468,6 +474,7 @@ export const RECORD_GUARDED_MOUNTS: Record<string, GuardRule[]> = {
   "/retention": [{ pattern: /^\/applications\/([^/]+)(?:\/|$)/, kind: "application" }],
   "/pgi": [{ pattern: /^\/referrals\/([^/]+)(?:\/|$)/, kind: "application" }],
   "/lender-referrals": [{ pattern: /^\/by-application\/([^/]+)(?:\/|$)/, kind: "application" }],
+  "/lender-connections": [{ pattern: /^\/applications\/([^/]+)(?:\/|$)/, kind: "application" }], // KS_SERVER_LENDER_API
 };
 
 export const PORTAL_ROUTE_REQUIREMENTS: Pick<ApiRoute, "method" | "path">[] = [
