@@ -59,8 +59,15 @@ export function displayName(u: Pick<MenuUser, "first_name" | "last_name">): stri
 }
 
 /** The menu a brokerage starts with, built from its own active staff: 1 rings everyone; 2-9 each person by name. */
+// KS_SERVER_v864_CONFERENCE_KEY - meeting invitations say "call the main line, press 3, then enter the access code", the
+// same as Boreal's. The default menu therefore keeps key 3 for the meeting dial-in and numbers people 2, 4, 5 ... 9
+// (before, the second person sat on 3, so a caller who pressed 3 and paused reached that person instead of the
+// meeting). "3" + code + "#" in one go still joins whatever the menu is.
+export const MEETING_KEY = "3";
+const PERSON_KEYS = DIGITS.filter((d) => d !== "1" && d !== MEETING_KEY);
+
 export function defaultMenu(companyName: string, users: MenuUser[]): PhoneMenu {
-  const staff = users.filter((u) => UUID.test(u.id)).slice(0, 8);
+  const staff = users.filter((u) => UUID.test(u.id)).slice(0, PERSON_KEYS.length);
   const options: MenuOption[] = [];
   if (staff.length === 1) {
     options.push({ digit: "1", label: displayName(staff[0]!), keywords: [], target: { type: "user", userId: staff[0]!.id } });
@@ -68,8 +75,12 @@ export function defaultMenu(companyName: string, users: MenuUser[]): PhoneMenu {
     options.push({ digit: "1", label: "the next available person", keywords: ["sales", "apply", "new", "loan", "financing"], target: { type: "group", userIds: staff.map((u) => u.id), strategy: "simultaneous" } });
     staff.forEach((u, i) => {
       const first = String(u.first_name ?? "").trim();
-      options.push({ digit: DIGITS[i + 1]!, label: `${displayName(u)}`, keywords: first ? [first.toLowerCase()] : [], target: { type: "user", userId: u.id } });
+      options.push({ digit: PERSON_KEYS[i]!, label: `${displayName(u)}`, keywords: first ? [first.toLowerCase()] : [], target: { type: "user", userId: u.id } });
     });
+  }
+  if (staff.length > 0) {
+    options.push({ digit: MEETING_KEY, label: "a meeting", keywords: ["meeting", "conference"], target: { type: "meeting" } });
+    options.sort((a, b) => a.digit.localeCompare(b.digit));
   }
   return {
     greeting: { mode: "tts", text: `Thank you for calling ${companyName}.`, audioId: null },

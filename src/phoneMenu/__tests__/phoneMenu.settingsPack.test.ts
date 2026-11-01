@@ -55,9 +55,10 @@ describe("the menu rules", () => {
     const m = defaultMenu("Acme Capital", users);
     expect(m.greeting.text).toBe("Thank you for calling Acme Capital.");
     expect(m.options.map((o) => [o.digit, o.label, o.target.type])).toEqual([
-      ["1", "the next available person", "group"], ["2", "Jane Smith", "user"], ["3", "Raj Patel", "user"],
+      // KS_SERVER_v864_CONFERENCE_KEY - key 3 is the meeting dial-in, as the invitations say.
+      ["1", "the next available person", "group"], ["2", "Jane Smith", "user"], ["3", "a meeting", "meeting"], ["4", "Raj Patel", "user"],
     ]);
-    expect(defaultMenu("Acme", [users[0]!]).options).toHaveLength(1);
+    expect(defaultMenu("Acme", [users[0]!]).options.map((o) => o.digit)).toEqual(["1", "3"]);
     expect(defaultMenu("Acme", []).options).toEqual([]);
     expect(JSON.stringify(m)).not.toMatch(/Todd|Andrew|Boreal|Risk Management|underwriting/i);
   });
