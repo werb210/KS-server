@@ -163,6 +163,8 @@ import dataImportRoutes from "./dataImport.js"; // KS_SERVER_v16_DATA_IMPORT
 import fraudRoutes from "./fraud.js"; // KS_SERVER_v9_FRAUD
 import kycRoutes from "./kyc.js"; // KS_SERVER_v22_KYC
 import clientKycRoutes from "./clientKyc.js"; // KS_SERVER_v22_KYC
+import quotesRoutes from "./quotes.js"; // KS_SERVER_v23_QUOTES
+import clientQuotesRoutes from "./clientQuotes.js"; // KS_SERVER_v23_QUOTES
 import retentionRoutes from "./retention.js"; // KS_SERVER_v14_RETENTION
 import pgiRoutes from "./pgi.js"; // KS_SERVER_v11_PGI
 import betaRoutes from "./beta.js"; // KS_SERVER_BETA_v1
@@ -407,6 +409,8 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/fraud", router: fraudRoutes }, // KS_SERVER_v9_FRAUD - staff; individual checks gated per route
   { path: "/kyc", router: kycRoutes }, // KS_SERVER_v22_KYC - staff (growth+, id_verification), Admin settings, public vendor webhook
   { path: "/client/kyc", router: clientKycRoutes }, // KS_SERVER_v22_KYC - the applicant's own verifications (OTP phone)
+  { path: "/quotes", router: quotesRoutes }, // KS_SERVER_v23_QUOTES - staff, growth+ (quotes)
+  { path: "/client/quotes", router: clientQuotesRoutes }, // KS_SERVER_v23_QUOTES - the client's own sent quotes (OTP phone)
   { path: "/retention", router: retentionRoutes }, // KS_SERVER_v14_RETENTION - staff status; Admin holds and report
   { path: "/pgi", router: pgiRoutes }, // KS_SERVER_v11_PGI - PGI referrals to the insurance partner (every plan)
   { path: "/beta", router: betaRoutes }, // KS_SERVER_BETA_v1 - beta feature flags and Labs (flags public, rest staff/Admin)
@@ -455,6 +459,7 @@ export const RECORD_GUARDED_MOUNTS: Record<string, GuardRule[]> = {
   "/banking": [{ pattern: /^\/applications\/([^/]+)(?:\/|$)/, kind: "application" }],
   "/fraud": [{ pattern: /^\/applications\/([^/]+)(?:\/|$)/, kind: "application" }],
   "/kyc": [{ pattern: /^\/applications\/([^/]+)(?:\/|$)/, kind: "application" }], // KS_SERVER_v22_KYC
+  "/quotes": [{ pattern: /^\/applications\/([^/]+)(?:\/|$)/, kind: "application" }], // KS_SERVER_v23_QUOTES
   "/retention": [{ pattern: /^\/applications\/([^/]+)(?:\/|$)/, kind: "application" }],
   "/pgi": [{ pattern: /^\/referrals\/([^/]+)(?:\/|$)/, kind: "application" }],
   "/lender-referrals": [{ pattern: /^\/by-application\/([^/]+)(?:\/|$)/, kind: "application" }],

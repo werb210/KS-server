@@ -90,6 +90,9 @@ export const FEATURES: readonly FeatureDef[] = [
   // and up. Each completed vendor check is counted (usage kind id_check): some are included each month, the rest are
   // billed by Keystone operations like minutes and texts (src/plans/idChecks.ts).
   { key: "id_verification", label: "ID and selfie verification of applicants and guarantors (some checks included each month)", plan: "growth" },
+  // KS_SERVER_v23_QUOTES - quotes: an offer summary built from the lender offers on a file, a branded PDF and client
+  // acceptance in the client app, growth and up.
+  { key: "quotes", label: "Quotes: compare lender offers for the client, branded PDF and acceptance in the client app", plan: "growth" },
   // pro
   { key: "multiple_lines", label: "Multiple business lines and a direct line for each person", plan: "pro" },
   // KS_SERVER_MARKETING_ADDON - Starter and Growth see Google Ads results only; the full tools are Pro (or the add-on).
