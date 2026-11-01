@@ -529,6 +529,11 @@ export async function start(): Promise<void> {
     await workerStagger();
     try { const w = startLeadScoreWorker(pool); workerStops.push(w.stop); console.log("[startup] lead-score worker started"); }
     catch (err) { console.error("[startup] lead-score worker failed to start:", err); }
+    // KS_SERVER_ACTIVE_CONTRACTS - funded files become contracts; renewal engine; lender statement intake (hourly, Growth+ only).
+    const { startActiveContractsWorker } = await import("./workers/activeContractsWorker.js");
+    await workerStagger();
+    try { const w = startActiveContractsWorker(pool); workerStops.push(w.stop); console.log("[startup] active-contracts worker started"); }
+    catch (err) { console.error("[startup] active-contracts worker failed to start:", err); }
     // KS_SERVER_v8_OPS_LINK - daily usage reports to Keystone operations.
     const { startUsageReportWorker } = await import("./workers/usageReportWorker.js");
     await workerStagger();
