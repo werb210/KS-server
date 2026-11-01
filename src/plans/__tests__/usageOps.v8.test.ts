@@ -168,12 +168,14 @@ describe("periods in the licensee's time zone", () => {
 describe("pooled allowances and overage", () => {
   it("per-seat allowance x seats, plus the trial bonus during a trial; assistant chats unlimited on pro and trial", () => {
     const starter = rowToState({ plan: "starter" });
-    expect(pooledAllowances(starter, 3, NOW)).toEqual({ minutes: 150, texts: 300, assistant_chats: 200, storage_bytes: 30 * GB });
+    // KS_SERVER_MARKETING_ADDON - campaign emails and signings are per brokerage; the trial includes the Marketing add-on.
+    const mk = (campaign_emails: number, bonus_marketing_texts = 0) => ({ campaign_emails, signings: 4, bonus_marketing_texts });
+    expect(pooledAllowances(starter, 3, NOW)).toEqual({ minutes: 150, texts: 300, assistant_chats: 200, storage_bytes: 30 * GB, ...mk(500) });
     expect(pooledAllowances(rowToState({ plan: "growth" }), 2, NOW)).toMatchObject({ minutes: 1000, texts: 1000, assistant_chats: 1000 });
     expect(pooledAllowances(rowToState({ plan: "pro", extra_storage_blocks: 1 }), 2, NOW))
-      .toEqual({ minutes: 3000, texts: 3000, assistant_chats: null, storage_bytes: 100 * GB + 50 * GB });
+      .toEqual({ minutes: 3000, texts: 3000, assistant_chats: null, storage_bytes: 100 * GB + 50 * GB, ...mk(2500) });
     const trial = rowToState({ plan: "starter", trial_started_at: "2026-10-20T00:00:00Z", trial_ends_at: "2026-11-03T00:00:00Z" });
-    expect(pooledAllowances(trial, 3, NOW)).toEqual({ minutes: 450, texts: 600, assistant_chats: null, storage_bytes: 150 * GB });
+    expect(pooledAllowances(trial, 3, NOW)).toEqual({ minutes: 450, texts: 600, assistant_chats: null, storage_bytes: 150 * GB, ...mk(12500, 1000) });
     expect(pooledAllowances(starter, 0, NOW).minutes).toBe(50); // at least one seat
     expect(overage(120, 100)).toBe(20);
     expect(overage(80, 100)).toBe(0);
@@ -243,8 +245,9 @@ describe("GET /api/plan usage and GET /api/plan/usage-report", () => {
       overage: { minutes: 0, texts: 50 }, extra_storage_blocks: 0,
     });
     expect(Object.keys(r.body).sort()).toEqual([
-      "allowances", "assistant_chats", "effective_plan", "extra_storage_blocks", "generated_at", "licensee_id", "minutes",
-      "overage", "period", "plan", "seats", "storage_bytes", "texts", "trial",
+      "addons", "allowances", "assistant_chats", "campaign_emails", "effective_plan", "extra_storage_blocks", "generated_at",
+      "licensee_id", "marketing_addon", "marketing_texts", "minutes", "overage", "period", "plan", "seats", "signings",
+      "storage_bytes", "texts", "trial",
     ]);
   });
 });

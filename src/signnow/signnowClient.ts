@@ -1,5 +1,8 @@
 // BF_SERVER_BLOCK_v201_SIGNNOW_REAL_BUILD_v1
 import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+// KS_SERVER_MARKETING_ADDON - every signature request SignNow accepts is metered here, the one place invites are made:
+// one signing per signer (4 a month included, then $2.50 each on the next bill). Never blocks a signing.
+import { countSignings } from "../plans/meters.js";
 const BASE_URL = process.env.SIGNNOW_API_BASE_URL || "https://api.signnow.com";
 export class SignNowError extends Error { constructor(message: string, public readonly status?: number, public readonly body?: unknown) { super(message); this.name = "SignNowError"; } }
 export function isApiKeyConfigured(): boolean { return (process.env.SIGNNOW_API_KEY ?? "").trim().length > 0; }
@@ -17,7 +20,9 @@ export async function uploadDocument(pdfBytes: Uint8Array, filename: string): Pr
 export type SendInviteParams = { documentId: string; signerEmail: string; signerName?: string; fromEmail: string; subject?: string; message?: string; };
 export async function sendInvite(p: SendInviteParams): Promise<{ inviteId?: string }> {
   const payload: Record<string, unknown> = { to: [{ email: p.signerEmail, role_id: "", role: "Signer 1", order: 1, ...(p.signerName ? { name: p.signerName } : {}) }], from: p.fromEmail, subject: p.subject ?? "Please sign your loan application", message: p.message ?? `Please review and sign your ${brandName()} loan application.` };
-  const body = (await signnowFetch(`/document/${encodeURIComponent(p.documentId)}/invite`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })) as { id?: string }; return { inviteId: body?.id };
+  const body = (await signnowFetch(`/document/${encodeURIComponent(p.documentId)}/invite`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })) as { id?: string };
+  await countSignings([{ document: p.documentId, email: p.signerEmail, role: "Signer 1" }]);
+  return { inviteId: body?.id };
 }
 
 // BF_SERVER_BLOCK_v712_EMBEDDED_GROUP_SIGNING_v1
@@ -101,6 +106,7 @@ export async function createEmbeddedGroupInvite(groupId: string, documentIds: st
   const body = (await signnowFetch(`/v2/document-groups/${encodeURIComponent(groupId)}/embedded-invites`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })) as { data?: { id?: string }; id?: string };
   const inviteId = body?.data?.id ?? body?.id;
   if (typeof inviteId !== "string") throw new SignNowError("SignNow embedded group invite returned no id", undefined, body);
+  await countSignings(signers.map((signer) => ({ document: groupId, email: signer.email, role: signer.roleName })));
   return { inviteId };
 }
 // BF_SERVER_BLOCK_v203_SIGNNOW_ACCORD_GROUP_v1
@@ -114,6 +120,7 @@ export async function uploadDocumentWithFieldExtract(pdfBytes: Uint8Array, filen
 export async function sendGroupEmailInvite(groupId: string, signer: EmbeddedSigner & { fromEmail: string; order?: number }): Promise<{ inviteId?: string }> {
   const payload = { invite: { invite_steps: [{ order: signer.order ?? 2, invite_emails: [{ email: signer.email, ...(signer.name ? { full_name: signer.name } : {}), role_name: signer.roleName }] }] } };
   const body = (await signnowFetch(`/documentgroup/${encodeURIComponent(groupId)}/groupinvite`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })) as { id?: string; data?: { id?: string } };
+  await countSignings([{ document: groupId, email: signer.email, role: signer.roleName }]);
   return { inviteId: body?.data?.id ?? body?.id };
 }
 export async function createEmbeddedGroupLink(groupId: string, inviteId: string, email: string): Promise<{ url: string; expiresAt: string | null }> {

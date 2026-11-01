@@ -35,6 +35,12 @@ import { renderBrandedEmail, type BrandedEmailFields } from "../services/emailTe
 import { resolveScheduledAt, SendScheduleError } from "../services/sendSchedule.js"; // BF_SERVER_SEND_LATER_v35
 import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
+// KS_SERVER_MARKETING_ADDON - the plan's marketing limits, the campaign email allowance and the add-on's tools.
+import {
+  campaignEmailBudget, campaignEmailLimitMessage, checkMarketingTool, currentMarketingLimits, personOf, requireMarketingTool,
+} from "../plans/marketingGate.js";
+import { parseCampaignOptions, type CampaignOptions } from "../marketing/campaignRunner.js";
+import campaignReportRoutes from "../marketing/campaignReport.js";
 
 
 const router = Router();
@@ -42,9 +48,47 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireCapability([CAPABILITIES.MARKETING_VIEW]));
 // KS_SERVER_v6_PLANS - path-scoped plan gates (a bare router.use(gate) here would gate every marketing route).
-router.use(["/ad-waste", "/ad-keywords", "/ads-story", "/ads-dropoff", "/ad-clicks", "/attribution-health", "/google-ads", "/customer-match"], requireFeature("ad_attribution"));
+// KS_SERVER_MARKETING_ADDON - Google Ads: every plan sees the results (the spend report and its history); the rest of
+// the Google Ads tools (attribution, ad-waste, Customer Match, AI suggestions, conversions) are Pro, or come with the
+// Marketing add-on for Admins and up to 3 Marketing users.
+const adsFullGate = requireMarketingTool("google_ads_full");
+export function isAdsResultsRequest(method: string, baseUrl: string, path: string): boolean {
+  return method === "GET" && /\/google-ads$/.test(baseUrl) && (path === "/" || path === "" || path === "/history");
+}
+router.use(["/ad-waste", "/ad-keywords", "/ads-story", "/ads-dropoff", "/ad-clicks", "/attribution-health", "/google-ads", "/customer-match"], (req: any, res: any, next: any) => {
+  if (isAdsResultsRequest(req.method, String(req.baseUrl ?? ""), String(req.path ?? ""))) return next();
+  return adsFullGate(req, res, next);
+});
 router.use("/ads-visitors", requireFeature("visitor_tracking"));
-router.use(["/templates", "/email/template", "/email/send-template"], requireFeature("templates"));
+// KS_SERVER_MARKETING_ADDON - Microsoft Clarity is session replay: Growth and Pro, or the Marketing add-on.
+router.use("/clarity", requireMarketingTool("session_replay"));
+// KS_SERVER_MARKETING_ADDON - campaign templates (the branded email, saved email and text templates) are on every plan.
+// Message templates and snippets (/api/templates) stay Growth and up.
+router.use(campaignReportRoutes);
+
+/**
+ * KS_SERVER_MARKETING_ADDON - checks before an email campaign is queued: the send options (A/B subject test, each
+ * person's best time) need the Marketing add-on, and without the add-on the campaign must fit in what is left of the
+ * month's campaign emails. Sends the refusal and returns null, or returns the options.
+ */
+async function campaignPreflight(req: any, res: any, subject: string, total: number): Promise<CampaignOptions | null> {
+  const parsed = parseCampaignOptions(req.body ?? {}, subject);
+  if (!parsed.ok) { res.status(400).json({ error: { code: parsed.error, message: parsed.message } }); return null; }
+  for (const [on, tool] of [[Boolean(parsed.value.ab), "ab_test"], [Boolean(parsed.value.sendTime), "send_time"]] as const) {
+    if (!on) continue;
+    const c = await checkMarketingTool(pool as any, tool, personOf(req));
+    if (!c.allowed) { res.status(c.status).json({ ...c.body, error: { code: c.body.error, message: c.body.message } }); return null; }
+  }
+  const budget = await campaignEmailBudget(pool as any);
+  if (budget.remaining !== null && total > budget.remaining) {
+    res.status(409).json({
+      error: { code: "campaign_email_limit", message: campaignEmailLimitMessage(budget, total) },
+      remaining: budget.remaining, allowance: budget.allowance, total,
+    });
+    return null;
+  }
+  return parsed.value;
+}
 router.use(adSpendAnalysisRoutes);
 router.use(adsStoryRoutes); // BF_SERVER_ADS_STORY_v707
 router.use(customerMatchRoutes); // BF_SERVER_CUSTOMER_MATCH_LISTS_v711
@@ -842,12 +886,14 @@ router.post("/email/send", safeHandler(async (req: any, res: any) => {
     }
     throw err;
   }
+  const options = await campaignPreflight(req, res, subject, total); // KS_SERVER_MARKETING_ADDON
+  if (!options) return;
   const job = await pool.query<{ id: string; not_before: string }>(
     `INSERT INTO marketing_send_jobs (channel, silo, tag, payload, total, created_by, not_before)
      VALUES ('email', $1, $2, $3, $4, $5, $6::timestamptz) RETURNING id, not_before`,
     // BF_SERVER_EMAIL_TWO_COLUMN_ONLY_v15 - `resend` rides along in the payload
     // so the worker that picks this job up honours it too.
-    [silo, tag, JSON.stringify({ subject, html: htmlOut, tags: includeTags, excludeTags, templateId, resend: b.resend === true }), total, req.user?.userId ?? null, schedule.at.toISOString()],
+    [silo, tag, JSON.stringify({ subject, html: htmlOut, tags: includeTags, excludeTags, templateId, resend: b.resend === true, ...options }), total, req.user?.userId ?? null, schedule.at.toISOString()],
   );
   respondOk(res, { configured: true, queued: true, jobId: job.rows[0].id, total, notBefore: job.rows[0].not_before, holdMinutes: SEND_HOLD_MINUTES, scheduled: schedule.scheduled });
 }));
@@ -970,6 +1016,16 @@ router.post("/sms/send", safeHandler(async (req: any, res: any) => {
   // email exists, so the number shown must be computed the same way.
   const total = await countSmsRecipients(pool, silo, tag, includeTags, excludeTags, Boolean(fbHtml));
   if (total === 0) { respondOk(res, { configured: true, recipients: 0, smsSent: 0, emailSent: 0, failed: 0 }); return; }
+  // KS_SERVER_MARKETING_ADDON - "send one text to many": 50 / 250 / 500 people per send on Starter / Growth / Pro,
+  // 1,000 with the Marketing add-on.
+  const textLimit = (await currentMarketingLimits(pool as any)).text_to_many;
+  if (total > textLimit) {
+    res.status(400).json({
+      error: { code: "text_to_many_limit", message: `This text would go to ${total.toLocaleString("en-CA")} people. One text campaign can go to at most ${textLimit.toLocaleString("en-CA")} people on your plan. Choose a smaller audience, or ask an Admin about the Marketing add-on (1,000 people per send).` },
+      total, limit: textLimit,
+    });
+    return;
+  }
   // BF_SERVER_SMS_SEND_SAFETY_v710
   const expected = b.expectedCount === undefined || b.expectedCount === null ? null : Number(b.expectedCount);
   if (expected !== null && Number.isFinite(expected) && expected !== total) {
@@ -1008,7 +1064,7 @@ router.get("/sms/audience-count", safeHandler(async (req: any, res: any) => {
   const silo = resolveSiloFromRequest(req);
   const tag = typeof req.query.tag === "string" && req.query.tag.trim() ? req.query.tag.trim() : null;
   const n = await countSmsRecipients(pool, silo, tag, tagArr(req.query.include), tagArr(req.query.exclude), req.query.fallback === "1");
-  respondOk(res, { n });
+  respondOk(res, { n, limit: (await currentMarketingLimits(pool as any)).text_to_many }); // KS_SERVER_MARKETING_ADDON
 }));
 
 router.get("/clarity", safeHandler(async (req: any, res: any) => {
@@ -1128,7 +1184,8 @@ router.get("/email/audience-count", safeHandler(async (req: any, res: any) => {
   const include = tagArr(req.query.include);
   const exclude = tagArr(req.query.exclude);
   const n = await countEmailRecipients(pool, silo, null, include, exclude);
-  respondOk(res, { n });
+  const budget = await campaignEmailBudget(pool as any); // KS_SERVER_MARKETING_ADDON
+  respondOk(res, { n, campaignEmails: { used: budget.used, allowance: budget.allowance, remaining: budget.remaining, addon: budget.addon } });
 }));
 
 router.post("/email/send-template", safeHandler(async (req: any, res: any) => {
@@ -1174,11 +1231,13 @@ router.post("/email/send-template", safeHandler(async (req: any, res: any) => {
     }
     throw err;
   }
+  const options = await campaignPreflight(req, res, subject, total); // KS_SERVER_MARKETING_ADDON
+  if (!options) return;
   const job = await pool.query<{ id: string; not_before: string }>(
     `INSERT INTO marketing_send_jobs (channel, silo, tag, payload, total, created_by, not_before) VALUES ('email', $1, $2, $3, $4, $5, $6::timestamptz) RETURNING id, not_before`,
     // BF_SERVER_EMAIL_TWO_COLUMN_ONLY_v15 - `resend` rides along in the payload
     // so the worker that picks this job up honours it too.
-    [silo, tag, JSON.stringify({ subject, html: htmlOut, tags: includeTags, excludeTags, templateId, resend: b.resend === true }), total, req.user?.userId ?? null, schedule.at.toISOString()],
+    [silo, tag, JSON.stringify({ subject, html: htmlOut, tags: includeTags, excludeTags, templateId, resend: b.resend === true, ...options }), total, req.user?.userId ?? null, schedule.at.toISOString()],
   );
   respondOk(res, { configured: true, queued: true, jobId: job.rows[0].id, total, notBefore: job.rows[0].not_before, holdMinutes: SEND_HOLD_MINUTES, scheduled: schedule.scheduled });
 }));
@@ -1489,6 +1548,18 @@ router.post("/sequences", requireAuth, safeHandler(async (req: any, res: any) =>
 router.post("/sequences/:id/activate", requireAuth, safeHandler(async (req: any, res: any) => {
   const silo = resolveSiloFromRequest(req);
   const id = String(req.params.id);
+  // KS_SERVER_MARKETING_ADDON - sequences running at once: 2 / 5 / 10 on Starter / Growth / Pro, unlimited with the add-on.
+  const seqLimit = (await currentMarketingLimits(pool as any)).sequences;
+  if (seqLimit !== null) {
+    const running = await pool.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM marketing_sequences WHERE status = 'active' AND id::text <> $1`, [id]);
+    if ((running.rows[0]?.n ?? 0) >= seqLimit) {
+      res.status(409).json({
+        error: { code: "sequence_limit", message: `${seqLimit} sequences are already running, the most your plan allows at once. Pause one first, or ask an Admin about the Marketing add-on (unlimited sequences).` },
+        limit: seqLimit,
+      });
+      return;
+    }
+  }
   const upd = await pool.query(`UPDATE marketing_sequences SET status='active', updated_at=now() WHERE id=$1 AND silo=$2 RETURNING id`, [id, silo]);
   if (upd.rowCount === 0) { respondOk(res, { error: "not found" }); return; }
   const enrolled = await enrollSequence(pool, id);

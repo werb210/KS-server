@@ -91,7 +91,7 @@ describe("KS v8 usage and ops link (real Postgres)", () => {
     await recordOutboundText(db, { sid: "SM-v8-2" });
     await pool.query(`UPDATE usage_events SET occurred_at = $1 WHERE ref LIKE 'SM-v8-%'`, [at(50)]);
     const c = await usageCounts(db, PERIOD, TZ);
-    expect(c).toEqual({ minutes: 3, texts: 3, assistant_chats: 2 }); // 61 s -> 2, 30 s -> 1; the -5 min call is February
+    expect(c).toEqual({ minutes: 3, texts: 3, assistant_chats: 2, campaign_emails: 0, marketing_texts: 0, signings: 0 }); // KS_SERVER_MARKETING_ADDON meters; 61 s -> 2, 30 s -> 1; the -5 min call is February
     const m = await pool.query(CALL_MINUTES_SQL, [start.toISOString(), at(60 * 24)]);
     expect(Number(m.rows[0].minutes)).toBe(3);
   });

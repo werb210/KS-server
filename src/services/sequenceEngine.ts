@@ -6,6 +6,7 @@ import type { Pool } from "pg";
 import { contactHasFraudApplication } from "./fraud/fraudGuard.js";
 import { randomUUID } from "crypto";
 import { sendOne, mergeFields } from "./sendgridService.js";
+import { meter } from "../plans/meters.js"; // KS_SERVER_MARKETING_ADDON
 import { renderMarketingSms, sendMarketingSms, trackedLink, lookupLineType } from "./marketingSms.js";
 import { renderBrandedEmail } from "./emailTemplateRender.js";
 import { isCanadianMobile } from "./smsConsent.js";
@@ -335,6 +336,15 @@ async function processClaimed(pool: Pool, en: any): Promise<void> {
     } else {
       const blocked = !c.email || c.marketing_opt_out;
       if (!blocked) {
+        // KS_SERVER_MARKETING_ADDON - sequence emails are campaign emails: without the add-on they wait (the step is
+        // tried again in 6 hours, and from the 1st the new month's allowance applies).
+        const { campaignEmailBudget } = await import("../plans/marketingGate.js");
+        const budget = await campaignEmailBudget(pool as any);
+        if (budget.remaining !== null && budget.remaining <= 0) {
+          console.warn("[sequence] campaign email allowance used up; step waits", { enrollmentId: en.id, period: budget.period });
+          await bump(pool, en.id, 360, en.quiet_start, en.quiet_end);
+          return;
+        }
         const html = effHtml && String(effHtml).trim()
           ? String(effHtml)
           : renderBrandedEmail({ headline: "", heroUrl: "", heroLink: "", body: String(effBody || ""), ctaLabel: "", ctaUrl: "", image2Url: "", image2Link: "" });
@@ -342,8 +352,10 @@ async function processClaimed(pool: Pool, en: any): Promise<void> {
         const es = await pool.query<{ id: string }>(`INSERT INTO sequence_sends (sequence_id, contact_id, silo, channel) VALUES ($1,$2,$3,'email') RETURNING id`, [en.sequence_id, c.id, c.silo || "BF"]);
         const esId = es.rows[0]?.id || "";
         const r = await sendOne({ to: String(c.email), subject: mergeFields(String(effSubject || ""), vars), html: mergeFields(html, vars), contactId: c.id, customArgs: esId ? { seq_send_id: esId } : undefined });
-        if (r.ok) await logStep(pool, c.id, en.sequence_id, idx, "email");
-        else {
+        if (r.ok) {
+          await logStep(pool, c.id, en.sequence_id, idx, "email");
+          await meter("campaign_email", esId ? `seq:${esId}` : null); // KS_SERVER_MARKETING_ADDON
+        } else {
           // BF_SERVER_SEQ_NO_ADVANCE_ON_SEND_FAIL_v1 - a failed send (e.g.
           // SendGrid 401 on a dead key) used to advance/complete the
           // enrollment anyway, and the pre-inserted sequence_sends row made

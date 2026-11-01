@@ -524,6 +524,11 @@ export async function start(): Promise<void> {
     await workerStagger();
     try { const w = startPhoneNumberWorker(pool); workerStops.push(w.stop); console.log("[startup] phone-number worker started"); }
     catch (err) { console.error("[startup] phone-number worker failed to start:", err); }
+    // KS_SERVER_MARKETING_ADDON - lead scores refreshed every 30 minutes while the Marketing add-on is on.
+    const { startLeadScoreWorker } = await import("./workers/leadScoreWorker.js");
+    await workerStagger();
+    try { const w = startLeadScoreWorker(pool); workerStops.push(w.stop); console.log("[startup] lead-score worker started"); }
+    catch (err) { console.error("[startup] lead-score worker failed to start:", err); }
     // KS_SERVER_v8_OPS_LINK - daily usage reports to Keystone operations.
     const { startUsageReportWorker } = await import("./workers/usageReportWorker.js");
     await workerStagger();

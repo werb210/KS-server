@@ -5,6 +5,7 @@ import { requireAuth } from "../../middleware/auth.js";
 import { safeHandler } from "../../middleware/safeHandler.js";
 import { commissionRate } from "../../services/googleDataManager.js";
 import { QUALIFIED_STATES } from "../../services/googleAdsLeadSignals.js";
+import { clampDays, visitorHistoryDays } from "../../plans/marketingGate.js"; // KS_SERVER_MARKETING_ADDON
 
 const router = Router();
 router.use(requireAuth);
@@ -51,7 +52,12 @@ export async function storyReport(days: number, by: StoryBy) {
   return { days, by, commissionRate: commissionRate(), spendAvailable:Boolean(level), rows, totals:{...totals, roas: totals.spend > 0 ? Math.round(totals.commission/totals.spend*100)/100 : null} };
 }
 
-router.get("/ads-visitors", safeHandler(async (req: any, res: any) => { res.json(await visitorsReport(windowDays(req.query?.days,30), String(req.query?.filter??"all"))); }));
+// KS_SERVER_MARKETING_ADDON - the window is cut to the visitor history this person may see (30 / 90 / 365 days by plan;
+// full history with the Marketing add-on).
+router.get("/ads-visitors", safeHandler(async (req: any, res: any) => {
+  const history = await visitorHistoryDays(req);
+  res.json({ ...(await visitorsReport(clampDays(windowDays(req.query?.days, 30), history), String(req.query?.filter ?? "all"))), history_days: history });
+}));
 // BF_SERVER_VISITOR_AD_LOOKUP_v713 - Google's own checkers (AdsBot, Googlebot and
 // friends) open every ad's final URL with its UTM tags but no click id, one page,
 // no time on site. They are not visitors; leave them out.
@@ -61,7 +67,7 @@ export async function visitorsReport(days: number, filter: string) { const where
   const {rows}=await pool.query(`SELECT s.session_id,s.contact_id,c.name AS contact_name,c.phone AS contact_phone,s.first_seen_at,s.last_seen_at,s.landing_page,s.referrer,(COALESCE(s.gclid,s.gbraid,s.wbraid) IS NOT NULL) AS from_ad,s.utm_source,s.utm_medium,s.utm_campaign,s.utm_term,COALESCE(att.campaign_name,s.ad_campaign_name) AS campaign_name,COALESCE(att.ad_group_name,s.ad_group_name) AS ad_group_name,att.ad_id,COALESCE(att.keyword,s.ad_keyword) AS keyword,COALESCE(att.click_date,s.ad_click_date) AS click_date,(SELECT COUNT(*)::int FROM visitor_events e WHERE e.session_id=s.session_id) AS events,(SELECT COUNT(*)::int FROM visitor_events e WHERE e.session_id=s.session_id AND e.event_type IN ('page_view', 'pageview')) AS pages,(SELECT COALESCE(SUM(e.dwell_ms),0)::bigint FROM visitor_events e WHERE e.session_id=s.session_id) AS dwell_ms,app.id AS application_id,app.step,app.submitted_at,app.pipeline_state,app.funded_amount FROM visitor_sessions s LEFT JOIN contacts c ON c.id::text=s.contact_id LEFT JOIN LATERAL (SELECT x.campaign_name,x.ad_group_name,x.ad_id,x.keyword,x.click_date FROM contact_ad_attribution x WHERE x.gclid=s.gclid ORDER BY x.updated_at DESC LIMIT 1) att ON true LEFT JOIN LATERAL (SELECT a.id,${STEP_SQL} AS step,a.submitted_at,a.pipeline_state,a.funded_amount FROM applications a WHERE s.contact_id IS NOT NULL AND a.contact_id::text=s.contact_id AND a.silo='BF' ORDER BY a.created_at DESC LIMIT 1) app ON true WHERE ${where.join(" AND ")} ORDER BY s.last_seen_at DESC LIMIT 300`,[days]);
   return {days,filter,visitors:rows};
 }
-router.get("/ads-visitors/:sessionId", safeHandler(async (req:any,res:any)=>{ const id=String(req.params?.sessionId??"").slice(0,100); const session=await pool.query(`SELECT * FROM visitor_sessions WHERE session_id=$1`,[id]); const events=await pool.query(`SELECT event_type,path,title,step,dwell_ms,meta,occurred_at FROM visitor_events WHERE session_id=$1 ORDER BY occurred_at ASC LIMIT 1000`,[id]); res.json({session:session.rows[0]??null,events:events.rows}); }));
+router.get("/ads-visitors/:sessionId", safeHandler(async (req:any,res:any)=>{ const id=String(req.params?.sessionId??"").slice(0,100); const history = await visitorHistoryDays(req); /* KS_SERVER_MARKETING_ADDON */ const session=await pool.query(`SELECT * FROM visitor_sessions WHERE session_id=$1 AND ($2::int IS NULL OR last_seen_at >= now() - ($2::int * interval '1 day'))`,[id, history]); const events=await pool.query(`SELECT event_type,path,title,step,dwell_ms,meta,occurred_at FROM visitor_events WHERE session_id=$1 ORDER BY occurred_at ASC LIMIT 1000`,[id]); res.json({session:session.rows[0]??null,events:events.rows}); }));
 router.get("/ads-dropoff", safeHandler(async (req:any,res:any)=>{ res.json(await dropoffReport(windowDays(req.query?.days))); }));
 export async function dropoffReport(days: number) { const funnel=await pool.query(`SELECT ${STEP_SQL} AS step,COUNT(*)::int AS stopped,COUNT(*) FILTER (WHERE COALESCE(a.metadata->'attribution'->>'gclid',a.metadata->'attribution'->>'gbraid',a.metadata->'attribution'->>'wbraid','')<>'')::int AS from_ad FROM applications a WHERE a.silo='BF' AND a.submitted_at IS NULL AND a.created_at >= now()-($1||' days')::interval GROUP BY 1 ORDER BY 1`,[days]); const totals=await pool.query(`SELECT COUNT(*)::int AS started,COUNT(*) FILTER (WHERE submitted_at IS NOT NULL)::int AS submitted FROM applications WHERE silo='BF' AND created_at >= now()-($1||' days')::interval`,[days]); const reasons=await pool.query(`SELECT reason,step,COUNT(*)::int AS count,MAX(created_at) AS latest FROM wizard_block_events WHERE created_at >= now()-($1||' days')::interval GROUP BY reason,step ORDER BY count DESC LIMIT 50`,[days]); const fields=await pool.query(`SELECT COALESCE(step,'') AS step,COALESCE(meta->>'field','') AS field,COUNT(*)::int AS count FROM visitor_events WHERE event_type IN ('field_abandon','form_abandon') AND occurred_at >= now()-($1||' days')::interval GROUP BY 1,2 ORDER BY count DESC LIMIT 50`,[days]); const timing=await pool.query(`SELECT step,COUNT(*)::int AS views,ROUND(AVG(dwell_ms))::int AS avg_ms FROM visitor_events WHERE step IS NOT NULL AND dwell_ms IS NOT NULL AND occurred_at >= now()-($1||' days')::interval GROUP BY step ORDER BY step`,[days]); return {days,totals:totals.rows[0]??{started:0,submitted:0},steps:funnel.rows,reasons:reasons.rows,fields:fields.rows,timing:timing.rows}; }
 export default router;

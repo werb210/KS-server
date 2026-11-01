@@ -54,6 +54,10 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "custom_fields", label: "Custom fields", plan: "starter" },
   // KS_SERVER_PLAN_FIXES - calls are recorded on every plan; playing recordings back is growth and up.
   { key: "call_recording", label: "Call recording on every plan (playback on Growth and Pro)", plan: "starter" },
+  // KS_SERVER_MARKETING_ADDON - every plan markets to its own client list at the plan's limits (src/plans/marketing.ts);
+  // Google Ads and LinkedIn Ads results and the Google Analytics connection are on every plan too.
+  { key: "marketing", label: "Marketing to your own client list: email and text campaigns, sequences, templates and a website lead form", plan: "starter" },
+  { key: "ads_results", label: "Google Ads and LinkedIn Ads results, Google Analytics connection", plan: "starter" },
   // growth
   { key: "call_recording_playback", label: "Call recording playback", plan: "growth" },
   // KS_SERVER_v20_TEAMS - teams and record visibility (all / team / own), growth and up.
@@ -69,7 +73,10 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "broker_portal", label: "Broker portal", plan: "growth" },
   // KS_SERVER_v7_NO_REPORTS_ON_STARTER - no reports on starter (Todd, Oct 22); starter keeps a basic dashboard.
   { key: "full_reports", label: "Reports", plan: "growth" },
-  { key: "visitor_tracking", label: "Website visitor tracking", plan: "growth" },
+  // KS_SERVER_MARKETING_ADDON - visitor tracking on every plan (history: 30 days Starter, 90 Growth, 12 months Pro;
+  // full history with the Marketing add-on). Session replay stays on Growth and Pro (and comes with the add-on).
+  { key: "visitor_tracking", label: "Website visitor tracking (30 days on Starter, 90 days on Growth, 12 months on Pro)", plan: "starter" },
+  { key: "session_replay", label: "Session replay of website visits", plan: "growth" },
   { key: "toll_free_number", label: "Toll-free number", plan: "growth" },
   // KS_SETTINGS_PACK_v1_NPS - the post-funding survey and review request (Growth and Pro).
   { key: "nps_survey", label: "Post-funding survey and review requests", plan: "growth" },
@@ -81,7 +88,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "custom_pipelines", label: "Extra pipelines with custom stages (Growth 3, Pro unlimited)", plan: "growth" },
   // pro
   { key: "multiple_lines", label: "Multiple business lines and a direct line for each person", plan: "pro" },
-  { key: "ad_attribution", label: "Ad attribution", plan: "pro" },
+  // KS_SERVER_MARKETING_ADDON - Starter and Growth see Google Ads results only; the full tools are Pro (or the add-on).
+  { key: "ad_attribution", label: "Google Ads tools: attribution, ad-waste report, Customer Match, Monday ads email and AI ads suggestions", plan: "pro" },
   { key: "api_access", label: "API access", plan: "pro" },
   { key: "sso", label: "Single sign-on", plan: "pro" },
   // KS_SERVER_v20_WEBHOOKS - outgoing webhooks (and Zapier Catch Hook triggers), pro.

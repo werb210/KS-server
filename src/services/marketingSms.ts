@@ -2,6 +2,7 @@
 // tracked links (signed token) so clicks drive the fallback cascade. Env-gated on
 // a marketing from-number (TWILIO_SMS_FROM, e.g. the toll-free 800 once A2P-verified).
 import { countOutboundText } from "../plans/usage.js"; // KS_SERVER_v8_USAGE - monthly text count
+import { meter } from "../plans/meters.js"; // KS_SERVER_MARKETING_ADDON
 import jwt from "jsonwebtoken";
 import { fetchTwilioClient } from "./twilio.js";
 import { config } from "../config/index.js";
@@ -103,6 +104,9 @@ export async function sendMarketingSms(to: string, body: string): Promise<{ ok: 
     const client = fetchTwilioClient();
     const msg = await client.messages.create({ to, from, body, statusCallback: `${PUBLIC_URL}/api/r/status` });
     await countOutboundText(msg as any); // KS_SERVER_v8_USAGE
+    // KS_SERVER_MARKETING_ADDON - also a marketing text: the add-on's 1,000 bonus marketing texts cover these first.
+    const sid = String((msg as any)?.sid ?? "");
+    if (sid) await meter("marketing_text", sid, Math.max(1, Math.floor(Number((msg as any)?.numSegments)) || 1));
     return { ok: true, sid: (msg as any)?.sid };
   } catch (e: any) {
     if (e?.code === 21610) return { ok: false, optedOut: true, error: "opted_out" };

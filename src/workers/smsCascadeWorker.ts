@@ -4,6 +4,7 @@
 import type { Pool } from "pg";
 import { sendOne, mergeFields } from "../services/sendgridService.js";
 import { withWorkerLock } from "./claim.js"; // BF_SERVER_v789_WORKER_CLAIM
+import { meter } from "../plans/meters.js"; // KS_SERVER_MARKETING_ADDON
 
 const TICK_MS = 5 * 60_000;
 // BF_SERVER_v789_SMS_CASCADE_ATTEMPTS - give up on a row after this many failed sends.
@@ -39,7 +40,18 @@ export async function runSmsCascadeOnce(pool: Pool): Promise<{ sent: number; fai
       LIMIT 20`,
     [SMS_CASCADE_MAX_ATTEMPTS],
   );
+  // KS_SERVER_MARKETING_ADDON - fallback emails are campaign emails: without the add-on they wait once the month's
+  // allowance is used up (they go out from the 1st), with it they are metered and extra ones billed.
+  let budget: { remaining: number | null; spent: number } | null = null;
+  if (rows.length) {
+    const { campaignEmailBudget } = await import("../plans/marketingGate.js");
+    budget = { remaining: (await campaignEmailBudget(pool as any)).remaining, spent: 0 };
+  }
   for (const r of rows) {
+    if (budget && budget.remaining !== null && budget.spent >= budget.remaining) {
+      console.warn("[sms-cascade] campaign email allowance used up; fallback emails wait", { left: rows.length - sent - failed });
+      break;
+    }
     const first = (r.name || "").trim().split(/\s+/)[0] || "there";
     const vars = { first_name: first, name: r.name || "there", email: r.email, company: r.company || "" };
     let res: { ok: boolean; status: number; error?: string };
@@ -62,6 +74,8 @@ export async function runSmsCascadeOnce(pool: Pool): Promise<{ sent: number; fai
       continue;
     }
     sent += 1;
+    if (budget) budget.spent += 1;
+    await meter("campaign_email", `cascade:${r.id}`); // KS_SERVER_MARKETING_ADDON
     try {
       await pool.query(`UPDATE sms_campaign_sends SET fallback_sent = true, fallback_at = now(), fallback_error = NULL WHERE id = $1`, [r.id]);
     } catch (err) {

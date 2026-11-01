@@ -9,6 +9,17 @@ import { clearStaffUserCache } from "../auth/staffUserState.js"; // BF_SERVER_v7
 import { recordAuditEvent } from "../modules/audit/audit.service.js";
 import { logger } from "../server/utils/logger.js";
 import { requestStaffDirectorySync } from "../staffDirectory/sync.js"; // KS_STAFF_DIRECTORY_v1
+import { assertMarketingRoleChange, MarketingSeatLimitError } from "../plans/marketingGate.js"; // KS_SERVER_MARKETING_ADDON
+
+/** KS_SERVER_MARKETING_ADDON - with the Marketing add-on on, at most 3 active people have the Marketing role. */
+export async function ensureMarketingSeat(targetUserId: string | null, next: { role?: string | null; active?: boolean }): Promise<void> {
+  try {
+    await assertMarketingRoleChange(db as any, targetUserId, next);
+  } catch (err) {
+    if (err instanceof MarketingSeatLimitError) throw new AppError(err.code, err.message, err.status);
+    throw err;
+  }
+}
 
 /**
  * Schemas
@@ -329,6 +340,14 @@ export async function adminUpdateUser(req: Request, res: Response) {
     if ((input as any).firstName) normalized.first_name = (input as any).firstName;
     if ((input as any).lastName) normalized.last_name = (input as any).lastName;
 
+    // KS_SERVER_MARKETING_ADDON - a role or status change that adds an active Marketing user checks the 3 seats.
+    if (normalized.role !== undefined || normalized.status !== undefined) {
+      await ensureMarketingSeat(String(targetId), {
+        ...(normalized.role !== undefined ? { role: String(normalized.role) } : {}),
+        ...(normalized.status !== undefined ? { active: String(normalized.status) === "ACTIVE" } : {}),
+      });
+    }
+
     const fields: string[] = [];
     const values: any[] = [];
     let idx = 1;
@@ -415,6 +434,7 @@ export async function createUser(req: Request, res: Response) {
     if (!normalizedRole) {
       throw new AppError("validation_error", "Role is invalid.", 400);
     }
+    if (normalizedRole === "Marketing") await ensureMarketingSeat(null, { role: normalizedRole, active: true }); // KS_SERVER_MARKETING_ADDON
 
     const requestedSilo = parsed.silo ?? "BF";
     const requestedSilos = Array.isArray(parsed.silos) && parsed.silos.length > 0
