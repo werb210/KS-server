@@ -86,6 +86,16 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "call_scripts", label: "Call scripts (playbooks)", plan: "growth" },
   // KS_HUBSPOT_GAPS_1_PIPELINES - extra pipelines with custom stages: Growth 3 pipelines in all, Pro unlimited.
   { key: "custom_pipelines", label: "Extra pipelines with custom stages (Growth 3, Pro unlimited)", plan: "growth" },
+  // KS_SERVER_v22_KYC - ID and selfie verification of applicants and guarantors (Entrust IDV, or manual review), growth
+  // and up. Each completed vendor check is counted (usage kind id_check): some are included each month, the rest are
+  // billed by Keystone operations like minutes and texts (src/plans/idChecks.ts).
+  { key: "id_verification", label: "ID and selfie verification of applicants and guarantors (some checks included each month)", plan: "growth" },
+  // KS_SERVER_v23_QUOTES - quotes: an offer summary built from the lender offers on a file, a branded PDF and client
+  // acceptance in the client app, growth and up.
+  { key: "quotes", label: "Quotes: compare lender offers for the client, branded PDF and acceptance in the client app", plan: "growth" },
+  // KS_SERVER_v23_FORECAST - revenue forecast from the pipeline (stage odds, close dates, categories) per rep and team
+  // against Goals, growth and up.
+  { key: "forecasting", label: "Revenue forecast: weighted pipeline, commit and best case per rep and team, against goals", plan: "growth" },
   // pro
   { key: "multiple_lines", label: "Multiple business lines and a direct line for each person", plan: "pro" },
   // KS_SERVER_MARKETING_ADDON - Starter and Growth see Google Ads results only; the full tools are Pro (or the add-on).

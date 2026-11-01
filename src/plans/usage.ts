@@ -28,6 +28,7 @@ import {
   MARKETING_ADDON, SIGNINGS, bonusTextsApplied, campaignEmailOverage, marketingAddonActive, marketingLimitsFor, signingOverage,
 } from "./marketing.js";
 import { getPlanState, type Q } from "./state.js";
+import { ID_CHECKS, idCheckUsage, type IdCheckUsage } from "./idChecks.js"; // KS_SERVER_v22_KYC
 import { seatCount, storageUsedBytes } from "./storage.js";
 
 export const OVERAGE_RATES = {
@@ -258,7 +259,7 @@ export type UsageReport = {
   allowances: PooledAllowances;
   overage: UsageOverage;
   extra_storage_blocks: number;
-};
+} & IdCheckUsage; // KS_SERVER_v22_KYC - id_checks, id_checks_included, overage_id_checks
 
 export function licenseeId(env: NodeJS.ProcessEnv = process.env): string {
   return String(env.KS_LICENSEE_ID ?? "").trim();
@@ -293,6 +294,7 @@ export async function buildUsageReport(db: Q, period: string, now: Date = new Da
     allowances: u.allowances,
     overage: u.overage,
     extra_storage_blocks: state.extra_storage_blocks,
+    ...(await idCheckUsage(db, periodBounds(period, licenseeTimeZone()), state, at)), // KS_SERVER_v22_KYC
   };
 }
 
@@ -312,6 +314,8 @@ export async function planUsageBlock(db: Q, state: PlanState, now: Date = new Da
     allowances: u.allowances,
     overage: u.overage,
     overage_rates: { ...OVERAGE_RATES },
+    // KS_SERVER_v22_KYC - ID checks this month: used, included, over, and the price of each one over.
+    id_checks: { ...(await idCheckUsage(db, periodBounds(u.period, licenseeTimeZone()), state, now)), overage_price: ID_CHECKS.overage_price },
   };
 }
 

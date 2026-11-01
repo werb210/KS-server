@@ -31,7 +31,11 @@ export async function revenueForecast() {
             ${liveStageFilter("a.pipeline_state")}
        ) x GROUP BY 1`,
   );
-  const stages = rows.map((r) => ({ stage: r.stage, files: r.files, amount: Math.round(r.amount_cad), full_commission: Math.round(r.commission_cad), odds: STAGE_ODDS[r.stage] ?? 0, expected_commission: Math.round(r.commission_cad * (STAGE_ODDS[r.stage] ?? 0)) }))
+  // KS_SERVER_v23_FORECAST - the odds are the Admin-editable stage probabilities (Reports > Forecast), STAGE_ODDS by default.
+  const { loadProbabilities } = await import("../../forecast/forecast.js");
+  const pct = await loadProbabilities(pool as any);
+  const oddsOf = (stage: string) => (pct[stage] ?? Math.round((STAGE_ODDS[stage] ?? 0) * 100)) / 100;
+  const stages = rows.map((r) => ({ stage: r.stage, files: r.files, amount: Math.round(r.amount_cad), full_commission: Math.round(r.commission_cad), odds: oddsOf(r.stage), expected_commission: Math.round(r.commission_cad * oddsOf(r.stage)) }))
     .sort((a, b) => b.odds - a.odds);
   return { stages, total: stages.reduce((s, r) => s + r.expected_commission, 0), full_total: stages.reduce((s, r) => s + r.full_commission, 0) };
 }
