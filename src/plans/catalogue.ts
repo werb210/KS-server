@@ -58,6 +58,11 @@ export const FEATURES: readonly FeatureDef[] = [
   // Google Ads and LinkedIn Ads results and the Google Analytics connection are on every plan too.
   { key: "marketing", label: "Marketing to your own client list: email and text campaigns, sequences, templates and a website lead form", plan: "starter" },
   { key: "ads_results", label: "Google Ads and LinkedIn Ads results, Google Analytics connection", plan: "starter" },
+  // KS_BROKER_TOOLS - deal tools for equipment and asset finance brokers (Todd, Nov 1): 1, 2, 3 on every plan; 4, 5, 7, 8
+  // growth and up; 9 pro. Credit bureau pulls (6) are the credit_bureau add-on, billed per pull (src/plans/addons.ts).
+  { key: "funding_conditions", label: "Funding conditions checklist", plan: "starter" },
+  { key: "invoice_reading", label: "Vendor invoice reading", plan: "starter" },
+  { key: "sales_tax", label: "Canadian sales tax in quotes and calculators", plan: "starter" },
   // growth
   { key: "call_recording_playback", label: "Call recording playback", plan: "growth" },
   // KS_SERVER_v20_TEAMS - teams and record visibility (all / team / own), growth and up.
@@ -80,6 +85,11 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "toll_free_number", label: "Toll-free number", plan: "growth" },
   // KS_SETTINGS_PACK_v1_NPS - the post-funding survey and review request (Growth and Pro).
   { key: "nps_survey", label: "Post-funding survey and review requests", plan: "growth" },
+  // KS_BROKER_TOOLS - growth and up.
+  { key: "credit_lines", label: "Approved credit lines per client", plan: "growth" },
+  { key: "rate_cards", label: "Lender rate cards and deal structuring", plan: "growth" },
+  { key: "credit_scorecards", label: "Credit scorecards and pre-decision rules", plan: "growth" },
+  { key: "contract_templates", label: "Contracts from Word templates", plan: "growth" },
   // KS_HUBSPOT_GAPS_1_PAYMENTS - payment links and pre-authorized debit for broker fees through the brokerage's own Stripe.
   { key: "payment_links", label: "Payment links and bank debit for fees (your own Stripe account)", plan: "growth" },
   // KS_HUBSPOT_GAPS_1_CALL_SCRIPTS - call scripts (playbooks) beside the dialler and on records.
@@ -108,6 +118,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "sso", label: "Single sign-on", plan: "pro" },
   // KS_SERVER_v20_WEBHOOKS - outgoing webhooks (and Zapier Catch Hook triggers), pro.
   { key: "webhooks", label: "Webhooks and Zapier", plan: "pro" },
+  // KS_BROKER_TOOLS - equipment vendors and dealers quote at the point of sale and send their customers to apply.
+  { key: "vendor_portal", label: "Vendor and dealer portal with point-of-sale quoting", plan: "pro" },
   // KS_HUBSPOT_GAPS_1_CALL_QUEUES - callers wait in line for the next free person (main line and phone-menu options).
   { key: "call_queues", label: "Call queues", plan: "pro" },
   // KS_SERVER_CUSTOM_ROLES - custom roles built from a permission matrix (per area view/create/edit/delete/export and
