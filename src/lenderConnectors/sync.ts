@@ -191,8 +191,8 @@ export async function applyRemoteUpdate(db: Q, args: {
 
   // ── funding and commission ──
   // TODO(active-contracts): Active Contracts (branch active-contracts, PR #52) is not on main yet. Once it merges,
-  // when a lender reports a funded / outstanding balance here, look up the contract
-  // (SELECT id FROM active_contracts WHERE application_id = sub.application_id) and call
+  // when a lender reports a funded / outstanding balance here, find the Active Contract whose application_id is
+  // sub.application_id and call
   // recordLenderReportedBalance(db, contractId, balance, asOf, "lender_portal") from src/activeContracts/money.ts.
   // Funded is a terminal bucket today, so polling stops at funding; keep polling funded deals if balances are wanted.
   if (update.fundedAmount !== undefined && update.fundedAmount !== null && result.bucket === "funded") {

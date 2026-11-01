@@ -111,6 +111,8 @@ describe("the permission matrix", () => {
     expect(r("GET", "/credit-summary-v2/1/export.pdf")).toEqual({ area: "applications", action: "export" });
     expect(r("GET", "/portal/documents/1")).toEqual({ area: "documents", action: "view" });
     expect(r("GET", "/portal/lender-products")).toEqual({ area: "lenders", action: "view" });
+    expect(r("POST", "/lender-connections/applications/a1/lenders/l1/submit")).toEqual({ area: "applications", action: "create" });
+    expect(r("PUT", "/lender-connections/lenders/l1")).toEqual({ area: "lenders", action: "edit" });
     expect(r("POST", "/o365/mail/send")).toEqual({ area: "communications", action: "create" });
     expect(r("GET", "/crm/inbox/m1")).toEqual({ area: "communications", action: "view" });
     expect(r("GET", "/google/gmail/threads")).toEqual({ area: "communications", action: "view" });
