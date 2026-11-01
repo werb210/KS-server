@@ -28,6 +28,14 @@ export type OptionInput = {
   fees: Fee[];
 };
 
+// KS_SERVER_v23_QUOTES_TAX_HOOK - sales tax on fees is NOT worked out here. The Canadian sales-tax helper
+// (GST/HST/PST/QST, built on the broker-tools branch) plugs in as a FeeTax: given the fees (and, from the caller,
+// the province), it returns the tax lines to add. Interest and factor cost are financial services and are never
+// taxed; only fees go through the hook. Without a hook there is no tax and every total is unchanged.
+export type TaxLine = { label: string; amount: number };
+export type FeeTax = (fees: Fee[]) => TaxLine[];
+export const NO_FEE_TAX: FeeTax = () => [];
+
 export type OptionMath = {
   payment_count: number | null;
   payment_amount: number | null;
@@ -36,6 +44,9 @@ export type OptionMath = {
   cost_of_borrowing: number | null;
   net_proceeds: number;
   estimated_apr: number | null;
+  /** KS_SERVER_v23_QUOTES_TAX_HOOK - tax on fees from the FeeTax hook; empty and 0 without one. Included in total_fees. */
+  tax_lines: TaxLine[];
+  total_tax: number;
 };
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -66,10 +77,12 @@ export function periodicIrr(netReceived: number, payment: number, n: number): nu
   return (lo + hi) / 2;
 }
 
-export function computeOption(o: OptionInput): OptionMath {
+export function computeOption(o: OptionInput, feeTax: FeeTax = NO_FEE_TAX): OptionMath {
   const amount = Math.max(0, Number(o.amount) || 0);
   const fees = (o.fees ?? []).filter((f) => Number(f.amount) > 0);
-  const totalFees = r2(fees.reduce((s, f) => s + Number(f.amount), 0));
+  const taxLines = feeTax(fees).filter((t) => Number(t.amount) > 0).map((t) => ({ label: t.label, amount: r2(Number(t.amount)) }));
+  const totalTax = r2(taxLines.reduce((s, t) => s + t.amount, 0));
+  const totalFees = r2(fees.reduce((s, f) => s + Number(f.amount), 0) + totalTax);
   const deducted = fees.filter((f) => f.deducted).reduce((s, f) => s + Number(f.amount), 0);
   const net = r2(amount - deducted);
   const n = o.payment_count && o.payment_count > 0 ? Math.round(o.payment_count) : paymentCount(o.term_months, o.payment_frequency);
@@ -92,7 +105,7 @@ export function computeOption(o: OptionInput): OptionMath {
   const received = amount - totalFees;
   const i = payment && n ? periodicIrr(received, payment, n) : null;
   const apr = i === null ? null : r2(i * PER_YEAR[o.payment_frequency] * 100);
-  return { payment_count: n, payment_amount: payment, total_fees: totalFees, total_repayment: total, cost_of_borrowing: cost, net_proceeds: net, estimated_apr: apr };
+  return { payment_count: n, payment_amount: payment, total_fees: totalFees, total_repayment: total, cost_of_borrowing: cost, net_proceeds: net, estimated_apr: apr, tax_lines: taxLines, total_tax: totalTax };
 }
 
 /** "1.35" / "1.35 factor" -> factor 1.35; "12.5%" / "12.5" -> interest 12.5. null when nothing usable. */

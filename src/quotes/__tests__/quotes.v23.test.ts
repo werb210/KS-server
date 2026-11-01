@@ -104,4 +104,17 @@ describe("the quote PDF", () => {
     expect(JSON.stringify(c)).not.toContain("payment_overridden");
     expect(c.options).toHaveLength(2);
   });
+
+  it("KS_SERVER_v23_QUOTES_TAX_HOOK - no tax without a hook; a hook's tax on fees adds to fees and cost only", async () => {
+    const { computeOption: c } = await import("../calc.js");
+    const base = { amount: 10_000, term_months: 12, rate_kind: "interest_rate" as const, rate: 10, payment_frequency: "monthly" as const, fees: [{ label: "Broker fee", amount: 500, deducted: false }] };
+    const none = c(base);
+    expect(none.tax_lines).toEqual([]);
+    expect(none.total_tax).toBe(0);
+    const taxed = c(base, (fees) => [{ label: "GST 5%", amount: fees.reduce((s, f) => s + f.amount, 0) * 0.05 }]);
+    expect(taxed.tax_lines).toEqual([{ label: "GST 5%", amount: 25 }]);
+    expect(taxed.total_fees).toBe(525);
+    expect(taxed.payment_amount).toBe(none.payment_amount);
+    expect(taxed.cost_of_borrowing).toBe((none.cost_of_borrowing ?? 0) + 25);
+  });
 });

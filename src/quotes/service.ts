@@ -15,7 +15,7 @@ import { brandName } from "../licensee/brand.js";
 import { clientUrl } from "../licensee/urls.js";
 import { getStorage, type StorageBackend } from "../lib/storage/index.js";
 import type { Q } from "../plans/state.js";
-import { FREQUENCIES, computeOption, parseFrequency, parseRate, parseTermMonths, type Fee, type Frequency } from "./calc.js";
+import { FREQUENCIES, NO_FEE_TAX, computeOption, parseFrequency, parseRate, parseTermMonths, type Fee, type Frequency } from "./calc.js";
 
 export type Db = Q;
 const defaultDb = (): Db => pool as unknown as Db;
@@ -173,7 +173,9 @@ export function optionFromOffer(o: Record<string, any>): OptionPatch {
 async function writeOptions(db: Db, quoteId: string, options: OptionPatch[]): Promise<void> {
   await db.query(`DELETE FROM quote_options WHERE quote_id::text = $1`, [quoteId]);
   for (const [i, o] of options.entries()) {
-    const m = computeOption({ ...o, payment_count: o.payment_count ?? null });
+    // KS_SERVER_v23_QUOTES_TAX_HOOK - when the sales-tax helper (broker-tools) lands, pass its FeeTax here
+    // (built from the licensee's / client's province). Until then fees carry no tax.
+    const m = computeOption({ ...o, payment_count: o.payment_count ?? null }, NO_FEE_TAX);
     await db.query(
       `INSERT INTO quote_options (quote_id, position, offer_id, lender_name, product_name, amount, term_months, rate_kind, rate, payment_frequency,
                                   payment_count, payment_amount, payment_overridden, fees, total_fees, total_repayment, cost_of_borrowing,
