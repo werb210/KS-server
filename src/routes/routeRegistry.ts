@@ -169,6 +169,7 @@ import apiKeysRoutes from "./apiKeys.js"; // KS_SERVER_SSO_API_KEYS
 import publicApiRoutes from "../publicApi/router.js"; // KS_SERVER_SSO_API_KEYS
 import customFieldsRoutes from "./customFields.js"; // KS_SERVER_v20_CRM_FIELDS
 import salesTeamsRoutes from "./salesTeams.js"; // KS_SERVER_v20_TEAMS
+import rolesRoutes from "./roles.js"; // KS_SERVER_CUSTOM_ROLES
 import webhookEndpointsRoutes from "./webhookEndpoints.js"; // KS_SERVER_v20_WEBHOOKS
 import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
 import { requireAuth, requireAuthAllowClient } from "../middleware/auth.js";
@@ -430,6 +431,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/meeting-notes", router: meetingNotesRoutes }, // Zoom and Google Meet notes (office_sync, every plan); public Zoom callback
   { path: "/pipelines", router: pipelinesRoutes }, // extra pipelines (custom_pipelines, growth 3 / pro unlimited); list on every plan
   { path: "/call-queues", router: callQueuesRoutes }, // call queues (call_queues, pro): settings, live panel, availability
+  { path: "/roles", router: rolesRoutes }, // KS_SERVER_CUSTOM_ROLES - GET /me every plan; custom roles pro (gated per route)
 ];
 
 // KS_SERVER_v20_TEAMS - staff mounts whose routes address one application by id (router-relative patterns). The

@@ -13,6 +13,7 @@ import { classifyClaims, staffRejectionStatus } from "../auth/principal.js";
 // BF_SERVER_v789_STAFF_USER_STATE
 import { checkStaffUser } from "../auth/staffUserState.js";
 import { looksLikeServiceToken, verifyServiceToken } from "../auth/serviceTokens.js";
+import { enforceRolePermissions } from "../roles/enforce.js"; // KS_SERVER_CUSTOM_ROLES
 
 type AuthorizationOptions = {
   roles?: string[];
@@ -89,6 +90,7 @@ async function authenticate(req: Request, res: Response, next: NextFunction, all
     let dbUser: Record<string, unknown> | null = null;
     let effectiveRole: string | null = typeof decodedAny.role === "string" ? decodedAny.role : null;
     let hydratedCaps: string[];
+    let customRoleId: string | null = null; // KS_SERVER_CUSTOM_ROLES
     if (principal.kind === "staff") {
       const check = await checkStaffUser(typeof userId === "string" ? userId : "", decodedAny, { profile: true });
       if (!check.ok) {
@@ -99,6 +101,7 @@ async function authenticate(req: Request, res: Response, next: NextFunction, all
         });
       }
       dbUser = check.record.profile;
+      customRoleId = check.record.custom_role_id ?? null; // KS_SERVER_CUSTOM_ROLES
       effectiveRole = check.role;
       hydratedCaps = check.capabilities;
       // KS_SETTINGS_PACK_v1_SECURITY - the Admin's "require a passkey or two-step sign-in" switch.
@@ -129,6 +132,7 @@ async function authenticate(req: Request, res: Response, next: NextFunction, all
       ...(decoded as any),
       ...(dbUser ?? {}),
       ...(effectiveRole ? { role: effectiveRole } : {}),
+      custom_role_id: customRoleId, // KS_SERVER_CUSTOM_ROLES - from the users row only, never from the token
       userId,
       capabilities: hydratedCaps,
       silos: (dbUser?.silos as string[] | null | undefined) ?? (Array.isArray((decoded as any).silos) ? (decoded as any).silos : []),
@@ -156,6 +160,9 @@ async function authenticate(req: Request, res: Response, next: NextFunction, all
     if (isServicePrincipal) markRequestServicePrincipal(String(decodedAny.service ?? "unknown"));
 
     res.locals.silo = resolveSiloFromRequest(req);
+
+    // KS_SERVER_CUSTOM_ROLES - a person on a custom role is held to its permission matrix (no-op for everyone else).
+    if (customRoleId && !(await enforceRolePermissions(req, res))) return;
 
     next();
   } catch {

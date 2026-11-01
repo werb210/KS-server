@@ -233,6 +233,34 @@ inbox. Code: `src/pgi/`, `src/routes/pgi.ts`, worker `src/workers/pgiReferralWor
 | `KS_SECRETS_KEY` (optional, 32+ chars) | the stored partner API key and callback secret are encrypted with a key derived from `JWT_SECRET` |
 | `KS_PGI_ALLOWED_HOSTS` (optional, comma separated) | the partner server must be an `https://*.azurewebsites.net` address |
 
+## Custom roles and permissions (KS_SERVER_CUSTOM_ROLES, Pro)
+
+Admins build roles from a permission matrix in **Settings > Users & roles**: for contacts, companies, applications and
+deals, lenders, documents, communications, calls and recordings, marketing, reports, settings, billing and users, each
+of view / create / edit / delete / export, plus record visibility (own / team / all).
+
+- Every custom role starts from a built-in role (Admin, Ops, Staff or Marketing) and can only take permissions away
+  from it. The person's `users.role` stays the base role, so all existing role checks, the Marketing seat count and
+  "notify the admins" keep treating them as that role; `users.custom_role_id` adds the matrix on top.
+- The built-in roles are read-only templates (`src/roles/permissions.ts` `TEMPLATES`). People on a built-in role are
+  never checked against a matrix: their access is exactly what it was (the unit suite checks every route in the
+  registry against the templates).
+- Enforcement is on the server, in both staff auth middlewares (`src/roles/enforce.ts`): the route's area comes from
+  its path, the action from the method (POST search/preview = view, bulk-delete = delete, `/export` and `.csv` =
+  export). A refusal is 403 `permission_denied` with a plain-words message. Personal endpoints (own profile, own
+  sessions, the plan's feature list, field definitions) are always allowed.
+- Only a full Admin (built-in Admin, no custom role) can create or change roles or change anyone's role. A role built
+  from Admin can run users and settings but never hand out roles, so it cannot widen itself.
+- Record visibility: a custom role carries its own own/team/all; a per-person override on Settings > Teams still wins.
+- Plan: `custom_roles` is Pro. After a downgrade, existing custom roles keep applying (restrictions are never lifted by
+  a plan change); Admins can still move people back to built-in roles, but cannot create or edit custom roles.
+- API: `GET /api/roles/me` (every staff member: role, matrix, visibility), `GET/POST/PATCH /api/roles`,
+  `POST /api/roles/:id/archive|unarchive`. Assign with `PATCH /api/users/:id { custom_role_id }` (or `{ role }` for a
+  built-in role; `POST /api/users { custom_role_id }` when inviting). Every change is in `audit_events`
+  (`custom_role` created / updated / archived / assigned, with before and after).
+- Migration `2026_11_05_ks_custom_roles.sql` (idempotent) adds `custom_roles` and `users.custom_role_id`; it assigns
+  nobody a custom role.
+
 ## Phone numbers bought through Twilio (KS_SERVER_PHONE_PROVISIONING)
 
 Numbers are bought into this copy's own Twilio account (`TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN`, which may be a

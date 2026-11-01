@@ -9,6 +9,7 @@ import { clearStaffUserCache } from "../auth/staffUserState.js"; // BF_SERVER_v7
 import { recordAuditEvent } from "../modules/audit/audit.service.js";
 import { logger } from "../server/utils/logger.js";
 import { requestStaffDirectorySync } from "../staffDirectory/sync.js"; // KS_STAFF_DIRECTORY_v1
+import { clearVisibilityCache } from "../visibility/scope.js"; // KS_SERVER_CUSTOM_ROLES
 import { assertMarketingRoleChange, MarketingSeatLimitError } from "../plans/marketingGate.js"; // KS_SERVER_MARKETING_ADDON
 
 /** KS_SERVER_MARKETING_ADDON - with the Marketing add-on on, at most 3 active people have the Marketing role. */
@@ -35,7 +36,9 @@ const updateMeSchema = z.object({
 });
 
 const adminUpdateSchema = z.object({
-  role: z.enum(["Admin", "Marketing", "Staff", "Lender", "Referrer"]).optional(),
+  role: z.enum(["Admin", "Marketing", "Staff", "Ops", "Lender", "Referrer"]).optional(), // KS_SERVER_CUSTOM_ROLES - Ops too
+  // KS_SERVER_CUSTOM_ROLES - a custom role (uuid) or null to put the person back on their built-in role.
+  custom_role_id: z.string().uuid().nullable().optional(),
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
   firstName: z.string().min(1).optional(),
   lastName: z.string().min(1).optional(),
@@ -50,7 +53,8 @@ const adminUpdateSchema = z.object({
 const createUserSchema = z.object({
   email: z.string().email().optional(),
   phone: z.string().min(1).optional(),
-  role: z.string().min(1),
+  role: z.string().min(1).optional(), // KS_SERVER_CUSTOM_ROLES - optional when custom_role_id names the role
+  custom_role_id: z.string().uuid().optional(), // KS_SERVER_CUSTOM_ROLES
   lenderId: z.guid().optional(),
   silo: z.enum(["BF"]).optional(),
   silos: z.array(z.enum(["BF"])).optional(),
@@ -298,7 +302,10 @@ export async function listUsers(req: Request, res: Response) {
       -- BF_SERVER_BLOCK_v104_USER_MGMT_FIX_v1
       disabled,
       active,
-      is_active
+      is_active,
+      -- KS_SERVER_CUSTOM_ROLES
+      custom_role_id::text AS custom_role_id,
+      (SELECT r.name FROM custom_roles r WHERE r.id = users.custom_role_id) AS custom_role_name
     FROM users
     ${where}
     ORDER BY created_at DESC
@@ -326,6 +333,11 @@ export async function adminUpdateUser(req: Request, res: Response) {
 
     const normalized: Record<string, any> = {};
     if (input.role) normalized.role = input.role;
+    // KS_SERVER_CUSTOM_ROLES - a custom role sets the person's role to the custom role's base (so every existing role
+    // check, and the Marketing seat count, sees the base role) and records the custom role on top. Naming only a
+    // built-in role puts the person back on it.
+    const roleChange = await resolveRoleAssignment(input.role, input.custom_role_id);
+    if (roleChange.role) normalized.role = roleChange.role;
     if (input.status) normalized.status = input.status;
     if (input.silo) normalized.silo = input.silo;
     if (Array.isArray((input as any).silos)) {
@@ -339,6 +351,9 @@ export async function adminUpdateUser(req: Request, res: Response) {
     if (input.last_name) normalized.last_name = input.last_name;
     if ((input as any).firstName) normalized.first_name = (input as any).firstName;
     if ((input as any).lastName) normalized.last_name = (input as any).lastName;
+    if (roleChange.customRoleId !== undefined) normalized.custom_role_id = roleChange.customRoleId; // KS_SERVER_CUSTOM_ROLES
+    const changesRole = Boolean(roleChange.role) || roleChange.customRoleId !== undefined; // KS_SERVER_CUSTOM_ROLES
+    const before = changesRole ? await currentRoleOf(targetId) : null; // KS_SERVER_CUSTOM_ROLES - for the audit log
 
     // KS_SERVER_MARKETING_ADDON - a role or status change that adds an active Marketing user checks the 3 seats.
     if (normalized.role !== undefined || normalized.status !== undefined) {
@@ -414,10 +429,16 @@ export async function adminUpdateUser(req: Request, res: Response) {
       userAgent: req.get("user-agent") ?? null,
       success: true,
       metadata: normalized,
-    }).catch(() => undefined);
+    }).catch((err: unknown) => logger.warn("user_admin_update_audit_failed", { message: err instanceof Error ? err.message : String(err) }));
+
+    // KS_SERVER_CUSTOM_ROLES - role changes get their own audit row with the before and after.
+    if (changesRole) {
+      await auditRoleChange(req, targetId, before, { role: roleChange.role ?? before?.role ?? null, custom_role_id: roleChange.customRoleId ?? null, custom_role_name: roleChange.customRoleName ?? null });
+      clearVisibilityCache();
+    }
 
     requestStaffDirectorySync(); // KS_STAFF_DIRECTORY_v1
-    res["json"](normalizeUserRecord(updated));
+    res["json"]({ ...normalizeUserRecord(updated), custom_role_id: changesRole ? roleChange.customRoleId ?? null : (updated as any).custom_role_id ?? null });
   } catch (err) {
     handleUserError(res, err, requestId);
   }
@@ -430,7 +451,10 @@ export async function createUser(req: Request, res: Response) {
   const requestId = res.locals.requestId ?? "unknown";
   try {
     const parsed = createUserSchema.parse(req.body ?? {});
-    const normalizedRole = normalizeRole(parsed.role);
+    // KS_SERVER_CUSTOM_ROLES - a new person can start on a custom role: they are created with its base role.
+    const assigned = parsed.custom_role_id ? await resolveRoleAssignment(undefined, parsed.custom_role_id) : null;
+    if (assigned?.role) parsed.role = assigned.role;
+    const normalizedRole = normalizeRole(String(parsed.role ?? ""));
     if (!normalizedRole) {
       throw new AppError("validation_error", "Role is invalid.", 400);
     }
@@ -454,6 +478,11 @@ export async function createUser(req: Request, res: Response) {
     const user = await createUserAccount(createPayload);
 
     await db.query(`UPDATE users SET silo = $1, silos = $2 WHERE id = $3`, [requestedSilo, requestedSilos, (user as any).id]);
+    if (assigned?.customRoleId) {
+      // KS_SERVER_CUSTOM_ROLES
+      await db.query(`UPDATE users SET custom_role_id = $1 WHERE id = $2`, [assigned.customRoleId, (user as any).id]);
+      await auditRoleChange(req, String((user as any).id), null, { role: normalizedRole, custom_role_id: assigned.customRoleId, custom_role_name: assigned.customRoleName ?? null });
+    }
 
     requestStaffDirectorySync(); // KS_STAFF_DIRECTORY_v1
     res.status(201).json({
@@ -495,4 +524,64 @@ export async function deleteUser(req: Request, res: Response) {
   } catch (err) {
     handleUserError(res, err, requestId);
   }
+}
+
+// KS_SERVER_CUSTOM_ROLES ------------------------------------------------------------------------------------------
+
+type RoleAssignment = { role?: string; customRoleId?: string | null; customRoleName?: string | null };
+
+/**
+ * What a role field in a user update means. custom_role_id (uuid): that role's base role plus the custom role (the
+ * plan must include custom roles, and the role must not be archived). custom_role_id null, or a built-in role alone:
+ * the built-in role, no custom role. Nothing: no change.
+ */
+export async function resolveRoleAssignment(role: string | undefined, customRoleId: string | null | undefined): Promise<RoleAssignment> {
+  if (typeof customRoleId === "string") {
+    const { checkFeature } = await import("../plans/catalogue.js");
+    const { getPlanState } = await import("../plans/state.js");
+    if (!checkFeature(await getPlanState(db as any), "custom_roles").allowed) {
+      throw new AppError("feature_not_in_plan", "Custom roles are part of the Pro plan.", 402);
+    }
+    const { rows } = await db.query<{ id: string; name: string; base_role: string; archived_at: string | null }>(
+      `SELECT id::text AS id, name, base_role, archived_at FROM custom_roles WHERE id = $1`, [customRoleId],
+    );
+    const r = rows[0];
+    if (!r) throw new AppError("role_not_found", "That role does not exist.", 404);
+    if (r.archived_at) throw new AppError("role_archived", "That role is archived. Pick another role.", 409);
+    return { role: r.base_role, customRoleId: r.id, customRoleName: r.name };
+  }
+  if (role) return { role, customRoleId: null };
+  if (customRoleId === null) return { customRoleId: null }; // back to their base role, which stays as it is
+  return {};
+}
+
+async function currentRoleOf(userId: string): Promise<{ role: string | null; custom_role_id: string | null; custom_role_name: string | null } | null> {
+  try {
+    const { rows } = await db.query<{ role: string | null; custom_role_id: string | null; custom_role_name: string | null }>(
+      `SELECT u.role, u.custom_role_id::text AS custom_role_id, r.name AS custom_role_name
+         FROM users u LEFT JOIN custom_roles r ON r.id = u.custom_role_id WHERE u.id = $1`, [userId],
+    );
+    return rows[0] ?? null;
+  } catch (err) {
+    logger.warn("user_role_before_lookup_failed", { userId, message: err instanceof Error ? err.message : String(err) });
+    return null;
+  }
+}
+
+async function auditRoleChange(
+  req: Request, targetId: string, before: Record<string, unknown> | null, after: Record<string, unknown>,
+): Promise<void> {
+  await recordAuditEvent({
+    actorUserId: req.user?.userId ?? null,
+    targetUserId: targetId,
+    targetType: "user",
+    targetId,
+    action: "user_role_changed",
+    eventType: "custom_role",
+    eventAction: "assigned",
+    ip: req.ip ?? null,
+    userAgent: req.get("user-agent") ?? null,
+    success: true,
+    metadata: { before, after },
+  }).catch((err: unknown) => logger.warn("user_role_audit_failed", { targetId, message: err instanceof Error ? err.message : String(err) }));
 }

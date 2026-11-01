@@ -64,21 +64,29 @@ export async function teamsInPlan(db: Q): Promise<boolean> {
   return checkFeature(await getPlanState(db), "teams").allowed;
 }
 
-/** The scope for a staff user by id and role. Unknown users (service principals) see everything. */
-export async function resolveScope(db: Q, userId: string | null | undefined, role: unknown): Promise<RecordScope> {
+/**
+ * The scope for a staff user by id and role. Unknown users (service principals) see everything.
+ * KS_SERVER_CUSTOM_ROLES - customRoleId: a person on a custom role takes the role's own record visibility instead of
+ * the built-in role's setting (a per-person override still wins), and a custom role built from Admin is not exempt.
+ */
+export async function resolveScope(db: Q, userId: string | null | undefined, role: unknown, customRoleId?: string | null): Promise<RecordScope> {
   const r = roleOf(role);
-  if (r === "Admin") return { ...ALL_SCOPE, userId: userId ?? null };
+  const custom = typeof customRoleId === "string" && UUID_RE.test(customRoleId) ? customRoleId : null;
+  if (r === "Admin" && !custom) return { ...ALL_SCOPE, userId: userId ?? null };
   if (!(await teamsInPlan(db))) return { ...ALL_SCOPE, userId: userId ?? null };
-  if (!userId || !UUID_RE.test(userId)) return resolveRoleOnlyScope(db, r);
-  const key = `${userId}|${r}`;
+  if (!userId || !UUID_RE.test(userId)) return custom ? NOTHING_SCOPE : resolveRoleOnlyScope(db, r);
+  const key = `${userId}|${r}|${custom ?? ""}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.scope;
   let scope: RecordScope;
   try {
     const row = (await db.query(
-      `SELECT u.record_visibility, (SELECT visibility FROM role_record_visibility WHERE role = $2) AS role_visibility, u.id IS NOT NULL AS found
+      custom
+        ? `SELECT u.record_visibility, (SELECT record_visibility FROM custom_roles WHERE id = $2::uuid) AS role_visibility, u.id IS NOT NULL AS found
+             FROM (SELECT $1::uuid AS want) w LEFT JOIN users u ON u.id = w.want`
+        : `SELECT u.record_visibility, (SELECT visibility FROM role_record_visibility WHERE role = $2) AS role_visibility, u.id IS NOT NULL AS found
          FROM (SELECT $1::uuid AS want) w LEFT JOIN users u ON u.id = w.want`,
-      [userId, r],
+      [userId, custom ?? r],
     ))?.rows?.[0];
     const v: Visibility = isVisibility(row?.record_visibility) ? row.record_visibility
       : isVisibility(row?.role_visibility) ? row.role_visibility : "all";
@@ -133,7 +141,7 @@ export async function scopeForRequest(req: Request, db: Q): Promise<RecordScope>
   const u = anyReq.user ?? {};
   let scope: RecordScope;
   if (u.isServicePrincipal || u.actorResolved === false) scope = ALL_SCOPE;
-  else scope = await resolveScope(db, String(u.userId ?? u.id ?? u.sub ?? "") || null, u.role);
+  else scope = await resolveScope(db, String(u.userId ?? u.id ?? u.sub ?? "") || null, u.role, u.custom_role_id ?? null);
   anyReq.__recordScope = scope;
   return scope;
 }
@@ -146,7 +154,15 @@ export async function scopeForActingUser(db: Q, body: any): Promise<RecordScope>
       if (isMissingRelation(err)) return { rows: [] };
       throw err;
     })).rows[0];
-    if (row) return resolveScope(db, id, row.role);
+    if (row) {
+      // KS_SERVER_CUSTOM_ROLES - the assistant acting for a person on a custom role sees what that role sees.
+      const custom = (await db.query(`SELECT custom_role_id::text AS custom_role_id FROM users WHERE id = $1 AND custom_role_id IS NOT NULL`, [id])
+        .catch((err: unknown) => {
+          if (isMissingRelation(err)) return { rows: [] };
+          throw err;
+        })).rows[0]?.custom_role_id ?? null;
+      return resolveScope(db, id, row.role, custom);
+    }
   }
   return resolveRoleOnlyScope(db, body?.role ?? "Staff");
 }
