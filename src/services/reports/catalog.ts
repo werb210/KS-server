@@ -49,6 +49,8 @@ export const REPORTS: ReportDef[] = [
   { key: "consent_health", title: "Consent health", silo: "BF", group: "marketing", size: "half", source: "reports", description: "Who can be texted, who opted out, and texting consent expiring in the next 30 days." },
   // BF_SERVER_REPORTS_BATCH2_v719
   { key: "revenue_forecast", title: "Revenue forecast", silo: "BF", group: "money", size: "half", source: "reports", description: "Open files weighted by the chance each stage funds - expected commission." },
+  // KS_SERVER_v23_FORECAST - per rep and team, by month: closed, commit, best case, pipeline and weighted against goals.
+  { key: "forecast", title: "Forecast", silo: "BF", group: "money", size: "full", source: "reports", description: "Commission forecast per person and team by month: closed, commit, best case, pipeline and weighted, against goals." },
   { key: "media_fee_agreements", title: "Media fee agreements", silo: "BF", group: "money", size: "full", source: "reports", description: "Waiting and signed agreements, and the 2% fee each one carries." },
   { key: "payouts_owed", title: "Broker payouts", silo: "BF", group: "money", size: "full", source: "reports", description: "Funded broker files and whether the broker has been paid." },
   { key: "staff_activity", title: "Staff activity", silo: "BF", group: "operations", size: "half", source: "reports", description: "Calls, connections and talk time per person (staff see their own)." },

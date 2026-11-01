@@ -93,6 +93,9 @@ export const FEATURES: readonly FeatureDef[] = [
   // KS_SERVER_v23_QUOTES - quotes: an offer summary built from the lender offers on a file, a branded PDF and client
   // acceptance in the client app, growth and up.
   { key: "quotes", label: "Quotes: compare lender offers for the client, branded PDF and acceptance in the client app", plan: "growth" },
+  // KS_SERVER_v23_FORECAST - revenue forecast from the pipeline (stage odds, close dates, categories) per rep and team
+  // against Goals, growth and up.
+  { key: "forecasting", label: "Revenue forecast: weighted pipeline, commit and best case per rep and team, against goals", plan: "growth" },
   // pro
   { key: "multiple_lines", label: "Multiple business lines and a direct line for each person", plan: "pro" },
   // KS_SERVER_MARKETING_ADDON - Starter and Growth see Google Ads results only; the full tools are Pro (or the add-on).
