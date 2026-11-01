@@ -203,7 +203,7 @@ export async function loadCrmTimeline(isContact: boolean, id: string, silo: stri
                (CASE WHEN event_type = 'contract_activity' THEN payload->>'contract_id' ELSE NULL END) AS extra -- KS_SERVER_ACTIVE_CONTRACTS
           FROM crm_timeline_events
          WHERE contact_id = $1
-           AND (event_type = 'contract_activity' OR event_type IN ('sequence_step_sent','email_open','email_click','email_bounce','email_dropped','email_spamreport','email_unsubscribe','email_group_unsubscribe','sms_link_clicked','attribution','email_marketing_sent','client_notice_sent','sms_marketing_sent','email_cascade_sent','email_notice_sent','automation')) -- KS_SERVER_ACTIVE_CONTRACTS - plus contract activity
+           AND event_type IN ('contract_activity','sequence_step_sent','email_open','email_click','email_bounce','email_dropped','email_spamreport','email_unsubscribe','email_group_unsubscribe','sms_link_clicked','attribution','email_marketing_sent','client_notice_sent','sms_marketing_sent','email_cascade_sent','email_notice_sent','automation') -- KS_SERVER_ACTIVE_CONTRACTS - plus contract activity
         UNION ALL
         -- KS_HUBSPOT_GAPS_1 - payment links and call script answers: system rows titled by the event itself.
         SELECT 'system' AS kind, id::text, created_at AS ts, payload->>'title' AS title, payload->>'detail' AS body, NULL::text AS extra
