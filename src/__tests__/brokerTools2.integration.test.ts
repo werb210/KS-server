@@ -67,6 +67,8 @@ describe("broker tools part 2 (real Postgres)", () => {
     await del(`DELETE FROM active_contract_assets WHERE contract_id IN (SELECT id FROM active_contracts WHERE application_id = $1)`, [appId]);
     await del(`DELETE FROM active_contracts WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM vendor_invoices WHERE application_id = $1`, [appId]);
+    await del(`DELETE FROM deal_structures WHERE application_id = $1`, [appId]);
+    await del(`DELETE FROM rate_cards WHERE name LIKE $1`, [`%${tag}%`]);
     await del(`DELETE FROM tasks WHERE title LIKE $1`, [`%${tag}%`]);
     await del(`DELETE FROM credit_line_reminders WHERE credit_line_id IN (SELECT id FROM credit_lines WHERE application_id = $1)`, [appId]);
     await del(`DELETE FROM credit_line_draws WHERE credit_line_id IN (SELECT id FROM credit_lines WHERE application_id = $1)`, [appId]);
@@ -171,6 +173,36 @@ describe("broker tools part 2 (real Postgres)", () => {
       expect((await http().get("/api/deal-desk/credit-lines?expiring_within=30").set(as("Staff"))).body.lines.some((l: any) => l.id === line.id)).toBe(true);
       expect((await http().patch(`/api/deal-desk/credit-lines/${line.id}`).set(as("Staff")).send({ status: "closed" })).body.line.status).toBe("closed");
       expect((await http().post(`/api/deal-desk/credit-lines/${line.id}/draws`).set(as("Staff")).send({ amount: 1 })).status).toBe(409);
+    });
+  });
+
+  // KS_BROKER_TOOLS_RATE_CARDS
+  describe("5 rate cards and structuring", () => {
+    it("an Admin loads a card by CSV; staff compare payment options on the deal with Alberta GST, and save one", async () => {
+      const made = await http().post("/api/deal-desk/rate-cards").set(as("Admin"))
+        .send({ name: `Equipment ${tag}`, lender_name: `Northern ${tag}`, rate_kind: "apr", min_amount: 10000, max_amount: 1000000, fees: [{ label: "Documentation fee", amount: 350, taxable: true }] });
+      expect(made.status).toBe(201);
+      const cid = made.body.card.id;
+      expect((await http().post("/api/deal-desk/rate-cards").set(as("Staff")).send({ name: "x", lender_name: "y" })).status).toBe(403);
+      const bad = await http().post(`/api/deal-desk/rate-cards/${cid}/import`).set(as("Admin")).send({ csv: "term,rate\n36,abc" });
+      expect(bad.status).toBe(400);
+      const imp = await http().post(`/api/deal-desk/rate-cards/${cid}/import`).set(as("Admin")).send({ csv: "term,min,max,tier,rate\n36,0,,,8.9\n48,0,,,9.4\n60,0,,,9.9\n36,0,,A,7.5" });
+      expect(imp.body.imported).toBe(4);
+      const csv = await http().get(`/api/deal-desk/rate-cards/${cid}/export`).set(as("Staff"));
+      expect(csv.text.split("\n")[0]).toBe("term,min,max,tier,rate");
+
+      const base = `/api/deal-desk/applications/${appId}/structure`;
+      const defaults = await http().get(base).set(as("Staff"));
+      expect(defaults.body.defaults).toMatchObject({ amount: 86500, province: "AB" }); // the confirmed invoice's subtotal
+      const run = await http().post(base).set(as("Staff")).send({ terms: [36, 60], tax_mode: "lease" });
+      expect(run.status).toBe(200);
+      const mine = run.body.options.filter((o: any) => o.card_id === cid);
+      expect(mine.map((o: any) => [o.term_months, o.rate])).toEqual([[36, 8.9], [60, 9.9]]);
+      expect(mine[0].payment_tax[0].label).toBe("GST 5%");
+      const save = await http().post(base).set(as("Staff")).send({ terms: [36, 60], save: true, chosen: run.body.options.indexOf(run.body.options.find((o: any) => o.card_id === cid)) });
+      expect(save.body.saved_id).toBeTruthy();
+      expect((await http().get(base).set(as("Staff"))).body.saved.chosen).toMatchObject({ card_id: cid, term_months: 36 });
+      expect((await http().delete(`/api/deal-desk/rate-cards/${cid}`).set(as("Admin"))).status).toBe(200);
     });
   });
 });

@@ -4,9 +4,11 @@
 import { Router } from "express";
 import invoices from "./dealDesk/invoices.js"; // KS_BROKER_TOOLS_INVOICES
 import creditLines from "./dealDesk/creditLines.js"; // KS_BROKER_TOOLS_CREDIT_LINES
+import rateCards from "./dealDesk/rateCards.js"; // KS_BROKER_TOOLS_RATE_CARDS
 
 const router = Router();
 router.use(invoices);
 router.use(creditLines);
+router.use(rateCards);
 
 export default router;

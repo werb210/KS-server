@@ -107,6 +107,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "lender_api", label: "Lender API connections (submit by API, sync status, offers and conditions)", plan: "growth" },
   // KS_BROKER_TOOLS_CREDIT_LINES - approved credit lines per client (limit, used, available, expiry reminders), growth and up.
   { key: "credit_lines", label: "Approved credit lines per client: limit, used, available and expiry reminders", plan: "growth" },
+  // KS_BROKER_TOOLS_RATE_CARDS - lender rate cards and the structuring tool (payment options side by side), growth and up.
+  { key: "rate_cards", label: "Rate cards and deal structuring: payment options across lenders side by side, with sales tax", plan: "growth" },
   // pro
   { key: "multiple_lines", label: "Multiple business lines and a direct line for each person", plan: "pro" },
   // KS_SERVER_MARKETING_ADDON - Starter and Growth see Google Ads results only; the full tools are Pro (or the add-on).
