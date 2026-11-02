@@ -159,6 +159,14 @@ router.post("/:id/confirm-acceptance", requireAuth, requireAuthorization({ roles
   ).catch((e) => console.warn("[offer_accept] funded_amount write failed", e instanceof Error ? e.message : String(e)));
   // KS_SERVER_v13_QUICKBOOKS - funded: the fee invoice moves to the funded amount and is marked paid.
   { const { queueFeeInvoice } = await import("../services/feeAgreement/mediaFeeAgreement.js"); await queueFeeInvoice(row.application_id, "funded"); }
+  // KS_SERVER_ACTIVE_CONTRACTS - on Growth+ the funded file becomes an Active Contract now (the hourly sweep is the safety net).
+  // Idempotent; the application itself is only read. Never the reason an acceptance fails.
+  void (async () => {
+    const { activeContractsEnabled } = await import("../workers/activeContractsWorker.js");
+    if (!(await activeContractsEnabled(pool as any))) return;
+    const m = await import("../activeContracts/repo.js");
+    await m.createContractFromApplication(pool as any, String(row.application_id));
+  })().catch((err) => console.warn("[offer_accept] active contract not created yet (the sweep retries)", err instanceof Error ? err.message : String(err)));
 
   // Fire SignNow envelope on the lender's term sheet (best-effort).
   try {

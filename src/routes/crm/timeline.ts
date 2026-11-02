@@ -154,6 +154,8 @@ export async function loadCrmTimeline(isContact: boolean, id: string, silo: stri
                      WHEN event_type = 'attribution' THEN 'system'
                      -- BF_SERVER_v786_AUTOMATION_TIMELINE - workflow steps render as plain system rows.
                      WHEN event_type = 'automation' THEN 'system'
+                     -- KS_SERVER_ACTIVE_CONTRACTS - contract activity; extra carries the contract id so the row opens it.
+                     WHEN event_type = 'contract_activity' THEN 'contract'
                      ELSE 'email_activity' END) AS kind,
                id::text, created_at AS ts,
                (CASE event_type
@@ -176,6 +178,7 @@ export async function loadCrmTimeline(isContact: boolean, id: string, silo: stri
                   WHEN 'attribution' THEN 'Ad click attribution'
                   WHEN 'automation' THEN ('Automation: ' || COALESCE(NULLIF(payload->>'rule_name', '') || ' - ', '') || COALESCE(payload->>'step', 'step')
                                           || CASE WHEN COALESCE(payload->>'outcome', 'done') <> 'done' THEN ' (' || (payload->>'outcome') || ')' ELSE '' END)
+                  WHEN 'contract_activity' THEN COALESCE(NULLIF(payload->>'title', ''), 'Contract activity') -- KS_SERVER_ACTIVE_CONTRACTS
                   ELSE event_type END) AS title,
                (CASE WHEN event_type = 'attribution' THEN
                   NULLIF(concat_ws(' | ',
@@ -194,11 +197,13 @@ export async function loadCrmTimeline(isContact: boolean, id: string, silo: stri
                        NULLIF(COALESCE(payload->>'body',''), '')
                      WHEN event_type = 'automation' THEN
                        NULLIF(COALESCE(payload->>'detail',''), '')
+                     WHEN event_type = 'contract_activity' THEN
+                       NULLIF(COALESCE(payload->>'detail',''), '')
                 ELSE NULLIF(payload->>'url','') END) AS body,
-               NULL::text AS extra
+               (CASE WHEN event_type = 'contract_activity' THEN payload->>'contract_id' ELSE NULL END) AS extra -- KS_SERVER_ACTIVE_CONTRACTS
           FROM crm_timeline_events
          WHERE contact_id = $1
-           AND event_type IN ('sequence_step_sent','email_open','email_click','email_bounce','email_dropped','email_spamreport','email_unsubscribe','email_group_unsubscribe','sms_link_clicked','attribution','email_marketing_sent','client_notice_sent','sms_marketing_sent','email_cascade_sent','email_notice_sent','automation')
+           AND event_type IN ('contract_activity','sequence_step_sent','email_open','email_click','email_bounce','email_dropped','email_spamreport','email_unsubscribe','email_group_unsubscribe','sms_link_clicked','attribution','email_marketing_sent','client_notice_sent','sms_marketing_sent','email_cascade_sent','email_notice_sent','automation') -- KS_SERVER_ACTIVE_CONTRACTS - plus contract activity
         UNION ALL
         -- KS_HUBSPOT_GAPS_1 - payment links and call script answers: system rows titled by the event itself.
         SELECT 'system' AS kind, id::text, created_at AS ts, payload->>'title' AS title, payload->>'detail' AS body, NULL::text AS extra

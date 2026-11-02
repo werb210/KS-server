@@ -96,6 +96,8 @@ export const FEATURES: readonly FeatureDef[] = [
   // KS_SERVER_v23_FORECAST - revenue forecast from the pipeline (stage odds, close dates, categories) per rep and team
   // against Goals, growth and up.
   { key: "forecasting", label: "Revenue forecast: weighted pipeline, commit and best case per rep and team, against goals", plan: "growth" },
+  // KS_SERVER_ACTIVE_CONTRACTS - funded facilities as contracts, renewal engine, commission tracking (Growth and Pro).
+  { key: "active_contracts", label: "Active contracts: renewals, re-engagement queues and commission tracking", plan: "growth" },
   // pro
   { key: "multiple_lines", label: "Multiple business lines and a direct line for each person", plan: "pro" },
   // KS_SERVER_MARKETING_ADDON - Starter and Growth see Google Ads results only; the full tools are Pro (or the add-on).

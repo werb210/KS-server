@@ -167,6 +167,7 @@ import quotesRoutes from "./quotes.js"; // KS_SERVER_v23_QUOTES
 import clientQuotesRoutes from "./clientQuotes.js"; // KS_SERVER_v23_QUOTES
 import forecastRoutes from "./forecast.js"; // KS_SERVER_v23_FORECAST
 import retentionRoutes from "./retention.js"; // KS_SERVER_v14_RETENTION
+import activeContractsRoutes from "./activeContracts.js"; // KS_SERVER_ACTIVE_CONTRACTS
 import pgiRoutes from "./pgi.js"; // KS_SERVER_v11_PGI
 import betaRoutes from "./beta.js"; // KS_SERVER_BETA_v1
 import ssoSettingsRoutes from "./ssoSettings.js"; // KS_SERVER_SSO_API_KEYS
@@ -414,6 +415,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/client/quotes", router: clientQuotesRoutes }, // KS_SERVER_v23_QUOTES - the client's own sent quotes (OTP phone)
   { path: "/forecast", router: forecastRoutes }, // KS_SERVER_v23_FORECAST - growth+ (forecasting); Admin all, others own
   { path: "/retention", router: retentionRoutes }, // KS_SERVER_v14_RETENTION - staff status; Admin holds and report
+  { path: "/active-contracts", router: activeContractsRoutes }, // KS_SERVER_ACTIVE_CONTRACTS - contracts, renewals, compensation
   { path: "/pgi", router: pgiRoutes }, // KS_SERVER_v11_PGI - PGI referrals to the insurance partner (every plan)
   { path: "/beta", router: betaRoutes }, // KS_SERVER_BETA_v1 - beta feature flags and Labs (flags public, rest staff/Admin)
   // KS_SERVER_SSO_API_KEYS - Pro: SSO settings and API keys (Admin), and the public REST API (API key; the plan is
