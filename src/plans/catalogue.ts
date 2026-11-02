@@ -109,6 +109,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "credit_lines", label: "Approved credit lines per client: limit, used, available and expiry reminders", plan: "growth" },
   // KS_BROKER_TOOLS_RATE_CARDS - lender rate cards and the structuring tool (payment options side by side), growth and up.
   { key: "rate_cards", label: "Rate cards and deal structuring: payment options across lenders side by side, with sales tax", plan: "growth" },
+  // KS_BROKER_TOOLS_SCORECARDS - admin-weighted credit scorecard, pre-decision rules and lender ranking (signals only), growth and up.
+  { key: "credit_scorecards", label: "Credit scorecards and pre-decision rules: grade, rule hits and lender ranking on each application", plan: "growth" },
   // pro
   { key: "multiple_lines", label: "Multiple business lines and a direct line for each person", plan: "pro" },
   // KS_SERVER_MARKETING_ADDON - Starter and Growth see Google Ads results only; the full tools are Pro (or the add-on).

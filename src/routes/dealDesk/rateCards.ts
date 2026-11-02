@@ -77,12 +77,14 @@ router.post("/structure", ...rc, safeHandler(async (req: Request, res: Response)
   res.json({ ok: true, input: p.value, ...(await structure(db(), p.value)) });
 }));
 
-/** What the deal starts from: the equipment cost (or the amount asked for) and the business's province. */
+/** What the deal starts from: the equipment cost (or the amount asked for), the business's province, the scorecard grade. */
 async function dealDefaults(app: Record<string, any>): Promise<Partial<StructureInput>> {
   const md = app.metadata ?? {};
   const amount = num(md.equipment_amount) || num(app.requested_amount) || undefined;
   const province = await applicationProvince(db(), String(app.id));
-  const tier: string | null = null;
+  // KS_BROKER_TOOLS_SCORECARDS - the scorecard grade is the starting credit tier.
+  const g = await db().query(`SELECT grade FROM application_scorecards WHERE application_id = $1 LIMIT 1`, [String(app.id)]);
+  const tier: string | null = g.rows[0]?.grade ?? null;
   return { amount: amount ?? undefined, province, tier, terms: [24, 36, 48, 60], tax_mode: "lease" };
 }
 

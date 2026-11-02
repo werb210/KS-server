@@ -68,6 +68,9 @@ describe("broker tools part 2 (real Postgres)", () => {
     await del(`DELETE FROM active_contracts WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM vendor_invoices WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM deal_structures WHERE application_id = $1`, [appId]);
+    await del(`DELETE FROM application_scorecards WHERE application_id = $1`, [appId]);
+    await del(`DELETE FROM banking_analyses WHERE application_id = $1`, [appId]);
+    await del(`DELETE FROM credit_scorecard_settings WHERE id = 1 AND updated_by = ANY($1::uuid[])`, [[ADMIN, STAFF]]);
     await del(`DELETE FROM rate_cards WHERE name LIKE $1`, [`%${tag}%`]);
     await del(`DELETE FROM tasks WHERE title LIKE $1`, [`%${tag}%`]);
     await del(`DELETE FROM credit_line_reminders WHERE credit_line_id IN (SELECT id FROM credit_lines WHERE application_id = $1)`, [appId]);
@@ -203,6 +206,33 @@ describe("broker tools part 2 (real Postgres)", () => {
       expect(save.body.saved_id).toBeTruthy();
       expect((await http().get(base).set(as("Staff"))).body.saved.chosen).toMatchObject({ card_id: cid, term_months: 36 });
       expect((await http().delete(`/api/deal-desk/rate-cards/${cid}`).set(as("Admin"))).status).toBe(200);
+    });
+  });
+
+  // KS_BROKER_TOOLS_SCORECARDS
+  describe("7 credit scorecards", () => {
+    it("scores the deal from the application and banking analysis, an Admin's rule shows as a hit, and the grade seeds the structuring tier", async () => {
+      await pool.query(
+        `INSERT INTO banking_analyses (application_id, total_avg_monthly_deposits, average_daily_balance, average_monthly_nsfs, negative_balance_days,
+           months_profitable_numerator, months_profitable_denominator, status) VALUES ($1, 100000, 30000, 0.5, 2, 5, 6, 'completed')`, [appId]);
+      const base = `/api/deal-desk/applications/${appId}/scorecard`;
+      expect((await http().get(base).set(as("Staff"))).body.result).toBeNull();
+      const scored = await http().post(base).set(as("Staff"));
+      expect(scored.status).toBe(200);
+      expect(scored.body.result).toMatchObject({ grade: "A", outcome: "clear", coverage: 85 }); // no credit score yet: coverage drops, the score does not
+      expect(scored.body.result.missing).toContain("Credit score (lowest principal)");
+      expect(Array.isArray(scored.body.result.lenders)).toBe(true);
+
+      const cfg = (await http().get("/api/deal-desk/scorecard").set(as("Staff"))).body.config;
+      expect((await http().put("/api/deal-desk/scorecard").set(as("Staff")).send(cfg)).status).toBe(403);
+      const strict = { ...cfg, rules: [...cfg.rules, { id: "nsf", factor: "nsf_per_month", op: ">=", value: 0.5, outcome: "refer", message: "Any NSFs: refer" }] };
+      expect((await http().put("/api/deal-desk/scorecard").set(as("Admin")).send(strict)).status).toBe(200);
+      const again = await http().post(base).set(as("Staff"));
+      expect(again.body.result.outcome).toBe("refer");
+      expect(again.body.result.hits.map((h: any) => h.message)).toContain("Any NSFs: refer");
+      expect((await http().get(base).set(as("Staff"))).body.result.grade).toBe("A");
+      expect((await http().get(`/api/deal-desk/applications/${appId}/structure`).set(as("Staff"))).body.defaults.tier).toBe("A");
+      expect((await http().post("/api/deal-desk/scorecard/reset").set(as("Admin"))).status).toBe(200);
     });
   });
 });
