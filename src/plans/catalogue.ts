@@ -61,6 +61,8 @@ export const FEATURES: readonly FeatureDef[] = [
   // KS_BROKER_TOOLS - broker deal tools 1-3, every plan.
   { key: "funding_conditions", label: "Funding conditions checklist", plan: "starter" },
   { key: "sales_tax", label: "Canadian sales tax in quotes and calculators", plan: "starter" },
+  // KS_BROKER_TOOLS_INVOICES - the AI reads vendor invoices into the deal's equipment fields, every plan.
+  { key: "invoice_reading", label: "Vendor invoice reading (vendor, line items, taxes, serial numbers and VINs)", plan: "starter" },
   // growth
   { key: "call_recording_playback", label: "Call recording playback", plan: "growth" },
   // KS_SERVER_v20_TEAMS - teams and record visibility (all / team / own), growth and up.
@@ -103,6 +105,16 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "active_contracts", label: "Active contracts: renewals, re-engagement queues and commission tracking", plan: "growth" },
   // KS_SERVER_LENDER_API - send the lender package by API and pull status, offers and conditions back, growth and up.
   { key: "lender_api", label: "Lender API connections (submit by API, sync status, offers and conditions)", plan: "growth" },
+  // KS_BROKER_TOOLS_CREDIT_LINES - approved credit lines per client (limit, used, available, expiry reminders), growth and up.
+  { key: "credit_lines", label: "Approved credit lines per client: limit, used, available and expiry reminders", plan: "growth" },
+  // KS_BROKER_TOOLS_RATE_CARDS - lender rate cards and the structuring tool (payment options side by side), growth and up.
+  { key: "rate_cards", label: "Rate cards and deal structuring: payment options across lenders side by side, with sales tax", plan: "growth" },
+  // KS_BROKER_TOOLS_SCORECARDS - admin-weighted credit scorecard, pre-decision rules and lender ranking (signals only), growth and up.
+  { key: "credit_scorecards", label: "Credit scorecards and pre-decision rules: grade, rule hits and lender ranking on each application", plan: "growth" },
+  // KS_BROKER_TOOLS_CONTRACTS - contracts from Word templates with merge fields, Word + PDF, sent for e-signature, growth and up.
+  { key: "contract_templates", label: "Contracts from Word templates: merge fields, Word and PDF, sent for e-signature", plan: "growth" },
+  // KS_BROKER_TOOLS_CREDIT_BUREAU - Equifax Canada / TransUnion Canada pulls with client consent, growth and up. Each real pull is
+  // one usage event (credit_pull), billed by Keystone operations at the bureau's cost.
   // pro
   { key: "multiple_lines", label: "Multiple business lines and a direct line for each person", plan: "pro" },
   // KS_SERVER_MARKETING_ADDON - Starter and Growth see Google Ads results only; the full tools are Pro (or the add-on).
@@ -113,6 +125,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "webhooks", label: "Webhooks and Zapier", plan: "pro" },
   // KS_HUBSPOT_GAPS_1_CALL_QUEUES - callers wait in line for the next free person (main line and phone-menu options).
   { key: "call_queues", label: "Call queues", plan: "pro" },
+  // KS_BROKER_TOOLS_VENDORS - vendor / dealer portal: point-of-sale quotes, apply links, deal status, invoices, vendor fees, pro.
+  { key: "vendor_portal", label: "Vendor and dealer portal: point-of-sale quotes, apply links, deal status, invoice upload and vendor fees", plan: "pro" },
   // KS_SERVER_CUSTOM_ROLES - custom roles built from a permission matrix (per area view/create/edit/delete/export and
   // own/team/all record visibility), pro. The built-in roles stay on every plan.
   { key: "custom_roles", label: "Custom roles and permissions", plan: "pro" },

@@ -539,6 +539,11 @@ export async function start(): Promise<void> {
     await workerStagger();
     try { const w = startActiveContractsWorker(pool); workerStops.push(w.stop); console.log("[startup] active-contracts worker started"); }
     catch (err) { console.error("[startup] active-contracts worker failed to start:", err); }
+    // KS_BROKER_TOOLS_2 - invoice equipment onto contracts, credit line expiry reminders, contract signing status.
+    const { startBrokerToolsWorker } = await import("./workers/brokerToolsWorker.js");
+    await workerStagger();
+    try { const w = startBrokerToolsWorker(pool); workerStops.push(w.stop); console.log("[startup] broker-tools worker started"); }
+    catch (err) { console.error("[startup] broker-tools worker failed to start:", err); }
     // KS_SERVER_v8_OPS_LINK - daily usage reports to Keystone operations.
     const { startUsageReportWorker } = await import("./workers/usageReportWorker.js");
     await workerStagger();
