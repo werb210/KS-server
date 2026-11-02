@@ -70,8 +70,10 @@ describe("broker tools part 2 (real Postgres)", () => {
   afterAll(async () => {
     setInvoiceReader(null);
     const del = (sql: string, p: unknown[]) => pool.query(sql, p).catch((e) => console.warn("cleanup", e.message));
-    await del(`DELETE FROM active_contract_assets WHERE contract_id IN (SELECT id FROM active_contracts WHERE application_id = $1)`, [appId]);
-    await del(`DELETE FROM active_contracts WHERE application_id = $1`, [appId]);
+    if ((await pool.query(`SELECT to_regclass('public.active_contract_assets') IS NOT NULL AS ok`)).rows[0].ok) {
+      await del(`DELETE FROM active_contract_assets WHERE contract_id IN (SELECT id FROM active_contracts WHERE application_id = $1)`, [appId]);
+      await del(`DELETE FROM active_contracts WHERE application_id = $1`, [appId]);
+    }
     await del(`DELETE FROM vendor_invoices WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM deal_structures WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM contract_documents WHERE application_id = $1`, [appId]);
@@ -132,16 +134,20 @@ describe("broker tools part 2 (real Postgres)", () => {
       expect(patched.status).toBe(200);
       expect(patched.body.invoice.data.equipment[0].serial_number).toBe("KX040-55123");
 
+      // Active Contracts may not be installed on this server: the equipment goes onto the contract only when it is.
+      const hasContracts = (await pool.query(`SELECT to_regclass('public.active_contract_assets') IS NOT NULL AS ok`)).rows[0].ok === true;
       const contractId = randomUUID();
-      await pool.query(`INSERT INTO active_contracts (id, silo, application_id, original_amount) VALUES ($1, 'BF', $2, 90825)`, [contractId, appId]);
+      if (hasContracts) await pool.query(`INSERT INTO active_contracts (id, silo, application_id, original_amount) VALUES ($1, 'BF', $2, 90825)`, [contractId, appId]);
       const ok = await http().post(`${base}/invoices/${inv.id}/confirm`).set(as("Staff"));
       expect(ok.status).toBe(200);
-      expect(ok.body.invoice).toMatchObject({ status: "confirmed", assets_contract_id: contractId });
+      expect(ok.body.invoice).toMatchObject({ status: "confirmed", assets_contract_id: hasContracts ? contractId : null });
       const md = (await pool.query(`SELECT metadata FROM applications WHERE id = $1`, [appId])).rows[0].metadata;
       expect(md.equipment_amount).toBe(86500);
       expect(md.equipment_invoices[0]).toMatchObject({ invoice_number: "INV-2041", vendor: "Prairie Equipment Ltd." });
-      const assets = (await pool.query(`SELECT serial_number, vendor, cost FROM active_contract_assets WHERE contract_id = $1`, [contractId])).rows;
-      expect(assets).toEqual([{ serial_number: "KX040-55123", vendor: "Prairie Equipment Ltd.", cost: "85000.00" }]);
+      if (hasContracts) {
+        const assets = (await pool.query(`SELECT serial_number, vendor, cost FROM active_contract_assets WHERE contract_id = $1`, [contractId])).rows;
+        expect(assets).toEqual([{ serial_number: "KX040-55123", vendor: "Prairie Equipment Ltd.", cost: "85000.00" }]);
+      }
 
       expect((await http().post(`${base}/invoices/${inv.id}/confirm`).set(as("Staff"))).status).toBe(409);
       expect((await http().get(`/api/deal-desk/applications/${randomUUID()}/invoices`).set(as("Staff"))).status).toBe(404);
@@ -382,8 +388,8 @@ describe("broker tools part 2 (real Postgres)", () => {
       const score = pull.body.pull.score;
       const md = (await pool.query(`SELECT metadata FROM applications WHERE id = $1`, [appId])).rows[0].metadata;
       expect(md.credit_bureau).toMatchObject({ lowest_score: score, pulls: [{ person: "Ann Client", bureau: "TransUnion Canada", score }] });
-      const usage = await pool.query(`SELECT count(*)::int AS n FROM usage_events WHERE kind = 'credit_pull' AND ref LIKE $1`, [`%${pull.body.pull.id}`]);
-      expect(usage.rows[0].n).toBe(0); // test pulls are not billed
+      const usage = await pool.query(`SELECT count(*)::int AS n FROM usage_events WHERE kind = 'credit_pull' AND ref LIKE $1`, [`%${pull.body.pull.id}`]); // KS_ONLY_USAGE
+      expect(usage.rows[0].n).toBe(0); // test pulls are not billed  KS_ONLY_USAGE
       const report = await http().get(`${base}/pulls/${pull.body.pull.id}/report`).set(as("Staff"));
       expect(report.headers["content-type"]).toBe("application/pdf");
       const scored = await http().post(`/api/deal-desk/applications/${appId}/scorecard`).set(as("Staff"));
