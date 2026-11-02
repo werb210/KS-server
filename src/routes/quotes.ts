@@ -46,6 +46,7 @@ router.post("/applications/:id", safeHandler(async (req: any, res: any) => {
   const r = await createQuote({
     applicationId: id, title: b.title, message: b.message, expiresOn: b.expires_on ?? null,
     offerIds: Array.isArray(b.offer_ids) ? b.offer_ids.map(String) : undefined, options: b.options, userId: actorId(req),
+    ...("tax_province" in b ? { taxProvince: b.tax_province ?? null } : {}), // KS_BROKER_TOOLS_3_SALES_TAX
   }, db());
   if (!r.ok) return fail(res, r.status, r.error);
   return res.status(201).json({ ok: true, quote: r.quote });

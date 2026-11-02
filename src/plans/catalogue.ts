@@ -58,6 +58,9 @@ export const FEATURES: readonly FeatureDef[] = [
   // Google Ads and LinkedIn Ads results and the Google Analytics connection are on every plan too.
   { key: "marketing", label: "Marketing to your own client list: email and text campaigns, sequences, templates and a website lead form", plan: "starter" },
   { key: "ads_results", label: "Google Ads and LinkedIn Ads results, Google Analytics connection", plan: "starter" },
+  // KS_BROKER_TOOLS - broker deal tools 1-3, every plan.
+  { key: "funding_conditions", label: "Funding conditions checklist", plan: "starter" },
+  { key: "sales_tax", label: "Canadian sales tax in quotes and calculators", plan: "starter" },
   // growth
   { key: "call_recording_playback", label: "Call recording playback", plan: "growth" },
   // KS_SERVER_v20_TEAMS - teams and record visibility (all / team / own), growth and up.
