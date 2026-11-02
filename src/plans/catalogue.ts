@@ -61,6 +61,8 @@ export const FEATURES: readonly FeatureDef[] = [
   // KS_BROKER_TOOLS - broker deal tools 1-3, every plan.
   { key: "funding_conditions", label: "Funding conditions checklist", plan: "starter" },
   { key: "sales_tax", label: "Canadian sales tax in quotes and calculators", plan: "starter" },
+  // KS_BROKER_TOOLS_INVOICES - the AI reads vendor invoices into the deal's equipment fields, every plan.
+  { key: "invoice_reading", label: "Vendor invoice reading (vendor, line items, taxes, serial numbers and VINs)", plan: "starter" },
   // growth
   { key: "call_recording_playback", label: "Call recording playback", plan: "growth" },
   // KS_SERVER_v20_TEAMS - teams and record visibility (all / team / own), growth and up.

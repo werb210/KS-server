@@ -38,6 +38,7 @@ export const INTEGRATION_TEST_FILES: string[] = [
   "src/__tests__/ksGmailInbox.integration.test.ts", // KS_SERVER_GMAIL_INBOX - needs Postgres
   "src/__tests__/ksLenderApi.integration.test.ts", // KS_SERVER_LENDER_API - needs Postgres
   "src/__tests__/brokerTools.integration.test.ts", // KS_BROKER_TOOLS - needs Postgres
+  "src/__tests__/brokerTools2.integration.test.ts", // KS_BROKER_TOOLS_2 - needs Postgres
   "src/__tests__/ksDemo.v10.integration.test.ts", // KS_SERVER_v10_DEMO - needs Postgres
   "src/__tests__/ksPgi.v11.integration.test.ts", // KS_SERVER_v11_PGI - needs Postgres
   "src/__tests__/ksRetention.v14.integration.test.ts", // KS_SERVER_v14_RETENTION - needs Postgres

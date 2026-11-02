@@ -12,7 +12,8 @@ export const PLATFORM = "keystone" as const;
 
 /** The plan features of the broker tools (KS-server src/plans/catalogue.ts). */
 export type BrokerFeature =
-  | "funding_conditions" | "sales_tax";
+  | "funding_conditions" | "sales_tax"
+  | "invoice_reading" | "credit_lines" | "rate_cards" | "credit_scorecards" | "contract_templates" | "vendor_portal" | "credit_bureau";
 
 /** 402 feature_not_in_plan unless the plan (or trial) includes the feature. */
 export function gate(feature: BrokerFeature): RequestHandler {
@@ -35,6 +36,28 @@ export function clientAppUrl(): string {
 
 export function staffPortalUrl(): string {
   return portalUrl();
+}
+
+/** Is the feature in the plan right now (for work that runs outside a request, e.g. the reminders worker)? */
+export async function featureOn(feature: BrokerFeature): Promise<boolean> {
+  try {
+    const { checkFeature } = await import("../plans/catalogue.js");
+    const { getPlanState } = await import("../plans/state.js");
+    return checkFeature(await getPlanState(pool as any), feature).allowed;
+  } catch (err) {
+    console.warn("[broker-tools] plan check failed", { feature, message: err instanceof Error ? err.message : String(err) });
+    return false;
+  }
+}
+
+/** Counts one billable use (e.g. a credit bureau pull) for Keystone operations: one usage event per kind and ref.
+ *  Never throws - the work has already happened. */
+export async function recordUsage(kind: string, ref: string): Promise<void> {
+  try {
+    await pool.query(`INSERT INTO usage_events (kind, ref, quantity) VALUES ($1, $2, 1) ON CONFLICT (kind, ref) DO NOTHING`, [kind, ref.slice(0, 300)]);
+  } catch (err) {
+    console.error("[broker-tools] usage event not recorded", { kind, ref, message: err instanceof Error ? err.message : String(err) });
+  }
 }
 
 export function passThrough(_req: Request, _res: Response, next: NextFunction): void {
