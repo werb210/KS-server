@@ -3,8 +3,10 @@
 // silo and record visibility.
 import { Router } from "express";
 import invoices from "./dealDesk/invoices.js"; // KS_BROKER_TOOLS_INVOICES
+import creditLines from "./dealDesk/creditLines.js"; // KS_BROKER_TOOLS_CREDIT_LINES
 
 const router = Router();
 router.use(invoices);
+router.use(creditLines);
 
 export default router;

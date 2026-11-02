@@ -105,6 +105,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "active_contracts", label: "Active contracts: renewals, re-engagement queues and commission tracking", plan: "growth" },
   // KS_SERVER_LENDER_API - send the lender package by API and pull status, offers and conditions back, growth and up.
   { key: "lender_api", label: "Lender API connections (submit by API, sync status, offers and conditions)", plan: "growth" },
+  // KS_BROKER_TOOLS_CREDIT_LINES - approved credit lines per client (limit, used, available, expiry reminders), growth and up.
+  { key: "credit_lines", label: "Approved credit lines per client: limit, used, available and expiry reminders", plan: "growth" },
   // pro
   { key: "multiple_lines", label: "Multiple business lines and a direct line for each person", plan: "pro" },
   // KS_SERVER_MARKETING_ADDON - Starter and Growth see Google Ads results only; the full tools are Pro (or the add-on).

@@ -11,6 +11,8 @@ import dealDeskRoutes from "../routes/dealDesk.js";
 import { markReady } from "../startupState.js";
 import { deps } from "../system/deps.js";
 import { setInvoiceReader } from "../brokerTools/invoices.js";
+import { afterFunded } from "../brokerTools/hooks.js";
+import { creditLineReminders } from "../brokerTools/creditLines.js";
 
 const MIGRATIONS = readdirSync("migrations").filter((f) => f.includes("_broker_tools_")).sort().map((f) => `migrations/${f}`);
 const tag = randomUUID().slice(0, 8);
@@ -65,6 +67,10 @@ describe("broker tools part 2 (real Postgres)", () => {
     await del(`DELETE FROM active_contract_assets WHERE contract_id IN (SELECT id FROM active_contracts WHERE application_id = $1)`, [appId]);
     await del(`DELETE FROM active_contracts WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM vendor_invoices WHERE application_id = $1`, [appId]);
+    await del(`DELETE FROM tasks WHERE title LIKE $1`, [`%${tag}%`]);
+    await del(`DELETE FROM credit_line_reminders WHERE credit_line_id IN (SELECT id FROM credit_lines WHERE application_id = $1)`, [appId]);
+    await del(`DELETE FROM credit_line_draws WHERE credit_line_id IN (SELECT id FROM credit_lines WHERE application_id = $1)`, [appId]);
+    await del(`DELETE FROM credit_lines WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM ocr_document_results WHERE document_id = $1`, [docId]);
     await del(`DELETE FROM documents WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM applications WHERE id = $1`, [appId]);
@@ -119,6 +125,52 @@ describe("broker tools part 2 (real Postgres)", () => {
 
       expect((await http().post(`${base}/invoices/${inv.id}/confirm`).set(as("Staff"))).status).toBe(409);
       expect((await http().get(`/api/deal-desk/applications/${randomUUID()}/invoices`).set(as("Staff"))).status).toBe(404);
+    });
+  });
+
+  // KS_BROKER_TOOLS_CREDIT_LINES
+  describe("4 approved credit lines", () => {
+    it("records a line, draws reduce what is available, a funded linked deal draws once, and expiry makes one task", async () => {
+      const base = `/api/deal-desk/applications/${appId}`;
+      // KS_ONLY_PLAN_START
+      await setPlan("starter");
+      expect((await http().get(`${base}/credit-lines`).set(as("Staff"))).status).toBe(402);
+      await setPlan("pro");
+      // KS_ONLY_PLAN_END
+      const expiry = new Date(Date.now() + 20 * 86_400_000).toISOString().slice(0, 10);
+      const made = await http().post(`${base}/credit-lines`).set(as("Staff"))
+        .send({ lender_name: `Northern ${tag}`, limit_amount: "250,000", expiry_date: expiry, conditions: "Annual financials", reminder_days: 30 });
+      expect(made.status).toBe(201);
+      const line = made.body.line;
+      expect(line).toMatchObject({ limit_amount: 250000, used: 0, available: 250000, expiring_soon: true });
+
+      const d1 = await http().post(`/api/deal-desk/credit-lines/${line.id}/draws`).set(as("Staff")).send({ amount: 100000, note: "first unit" });
+      expect(d1.body.line).toMatchObject({ used: 100000, available: 150000 });
+      expect((await http().post(`/api/deal-desk/credit-lines/${line.id}/draws`).set(as("Staff")).send({ amount: 200000 })).status).toBe(409);
+
+      expect((await http().put(`${base}/credit-line`).set(as("Staff")).send({ credit_line_id: line.id })).body.linked_line_id).toBe(line.id);
+      await pool.query(`UPDATE applications SET funded_amount = 60000 WHERE id = $1`, [appId]);
+      await afterFunded(appId);
+      await afterFunded(appId); // once only
+      const list = await http().get(`${base}/credit-lines`).set(as("Staff"));
+      expect(list.body.linked_line_id).toBe(line.id);
+      const after = list.body.lines.find((l: any) => l.id === line.id);
+      expect(after).toMatchObject({ used: 160000, available: 90000 });
+      expect(after.draws.filter((d: any) => d.source === "funded")).toHaveLength(1);
+
+      const firstDraw = after.draws.find((d: any) => d.note === "first unit");
+      const rev = await http().delete(`/api/deal-desk/credit-lines/${line.id}/draws/${firstDraw.id}`).set(as("Staff"));
+      expect(rev.body.line.available).toBe(190000);
+
+      await pool.query(`UPDATE credit_lines SET lender_name = $2 WHERE id = $1`, [line.id, `Northern ${tag}`]);
+      expect(await creditLineReminders(pool as any)).toBeGreaterThanOrEqual(1);
+      await creditLineReminders(pool as any);
+      const tasks = await pool.query(`SELECT title FROM tasks WHERE title LIKE $1`, [`%Northern ${tag}%`]);
+      expect(tasks.rows).toHaveLength(1);
+
+      expect((await http().get("/api/deal-desk/credit-lines?expiring_within=30").set(as("Staff"))).body.lines.some((l: any) => l.id === line.id)).toBe(true);
+      expect((await http().patch(`/api/deal-desk/credit-lines/${line.id}`).set(as("Staff")).send({ status: "closed" })).body.line.status).toBe("closed");
+      expect((await http().post(`/api/deal-desk/credit-lines/${line.id}/draws`).set(as("Staff")).send({ amount: 1 })).status).toBe(409);
     });
   });
 });

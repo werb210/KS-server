@@ -11,6 +11,8 @@ type Step = { name: string; feature: BrokerFeature; run: (db: Q, now: Date) => P
 export const STEPS: Step[] = [
   // Confirmed vendor invoices: equipment goes onto the Active Contract once the file has one.
   { name: "invoice_assets", feature: "invoice_reading", run: async (db) => (await import("../brokerTools/invoices.js")).syncPendingInvoiceAssets(db) },
+  // Approved credit lines: expired lines are marked; a reminder task before each expiry date.
+  { name: "credit_line_reminders", feature: "credit_lines", run: async (db, now) => (await import("../brokerTools/creditLines.js")).creditLineReminders(db, now.toISOString().slice(0, 10)) },
 ];
 
 export async function runBrokerToolsTick(db: Q, now = new Date()): Promise<Record<string, number>> {
