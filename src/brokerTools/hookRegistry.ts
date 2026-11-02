@@ -11,4 +11,10 @@ export const FUNDED_STEPS: FundedStep[] = [
     const { drawOnFunded } = await import("./creditLines.js");
     await drawOnFunded(db(), applicationId);
   } },
+  // KS_BROKER_TOOLS_VENDORS - a deal from a vendor's apply link records the vendor's fee.
+  { name: "vendor_fee", run: async (applicationId) => {
+    if (!(await featureOn("vendor_portal"))) return;
+    const { vendorFeeOnFunded } = await import("./vendors.js");
+    await vendorFeeOnFunded(db(), applicationId);
+  } },
 ];

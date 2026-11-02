@@ -123,6 +123,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "webhooks", label: "Webhooks and Zapier", plan: "pro" },
   // KS_HUBSPOT_GAPS_1_CALL_QUEUES - callers wait in line for the next free person (main line and phone-menu options).
   { key: "call_queues", label: "Call queues", plan: "pro" },
+  // KS_BROKER_TOOLS_VENDORS - vendor / dealer portal: point-of-sale quotes, apply links, deal status, invoices, vendor fees, pro.
+  { key: "vendor_portal", label: "Vendor and dealer portal: point-of-sale quotes, apply links, deal status, invoice upload and vendor fees", plan: "pro" },
   // KS_SERVER_CUSTOM_ROLES - custom roles built from a permission matrix (per area view/create/edit/delete/export and
   // own/team/all record visibility), pro. The built-in roles stay on every plan.
   { key: "custom_roles", label: "Custom roles and permissions", plan: "pro" },

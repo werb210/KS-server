@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { pool } from "../db.js";
 import { clearPlanCache } from "../plans/state.js"; // KS_ONLY_PLAN
 import dealDeskRoutes from "../routes/dealDesk.js";
+import vendorPortalRoutes from "../routes/vendorPortal.js";
 import { markReady } from "../startupState.js";
 import { deps } from "../system/deps.js";
 import { setInvoiceReader } from "../brokerTools/invoices.js";
@@ -26,6 +27,7 @@ function app() {
   const a = express();
   a.use(express.json());
   a.use("/api/deal-desk", dealDeskRoutes);
+  a.use("/api/vendor-portal", vendorPortalRoutes);
   return a;
 }
 const http = () => request(app());
@@ -70,6 +72,10 @@ describe("broker tools part 2 (real Postgres)", () => {
     await del(`DELETE FROM vendor_invoices WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM deal_structures WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM contract_documents WHERE application_id = $1`, [appId]);
+    await del(`DELETE FROM vendor_fees WHERE vendor_id IN (SELECT user_id FROM vendor_profiles WHERE company_name LIKE $1)`, [`%${tag}%`]);
+    await del(`DELETE FROM vendor_quotes WHERE vendor_id IN (SELECT user_id FROM vendor_profiles WHERE company_name LIKE $1)`, [`%${tag}%`]);
+    await del(`DELETE FROM users WHERE id IN (SELECT user_id FROM vendor_profiles WHERE company_name LIKE $1)`, [`%${tag}%`]);
+    await del(`DELETE FROM vendor_profiles WHERE company_name LIKE $1`, [`%${tag}%`]);
     await del(`DELETE FROM contract_templates WHERE name LIKE $1`, [`%${tag}%`]);
     await del(`DELETE FROM application_scorecards WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM banking_analyses WHERE application_id = $1`, [appId]);
@@ -273,6 +279,73 @@ describe("broker tools part 2 (real Postgres)", () => {
         if (prev !== undefined) process.env.SIGNNOW_API_KEY = prev;
       }
       expect((await http().post(`${base}/${made.body.contract.id}/cancel`).set(as("Staff"))).status).toBe(200);
+    });
+  });
+
+  // KS_BROKER_TOOLS_VENDORS
+  describe("9 vendor and dealer portal", () => {
+    it("an Admin adds a vendor; the vendor quotes from the rate cards, sees the deal from its link, and is owed a fee when it funds", async () => {
+      const phoneDigits = String(Math.floor(1000000 + Math.random() * 8999999));
+      // KS_ONLY_PLAN_START
+      await setPlan("growth");
+      expect((await http().get("/api/deal-desk/vendors").set(as("Staff"))).status).toBe(402);
+      await setPlan("pro");
+      // KS_ONLY_PLAN_END
+      const add = await http().post("/api/deal-desk/vendors").set(as("Admin"))
+        .send({ company_name: `Prairie ${tag}`, contact_name: "Pat Vendor", email: `pat-${tag}@example.com`, phone: `780${phoneDigits}`, province: "AB", fee_pct: 1.5, fee_flat: 250 });
+      expect(add.status).toBe(201);
+      const v = add.body.vendor;
+      expect(v.status).toBe("invited");
+      const vtok = `Bearer ${jwt.sign({ sub: `referrer:${v.user_id}`, role: "Referrer", referrerId: v.user_id, tokenVersion: 0 }, String(process.env.JWT_SECRET))}`;
+      expect((await http().get("/api/vendor-portal/me").set("Authorization", vtok)).status).toBe(403); // not signed yet
+      expect((await http().patch(`/api/deal-desk/vendors/${v.user_id}`).set(as("Admin")).send({ status: "active" })).body.vendor.status).toBe("active");
+      const me = await http().get("/api/vendor-portal/me").set("Authorization", vtok);
+      expect(me.status).toBe(200);
+      expect(me.body.apply_link).toContain(`ref=${v.code}`);
+      const staffTok = tok(STAFF, "Staff");
+      expect((await http().get("/api/vendor-portal/me").set("Authorization", staffTok)).status).toBe(403);
+
+      const card = await http().post("/api/deal-desk/rate-cards").set(as("Admin")).send({ name: `Vendor card ${tag}`, lender_name: `Northern ${tag}`, rate_kind: "apr" });
+      await http().post(`/api/deal-desk/rate-cards/${card.body.card.id}/import`).set(as("Admin")).send({ csv: "term,rate\n36,8.9\n48,9.4" });
+      const quote = await http().post("/api/vendor-portal/quote").set("Authorization", vtok)
+        .send({ customer_name: "Dig Co", amount: 50000, terms: [36, 48], equipment_description: "Mini excavator" });
+      expect(quote.status).toBe(201);
+      const mine = quote.body.quote.options.filter((o: any) => o.card_id === card.body.card.id);
+      expect(mine.map((o: any) => o.term_months)).toEqual([36, 48]);
+      expect(mine[0].payment_tax[0].label).toBe("GST 5%"); // the vendor's province
+      expect(quote.body.apply_link).toContain(`vq=${quote.body.quote.id}`);
+      expect((await http().get("/api/vendor-portal/quotes").set("Authorization", vtok)).body.quotes).toHaveLength(1);
+
+      await pool.query(`UPDATE applications SET metadata = metadata || $2::jsonb WHERE id = $1`, [appId, JSON.stringify({ attribution: { ref: v.code, vq: quote.body.quote.id } })]);
+      const deals = await http().get("/api/vendor-portal/deals").set("Authorization", vtok);
+      expect(deals.body.deals).toHaveLength(1);
+      expect(deals.body.deals[0]).toMatchObject({ application_id: appId, quote_id: quote.body.quote.id, stage: "Accepted" });
+      expect(Object.keys(deals.body.deals[0])).not.toContain("lender_name");
+      expect((await http().post(`/api/vendor-portal/deals/${randomUUID()}/invoice`).set("Authorization", vtok).attach("file", Buffer.from("%PDF-1.4"), "inv.pdf")).status).toBe(404);
+
+      await pool.query(`UPDATE applications SET funded_amount = 60000 WHERE id = $1`, [appId]);
+      await afterFunded(appId);
+      const fees = await http().get("/api/vendor-portal/fees").set("Authorization", vtok);
+      expect(fees.body.fees).toHaveLength(1);
+      expect(fees.body.fees[0]).toMatchObject({ fee_amount: "1150.00", status: "expected" });
+      expect((await http().patch(`/api/deal-desk/vendor-fees/${fees.body.fees[0].id}`).set(as("Admin")).send({ status: "paid", paid_on: "2026-11-20" })).status).toBe(200);
+      const list = await http().get("/api/deal-desk/vendors").set(as("Staff"));
+      expect(list.body.vendors.find((x: any) => x.user_id === v.user_id)).toMatchObject({ quotes: 1, deals: 1, fees_paid: "1150.00" });
+      await http().delete(`/api/deal-desk/rate-cards/${card.body.card.id}`).set(as("Admin"));
+      await pool.query(`UPDATE applications SET metadata = metadata - 'attribution' WHERE id = $1`, [appId]);
+    });
+
+    it("a vendor signs up from the portal; without e-signing set up it waits for an Admin", async () => {
+      const prev = process.env.SIGNNOW_API_KEY;
+      delete process.env.SIGNNOW_API_KEY;
+      try {
+        const r = await http().post("/api/vendor-portal/signup").send({ company_name: `Self ${tag}`, email: `self-${tag}@example.com`, phone: `587${String(Math.floor(1000000 + Math.random() * 8999999))}` });
+        expect(r.status).toBe(201);
+        expect(r.body).toMatchObject({ agreementConfigured: false, signingUrl: null });
+        expect((await http().post("/api/vendor-portal/signup/complete").send({ vendorId: r.body.vendorId })).body.active).toBe(false);
+      } finally {
+        if (prev !== undefined) process.env.SIGNNOW_API_KEY = prev;
+      }
     });
   });
 });

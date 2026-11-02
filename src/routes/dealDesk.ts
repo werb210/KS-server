@@ -7,6 +7,7 @@ import creditLines from "./dealDesk/creditLines.js"; // KS_BROKER_TOOLS_CREDIT_L
 import rateCards from "./dealDesk/rateCards.js"; // KS_BROKER_TOOLS_RATE_CARDS
 import scorecards from "./dealDesk/scorecards.js"; // KS_BROKER_TOOLS_SCORECARDS
 import contracts from "./dealDesk/contracts.js"; // KS_BROKER_TOOLS_CONTRACTS
+import vendors from "./dealDesk/vendors.js"; // KS_BROKER_TOOLS_VENDORS
 
 const router = Router();
 router.use(invoices);
@@ -14,5 +15,6 @@ router.use(creditLines);
 router.use(rateCards);
 router.use(scorecards);
 router.use(contracts);
+router.use(vendors);
 
 export default router;
