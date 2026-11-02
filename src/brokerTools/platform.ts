@@ -12,9 +12,7 @@ export const PLATFORM = "keystone" as const;
 
 /** The plan features of the broker tools (KS-server src/plans/catalogue.ts). */
 export type BrokerFeature =
-  | "funding_conditions" | "invoice_reading" | "sales_tax"
-  | "credit_lines" | "rate_cards" | "credit_scorecards" | "contract_templates"
-  | "vendor_portal";
+  | "funding_conditions" | "sales_tax";
 
 /** 402 feature_not_in_plan unless the plan (or trial) includes the feature. */
 export function gate(feature: BrokerFeature): RequestHandler {
