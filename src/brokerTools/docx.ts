@@ -149,8 +149,8 @@ export function docxBlocks(docx: Buffer): Block[] {
 // ------------------------------------------------------------------------------------------------ PDF
 /** Text the standard PDF fonts can draw (WinAnsi): smart quotes and dashes simplified, other characters dropped. */
 export function pdfSafe(s: string): string {
-  return String(s ?? "").replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-").replace(/…/g, "...")
-    .replace(/•/g, "-").replace(/ /g, " ").replace(/[^\x09\x0A\x0D\x20-\x7E¡-ÿ]/g, "");
+  return String(s ?? "").replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/[\u2013\u2014]/g, "-").replace(/\u2026/g, "...")
+    .replace(/\u2022/g, "-").replace(/\u00A0/g, " ").replace(/[^\x09\x0A\x0D\x20-\x7E\u00A1-\u00FF]/g, "");
 }
 
 export type Signer = { name: string; email: string; role: string };
