@@ -13,7 +13,7 @@ export type Frequency = (typeof FREQUENCIES)[number];
 export const PER_YEAR: Record<Frequency, number> = { daily: 252, weekly: 52, biweekly: 26, semimonthly: 24, monthly: 12 };
 export const FREQUENCY_LABEL: Record<Frequency, string> = { daily: "Daily (business days)", weekly: "Weekly", biweekly: "Every two weeks", semimonthly: "Twice a month", monthly: "Monthly" };
 
-export type Fee = { label: string; amount: number; deducted: boolean };
+export type Fee = { label: string; amount: number; deducted: boolean; /** KS_BROKER_TOOLS_3_SALES_TAX - sales tax applies to this fee */ taxable?: boolean };
 
 export type OptionInput = {
   amount: number;

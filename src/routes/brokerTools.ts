@@ -11,6 +11,12 @@
 //     POST   /condition-templates | PUT /condition-templates/:id | DELETE /condition-templates/:id    Admin
 //     GET    /people                                            staff to assign conditions to
 //     GET    /lender-options                                    lenders and lender products for the pickers
+//   Sales tax (sales_tax, every plan) - KS_BROKER_TOOLS_3_SALES_TAX
+//     GET    /sales-tax/rates                                   every row + the rate in force today per province
+//     PUT    /sales-tax/rates                                   Admin: add or change { province, effective_from, gst, pst, hst, qst, note }
+//     DELETE /sales-tax/rates/:province/:effective_from         Admin
+//     POST   /sales-tax/calculate                               { amount, province, date? } -> tax lines and total
+//     GET    /applications/:id/sales-tax                        the business's province on the file and its rate today
 // Every /applications/:id route checks the caller's silo and record visibility first (404 otherwise).
 import { Router, type NextFunction, type Request, type Response } from "express";
 import multer from "multer";
@@ -24,6 +30,10 @@ import {
   OWNERS, STATUSES, addCondition, applyTemplates, getCondition, importFromOffer, listConditions, outstanding, parseConditionInput,
   type ConditionInput,
 } from "../brokerTools/conditions.js";
+import {
+  PROVINCES, PROVINCE_NAMES, applicationProvince, combinedRate, currentRates, deleteRate, listRates, normaliseProvince, parseRateInput,
+  rateOn, salesTax, saveRate,
+} from "../brokerTools/salesTax.js"; // KS_BROKER_TOOLS_3_SALES_TAX
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024, files: 1 } });
@@ -234,6 +244,51 @@ router.delete("/condition-templates/:tid", ...admin, gate("funding_conditions"),
   if (!r.rows[0]) return void res.status(404).json({ ok: false, error: "not_found" });
   await audit(req, "funding_condition_template.deleted", { title: r.rows[0].title }, { type: "funding_condition_template", id: tid });
   res.json({ ok: true });
+}));
+
+// ---------------------------------------------------------------------------------------------- sales tax
+// KS_BROKER_TOOLS_3_SALES_TAX
+const taxStaff = [...staff, gate("sales_tax")];
+
+router.get("/sales-tax/rates", ...taxStaff, safeHandler(async (_req: Request, res: Response) => {
+  const rows = await listRates(db());
+  const current = currentRates(rows).map((r) => ({ ...r, name: PROVINCE_NAMES[r.province], combined: combinedRate(r) }));
+  res.json({ ok: true, rates: rows, current, provinces: PROVINCES.map((code) => ({ code, name: PROVINCE_NAMES[code] })) });
+}));
+
+router.put("/sales-tax/rates", ...admin, gate("sales_tax"), safeHandler(async (req: Request, res: Response) => {
+  const p = parseRateInput((req.body ?? {}) as Record<string, unknown>);
+  if (!p.ok) return void res.status(400).json({ ok: false, error: "invalid", message: p.error });
+  await saveRate(db(), p.rate, actorId(req));
+  await audit(req, "sales_tax.rate_saved", { ...p.rate }, { type: "sales_tax_rate", id: `${p.rate.province}:${p.rate.effective_from}` });
+  res.json({ ok: true, rate: p.rate });
+}));
+
+router.delete("/sales-tax/rates/:province/:day", ...admin, gate("sales_tax"), safeHandler(async (req: Request, res: Response) => {
+  const province = normaliseProvince(req.params.province);
+  const day = String(req.params.day ?? "");
+  if (!province || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return void res.status(400).json({ ok: false, error: "invalid" });
+  const removed = await deleteRate(db(), province, day);
+  if (!removed) return void res.status(404).json({ ok: false, error: "not_found" });
+  await audit(req, "sales_tax.rate_deleted", { province, effective_from: day }, { type: "sales_tax_rate", id: `${province}:${day}` });
+  res.json({ ok: true });
+}));
+
+router.post("/sales-tax/calculate", ...taxStaff, safeHandler(async (req: Request, res: Response) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const province = normaliseProvince(b.province);
+  const amount = Number(b.amount);
+  if (!province) return void res.status(400).json({ ok: false, error: "invalid", message: "Pick a province or territory." });
+  if (!(amount >= 0) || amount > 1e11) return void res.status(400).json({ ok: false, error: "invalid", message: "Enter an amount." });
+  const rate = await rateOn(db(), province, typeof b.date === "string" ? b.date : undefined);
+  const t = salesTax(amount, rate);
+  res.json({ ok: true, province, rate, combined: combinedRate(rate), lines: t.lines, total_tax: t.total, total_with_tax: Math.round((amount + t.total) * 100) / 100 });
+}));
+
+router.get("/applications/:id/sales-tax", ...taxStaff, appGuard, safeHandler(async (req: Request, res: Response) => {
+  const province = await applicationProvince(db(), String(req.params.id));
+  const rate = province ? await rateOn(db(), province) : null;
+  res.json({ ok: true, province, rate, combined: rate ? combinedRate(rate) : null });
 }));
 
 router.get("/lender-options", ...staff, safeHandler(async (_req: Request, res: Response) => {

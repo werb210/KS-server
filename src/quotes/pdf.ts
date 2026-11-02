@@ -64,6 +64,7 @@ function optionCard(ctx: Ctx, o: OptionRow, i: number, currency: string, accent:
     [o.rate_kind === "factor_rate" ? "Factor rate" : "Interest rate", rateText(o)],
     ["Payment", o.payment_amount === null ? "-" : `${money(o.payment_amount, currency)} ${FREQUENCY_LABEL[o.payment_frequency].toLowerCase()}${o.payment_count ? ` x ${o.payment_count}` : ""}`],
     ...o.fees.map((f): [string, string] => [`Fee: ${f.label}`, `${money(f.amount, currency)}${f.deducted ? " (taken from the funds)" : ""}`]),
+    ...(o.tax_lines ?? []).map((t): [string, string] => [`Tax on fees: ${t.label}`, money(t.amount, currency)]), // KS_BROKER_TOOLS_3_SALES_TAX
     ["Funds you receive", money(o.net_proceeds, currency)],
     ["Total you repay", money(o.total_repayment, currency)],
     ["Total cost of borrowing", money(o.cost_of_borrowing, currency)],

@@ -12,6 +12,8 @@ import brokerToolsRoutes from "../routes/brokerTools.js";
 import clientBrokerRoutes from "../routes/clientBroker.js";
 import { markReady } from "../startupState.js";
 import { deps } from "../system/deps.js";
+import { createQuote, updateQuote } from "../quotes/service.js"; // KS_ONLY_QUOTES
+import { rateOn } from "../brokerTools/salesTax.js";
 
 const MIGRATIONS = readdirSync("migrations").filter((f) => f.includes("_broker_tools_")).sort().map((f) => `migrations/${f}`);
 const tag = randomUUID().slice(0, 8);
@@ -63,7 +65,8 @@ describe("broker tools (real Postgres)", () => {
   afterAll(async () => {
     await pool.query(`DELETE FROM funding_conditions WHERE application_id = $1`, [appId]);
     await pool.query(`DELETE FROM offers WHERE application_id = $1`, [appId]);
-    await pool.query(`DELETE FROM application_stage_events WHERE application_id::text = $1`, [appId]).catch(() => undefined);
+    await pool.query(`DELETE FROM quotes WHERE application_id = $1`, [appId]).catch((e) => console.warn("cleanup", e.message)); // KS_ONLY_QUOTES
+    await pool.query(`DELETE FROM application_stage_events WHERE application_id::text = $1`, [appId]).catch((e) => console.warn("cleanup", e.message));
     await pool.query(`DELETE FROM applications WHERE id = $1`, [appId]).catch((e) => console.warn("cleanup", e.message));
     await pool.query(`DELETE FROM contacts WHERE id = $1`, [contactId]).catch((e) => console.warn("cleanup", e.message));
     await pool.query(`DELETE FROM licensee_plan`);
@@ -135,5 +138,51 @@ describe("broker tools (real Postgres)", () => {
       const r = await http().get(`/api/broker-tools/applications/${randomUUID()}/conditions`).set("Authorization", tok(STAFF, "Staff"));
       expect(r.status).toBe(404);
     });
+  });
+
+  // KS_BROKER_TOOLS_3_SALES_TAX
+  describe("3 sales tax", () => {
+    it("serves the seeded rates, calculates, and only an Admin edits; a dated row applies from its day", async () => {
+      const list = await http().get("/api/broker-tools/sales-tax/rates").set("Authorization", tok(STAFF, "Staff"));
+      expect(list.status).toBe(200);
+      const on = list.body.current.find((r: any) => r.province === "ON");
+      expect(on.hst).toBe(13);
+      expect(list.body.current.find((r: any) => r.province === "QC").combined).toBe(14.975);
+      const calc = await http().post("/api/broker-tools/sales-tax/calculate").set("Authorization", tok(STAFF, "Staff")).send({ amount: 1000, province: "British Columbia" });
+      expect(calc.body.lines).toEqual([{ label: "GST 5%", amount: 50 }, { label: "PST 7%", amount: 70 }]);
+      expect(calc.body.total_with_tax).toBe(1120);
+      const bad = await http().post("/api/broker-tools/sales-tax/calculate").set("Authorization", tok(STAFF, "Staff")).send({ amount: 1000, province: "Texas" });
+      expect(bad.status).toBe(400);
+
+      const edit = { province: "ON", effective_from: "2099-01-01", hst: 14, note: "test" };
+      expect((await http().put("/api/broker-tools/sales-tax/rates").set("Authorization", tok(STAFF, "Staff")).send(edit)).status).toBe(403);
+      expect((await http().put("/api/broker-tools/sales-tax/rates").set("Authorization", tok(ADMIN, "Admin")).send({ ...edit, gst: 5 })).status).toBe(400);
+      try {
+        expect((await http().put("/api/broker-tools/sales-tax/rates").set("Authorization", tok(ADMIN, "Admin")).send(edit)).status).toBe(200);
+        expect((await rateOn(pool as any, "ON", "2099-02-01")).hst).toBe(14);
+        expect((await rateOn(pool as any, "ON", "2026-11-01")).hst).toBe(13);
+      } finally {
+        expect((await http().delete("/api/broker-tools/sales-tax/rates/ON/2099-01-01").set("Authorization", tok(ADMIN, "Admin"))).status).toBe(200);
+      }
+    });
+
+    // KS_ONLY_QUOTES_START - quotes are Keystone only.
+    it("taxes only the fees ticked taxable on a quote, and a new province re-prices it", async () => {
+      const options = [{ lender_name: "Test Lender", amount: 10000, term_months: 12, rate: 10, payment_frequency: "monthly",
+        fees: [{ label: "Documentation fee", amount: 300, taxable: true }, { label: "Admin fee", amount: 200 }] }];
+      const c = await createQuote({ applicationId: appId, options, userId: STAFF, taxProvince: "ON" }, pool as any);
+      expect(c.ok).toBe(true);
+      if (!c.ok) return;
+      expect(c.quote.tax_province).toBe("ON");
+      expect(c.quote.options[0].tax_lines).toEqual([{ label: "HST 13%", amount: 39 }]);
+      expect(c.quote.options[0].total_fees).toBe(539);
+      expect(c.quote.options[0].fees[0].taxable).toBe(true);
+      const u = await updateQuote(c.quote.id, { tax_province: "SK" }, STAFF, pool as any);
+      expect(u.ok && u.quote.options[0].tax_lines).toEqual([{ label: "GST 5%", amount: 15 }, { label: "PST 6%", amount: 18 }]);
+      const none = await updateQuote(c.quote.id, { tax_province: null }, STAFF, pool as any);
+      expect(none.ok && none.quote.options[0].total_tax).toBe(0);
+      expect((await updateQuote(c.quote.id, { tax_province: "Texas" }, STAFF, pool as any)).ok).toBe(false);
+    });
+    // KS_ONLY_QUOTES_END
   });
 });

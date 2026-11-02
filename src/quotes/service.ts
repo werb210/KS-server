@@ -15,7 +15,8 @@ import { brandName } from "../licensee/brand.js";
 import { clientUrl } from "../licensee/urls.js";
 import { getStorage, type StorageBackend } from "../lib/storage/index.js";
 import type { Q } from "../plans/state.js";
-import { FREQUENCIES, NO_FEE_TAX, computeOption, parseFrequency, parseRate, parseTermMonths, type Fee, type Frequency } from "./calc.js";
+import { FREQUENCIES, NO_FEE_TAX, computeOption, parseFrequency, parseRate, parseTermMonths, type Fee, type FeeTax, type Frequency, type TaxLine } from "./calc.js";
+import { applicationProvince, feeTaxFor, normaliseProvince, rateOn } from "../brokerTools/salesTax.js"; // KS_BROKER_TOOLS_3_SALES_TAX
 
 export type Db = Q;
 const defaultDb = (): Db => pool as unknown as Db;
@@ -31,6 +32,8 @@ export type OptionRow = {
   payment_count: number | null; payment_amount: number | null; payment_overridden: boolean; fees: Fee[]; total_fees: number;
   total_repayment: number | null; cost_of_borrowing: number | null; net_proceeds: number | null; estimated_apr: number | null;
   recommended: boolean; notes: string | null;
+  /** KS_BROKER_TOOLS_3_SALES_TAX - sales tax on the taxable fees (already inside total_fees). */
+  tax_lines?: TaxLine[]; total_tax?: number;
 };
 
 export type QuoteView = {
@@ -38,6 +41,8 @@ export type QuoteView = {
   expires_on: string | null; pdf_document_id: string | null; accepted_option_id: string | null; accepted_name: string | null;
   decline_reason: string | null; view_count: number; created_at: string; sent_at: string | null; first_viewed_at: string | null;
   last_viewed_at: string | null; accepted_at: string | null; declined_at: string | null; withdrawn_at: string | null; options: OptionRow[];
+  /** KS_BROKER_TOOLS_3_SALES_TAX - the province whose sales tax applies to taxable fees; null = no tax. */
+  tax_province?: string | null;
 };
 
 const num = (v: unknown): number | null => (v === null || v === undefined || v === "" ? null : Number.isFinite(Number(v)) ? Number(v) : null);
@@ -51,9 +56,10 @@ function optionOf(r: any): OptionRow {
     amount: Number(r.amount) || 0, term_months: num(r.term_months), rate_kind: r.rate_kind === "factor_rate" ? "factor_rate" : "interest_rate", rate: num(r.rate),
     payment_frequency: (FREQUENCIES as readonly string[]).includes(r.payment_frequency) ? r.payment_frequency : "monthly",
     payment_count: num(r.payment_count), payment_amount: num(r.payment_amount), payment_overridden: r.payment_overridden === true,
-    fees: arr(r.fees).map((f: any) => ({ label: String(f.label ?? ""), amount: Number(f.amount) || 0, deducted: f.deducted === true })),
+    fees: arr(r.fees).map((f: any) => ({ label: String(f.label ?? ""), amount: Number(f.amount) || 0, deducted: f.deducted === true, ...(f.taxable === true ? { taxable: true } : {}) })),
     total_fees: Number(r.total_fees) || 0, total_repayment: num(r.total_repayment), cost_of_borrowing: num(r.cost_of_borrowing),
     net_proceeds: num(r.net_proceeds), estimated_apr: num(r.estimated_apr), recommended: r.recommended === true, notes: r.notes ?? null,
+    tax_lines: arr(r.tax_lines).map((t: any) => ({ label: String(t.label ?? ""), amount: Number(t.amount) || 0 })), total_tax: Number(r.total_tax) || 0, // KS_BROKER_TOOLS_3_SALES_TAX
   };
 }
 
@@ -83,7 +89,7 @@ export async function loadQuote(db: Db, id: string, now: Date = new Date()): Pro
     accepted_option_id: q.accepted_option_id ? String(q.accepted_option_id) : null, accepted_name: q.accepted_name ?? null,
     decline_reason: q.decline_reason ?? null, view_count: Number(q.view_count) || 0, created_at: iso(q.created_at)!, sent_at: iso(q.sent_at),
     first_viewed_at: iso(q.first_viewed_at), last_viewed_at: iso(q.last_viewed_at), accepted_at: iso(q.accepted_at), declined_at: iso(q.declined_at),
-    withdrawn_at: iso(q.withdrawn_at), options: opts,
+    withdrawn_at: iso(q.withdrawn_at), options: opts, tax_province: normaliseProvince(q.tax_province), // KS_BROKER_TOOLS_3_SALES_TAX
   };
 }
 
@@ -147,7 +153,7 @@ export function parseOptions(raw: unknown): { ok: true; options: OptionPatch[] }
       const amt = Number((f as any)?.amount);
       if (!label && !(amt > 0)) continue;
       if (!label || !(amt >= 0)) return { ok: false, error: `option ${i + 1}: each fee needs a name and an amount` };
-      feeList.push({ label, amount: Math.round(amt * 100) / 100, deducted: (f as any)?.deducted === true });
+      feeList.push({ label, amount: Math.round(amt * 100) / 100, deducted: (f as any)?.deducted === true, ...((f as any)?.taxable === true ? { taxable: true } : {}) }); // KS_BROKER_TOOLS_3_SALES_TAX
     }
     const pay = num(x.payment_amount);
     out.push({
@@ -170,20 +176,26 @@ export function optionFromOffer(o: Record<string, any>): OptionPatch {
   };
 }
 
-async function writeOptions(db: Db, quoteId: string, options: OptionPatch[]): Promise<void> {
+// KS_BROKER_TOOLS_3_SALES_TAX - the quote's FeeTax: the sales-tax helper with the rate of the quote's province (no
+// province = no tax). Interest and factor cost are never taxed; only fees ticked "taxable" are.
+export async function feeTaxForQuote(db: Db, province: string | null | undefined): Promise<FeeTax> {
+  const p = normaliseProvince(province);
+  return p ? feeTaxFor(await rateOn(db, p)) : NO_FEE_TAX;
+}
+
+async function writeOptions(db: Db, quoteId: string, options: OptionPatch[], feeTax: FeeTax = NO_FEE_TAX): Promise<void> {
   await db.query(`DELETE FROM quote_options WHERE quote_id::text = $1`, [quoteId]);
   for (const [i, o] of options.entries()) {
-    // KS_SERVER_v23_QUOTES_TAX_HOOK - when the sales-tax helper (broker-tools) lands, pass its FeeTax here
-    // (built from the licensee's / client's province). Until then fees carry no tax.
-    const m = computeOption({ ...o, payment_count: o.payment_count ?? null }, NO_FEE_TAX);
+    // KS_SERVER_v23_QUOTES_TAX_HOOK / KS_BROKER_TOOLS_3_SALES_TAX - feeTax comes from the quote's province.
+    const m = computeOption({ ...o, payment_count: o.payment_count ?? null }, feeTax);
     await db.query(
       `INSERT INTO quote_options (quote_id, position, offer_id, lender_name, product_name, amount, term_months, rate_kind, rate, payment_frequency,
                                   payment_count, payment_amount, payment_overridden, fees, total_fees, total_repayment, cost_of_borrowing,
-                                  net_proceeds, estimated_apr, recommended, notes)
-       VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, $18, $19, $20, $21)`,
+                                  net_proceeds, estimated_apr, recommended, notes, tax_lines, total_tax)
+       VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, $18, $19, $20, $21, $22::jsonb, $23)`,
       [quoteId, i, o.offer_id ?? null, o.lender_name, o.product_name ?? null, o.amount, o.term_months, o.rate_kind, o.rate, o.payment_frequency,
         m.payment_count, m.payment_amount, Boolean(o.payment_overridden), JSON.stringify(o.fees), m.total_fees, m.total_repayment, m.cost_of_borrowing,
-        m.net_proceeds, m.estimated_apr, Boolean(o.recommended), o.notes ?? null],
+        m.net_proceeds, m.estimated_apr, Boolean(o.recommended), o.notes ?? null, JSON.stringify(m.tax_lines), m.total_tax],
     );
   }
 }
@@ -201,7 +213,9 @@ function quoteNumber(now: Date): string {
   return `Q-${now.toISOString().slice(2, 10).replace(/-/g, "")}-${randomUUID().slice(0, 5).toUpperCase()}`;
 }
 
-export type CreateInput = { applicationId: string; title?: string; message?: string | null; expiresOn?: string | null; offerIds?: string[]; options?: unknown; userId: string | null };
+export type CreateInput = { applicationId: string; title?: string; message?: string | null; expiresOn?: string | null; offerIds?: string[]; options?: unknown; userId: string | null;
+  /** KS_BROKER_TOOLS_3_SALES_TAX - omitted: the business's province on the file; null or "": no tax. */
+  taxProvince?: string | null };
 
 export async function createQuote(input: CreateInput, db: Db = defaultDb(), now: Date = new Date()): Promise<{ ok: true; quote: QuoteView } | { ok: false; status: number; error: string }> {
   const app = (await db.query(`SELECT id::text AS id, funded_currency FROM applications WHERE id::text = $1 LIMIT 1`, [input.applicationId])).rows[0];
@@ -219,12 +233,14 @@ export async function createQuote(input: CreateInput, db: Db = defaultDb(), now:
   const expires = input.expiresOn && /^\d{4}-\d{2}-\d{2}$/.test(input.expiresOn) ? input.expiresOn
     : new Date(now.getTime() + 14 * 86_400_000).toISOString().slice(0, 10);
   const id = randomUUID();
+  // KS_BROKER_TOOLS_3_SALES_TAX - a new quote takes the business's province from the file unless staff chose one.
+  const taxProvince = input.taxProvince !== undefined ? normaliseProvince(input.taxProvince) : await applicationProvince(db, app.id);
   await db.query(
-    `INSERT INTO quotes (id, application_id, quote_number, title, message, currency, expires_on, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    `INSERT INTO quotes (id, application_id, quote_number, title, message, currency, expires_on, created_by, tax_province) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [id, app.id, quoteNumber(now), clip(input.title, LIMITS.title) || "Your financing options", clip(input.message, LIMITS.message) || null,
-      String(app.funded_currency ?? "").toUpperCase() === "USD" ? "USD" : "CAD", expires, input.userId],
+      String(app.funded_currency ?? "").toUpperCase() === "USD" ? "USD" : "CAD", expires, input.userId, taxProvince],
   );
-  await writeOptions(db, id, options);
+  await writeOptions(db, id, options, await feeTaxForQuote(db, taxProvince));
   await event(db, id, "created", "staff", input.userId, { options: options.length });
   return { ok: true, quote: (await loadQuote(db, id, now))! };
 }
@@ -235,6 +251,12 @@ export async function updateQuote(id: string, body: Record<string, unknown>, use
   if (q.status !== "draft") return { ok: false, status: 409, error: "only_drafts_can_change" };
   if ("expires_on" in body && body.expires_on !== null && !/^\d{4}-\d{2}-\d{2}$/.test(String(body.expires_on))) return { ok: false, status: 400, error: "expires_on must be a date (YYYY-MM-DD)" };
   if ("currency" in body && body.currency !== "CAD" && body.currency !== "USD") return { ok: false, status: 400, error: "currency must be CAD or USD" };
+  // KS_BROKER_TOOLS_3_SALES_TAX - tax_province: a province code or name, or null / "" for no tax.
+  const taxProvinceGiven = "tax_province" in body;
+  const taxProvince = taxProvinceGiven ? normaliseProvince(body.tax_province) : (q.tax_province ?? null);
+  if (taxProvinceGiven && body.tax_province !== null && String(body.tax_province ?? "").trim() !== "" && !taxProvince) {
+    return { ok: false, status: 400, error: "tax_province must be a Canadian province or territory" };
+  }
   let options: OptionPatch[] | null = null;
   if ("options" in body) {
     const p = parseOptions(body.options);
@@ -248,7 +270,10 @@ export async function updateQuote(id: string, body: Record<string, unknown>, use
     [id, "title" in body ? clip(body.title, LIMITS.title) || "Your financing options" : null, "message" in body, clip(body.message, LIMITS.message) || null,
       "expires_on" in body, body.expires_on ?? null, "currency" in body ? body.currency : null],
   );
-  if (options) await writeOptions(db, id, options);
+  if (taxProvinceGiven) await db.query(`UPDATE quotes SET tax_province = $2, updated_at = now() WHERE id::text = $1`, [id, taxProvince]);
+  // A new province re-prices the existing options too.
+  const opts = options ?? (taxProvinceGiven ? q.options.map(({ id: _id, position: _p, ...o }) => o) : null);
+  if (opts) await writeOptions(db, id, opts, await feeTaxForQuote(db, taxProvince));
   await event(db, id, "edited", "staff", userId, {});
   return { ok: true, quote: (await loadQuote(db, id))! };
 }
@@ -256,7 +281,7 @@ export async function updateQuote(id: string, body: Record<string, unknown>, use
 export async function duplicateQuote(id: string, userId: string | null, db: Db = defaultDb()) {
   const q = await loadQuote(db, id);
   if (!q) return { ok: false as const, status: 404, error: "not_found" };
-  return createQuote({ applicationId: q.application_id, title: q.title, message: q.message, options: q.options, userId }, db);
+  return createQuote({ applicationId: q.application_id, title: q.title, message: q.message, options: q.options, userId, taxProvince: q.tax_province ?? null }, db);
 }
 
 // ------------------------------------------------------------------------------------------------ send
