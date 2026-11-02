@@ -9,6 +9,7 @@ import { pool } from "../db.js";
 import { clearPlanCache } from "../plans/state.js"; // KS_ONLY_PLAN
 import dealDeskRoutes from "../routes/dealDesk.js";
 import vendorPortalRoutes from "../routes/vendorPortal.js";
+import clientCreditRoutes from "../routes/clientCredit.js";
 import { markReady } from "../startupState.js";
 import { deps } from "../system/deps.js";
 import { setInvoiceReader } from "../brokerTools/invoices.js";
@@ -28,6 +29,7 @@ function app() {
   a.use(express.json());
   a.use("/api/deal-desk", dealDeskRoutes);
   a.use("/api/vendor-portal", vendorPortalRoutes);
+  a.use("/api/client-credit", clientCreditRoutes);
   return a;
 }
 const http = () => request(app());
@@ -72,6 +74,8 @@ describe("broker tools part 2 (real Postgres)", () => {
     await del(`DELETE FROM vendor_invoices WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM deal_structures WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM contract_documents WHERE application_id = $1`, [appId]);
+    await del(`DELETE FROM credit_pulls WHERE application_id = $1`, [appId]);
+    await del(`DELETE FROM credit_consents WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM vendor_fees WHERE vendor_id IN (SELECT user_id FROM vendor_profiles WHERE company_name LIKE $1)`, [`%${tag}%`]);
     await del(`DELETE FROM vendor_quotes WHERE vendor_id IN (SELECT user_id FROM vendor_profiles WHERE company_name LIKE $1)`, [`%${tag}%`]);
     await del(`DELETE FROM users WHERE id IN (SELECT user_id FROM vendor_profiles WHERE company_name LIKE $1)`, [`%${tag}%`]);
@@ -346,6 +350,44 @@ describe("broker tools part 2 (real Postgres)", () => {
       } finally {
         if (prev !== undefined) process.env.SIGNNOW_API_KEY = prev;
       }
+    });
+  });
+
+  // KS_BROKER_TOOLS_CREDIT_BUREAU
+  describe("6 credit bureau pulls", () => {
+    it("staff ask for consent, the client gives it in the client app, staff pull; the score feeds the scorecard", async () => {
+      const base = `/api/deal-desk/applications/${appId}/credit-bureau`;
+      const clientTok = `Bearer ${jwt.sign({ phone: "+17805550199", role: "client" }, String(process.env.JWT_SECRET))}`;
+      const strangerTok = `Bearer ${jwt.sign({ phone: "+17805550111", role: "client" }, String(process.env.JWT_SECRET))}`;
+      const ask = await http().post(`${base}/consents`).set(as("Staff")).send({ first_name: "Ann", last_name: "Client", city: "Edmonton", province: "AB" });
+      expect(ask.status).toBe(201);
+      const cid = ask.body.consent.id;
+      const early = await http().post(`${base}/pulls`).set(as("Staff")).send({ consent_id: cid, bureau: "equifax_ca" });
+      expect(early.status).toBe(409);
+      expect(early.body.error).toBe("no_consent");
+
+      expect((await http().get(`/api/client-credit/consents?applicationId=${appId}`).set("Authorization", strangerTok)).status).toBe(403);
+      const mine = await http().get(`/api/client-credit/consents?applicationId=${appId}`).set("Authorization", clientTok);
+      expect(mine.body.consents[0]).toMatchObject({ id: cid, person: "Ann Client", status: "requested", needs_date_of_birth: true });
+      expect((await http().post(`/api/client-credit/consents/${cid}`).set("Authorization", clientTok).send({ applicationId: appId, full_name: "Ann Client", agree: true })).status).toBe(400);
+      const gave = await http().post(`/api/client-credit/consents/${cid}`).set("Authorization", clientTok).send({ applicationId: appId, full_name: "Ann Client", date_of_birth: "1980-04-02", agree: true });
+      expect(gave.body.consent.status).toBe("given");
+
+      const pull = await http().post(`${base}/pulls`).set(as("Staff")).send({ consent_id: cid, bureau: "transunion_ca" });
+      expect(pull.status).toBe(201);
+      expect(pull.body.pull).toMatchObject({ provider: "mock", status: "completed" });
+      const score = pull.body.pull.score;
+      const md = (await pool.query(`SELECT metadata FROM applications WHERE id = $1`, [appId])).rows[0].metadata;
+      expect(md.credit_bureau).toMatchObject({ lowest_score: score, pulls: [{ person: "Ann Client", bureau: "TransUnion Canada", score }] });
+      const usage = await pool.query(`SELECT count(*)::int AS n FROM usage_events WHERE kind = 'credit_pull' AND ref LIKE $1`, [`%${pull.body.pull.id}`]);
+      expect(usage.rows[0].n).toBe(0); // test pulls are not billed
+      const report = await http().get(`${base}/pulls/${pull.body.pull.id}/report`).set(as("Staff"));
+      expect(report.headers["content-type"]).toBe("application/pdf");
+      const scored = await http().post(`/api/deal-desk/applications/${appId}/scorecard`).set(as("Staff"));
+      expect(scored.body.result.inputs.credit_score).toBe(score);
+      const view = await http().get(base).set(as("Staff"));
+      expect(view.body.pulls).toHaveLength(1);
+      expect(view.body.providers.every((p: any) => p.test_mode)).toBe(true);
     });
   });
 });

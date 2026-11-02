@@ -190,6 +190,7 @@ import brokerToolsRoutes from "./brokerTools.js"; // KS_BROKER_TOOLS
 import clientBrokerRoutes from "./clientBroker.js"; // KS_BROKER_TOOLS
 import dealDeskRoutes from "./dealDesk.js"; // KS_BROKER_TOOLS_2
 import vendorPortalRoutes from "./vendorPortal.js"; // KS_BROKER_TOOLS_VENDORS
+import clientCreditRoutes from "./clientCredit.js"; // KS_BROKER_TOOLS_CREDIT_BUREAU
 import { safeHandler } from "../middleware/safeHandler.js"; // BF_SERVER_v789_SAFE_HANDLERS
 
 export type ApiRoute = {
@@ -348,6 +349,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   // KS_BROKER_TOOLS_2 - invoices, credit lines, rate cards and structuring, scorecards, contracts, vendors, bureau.
   { path: "/deal-desk", router: dealDeskRoutes },
   { path: "/vendor-portal", router: vendorPortalRoutes }, // KS_BROKER_TOOLS_VENDORS - vendor / dealer portal (its own login check)
+  { path: "/client-credit", router: clientCreditRoutes }, // KS_BROKER_TOOLS_CREDIT_BUREAU - client consent to a credit check
   { path: "/reporting", router: reportingRoutes, feature: "full_reports" }, // KS_SERVER_v7_NO_REPORTS_ON_STARTER
   { path: "/reports", router: reportsRoutes },
   { path: "/settings", router: settingsRoutes },
