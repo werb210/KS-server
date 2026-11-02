@@ -20,7 +20,7 @@ import { simpleDocx, unzip } from "../brokerTools/docx.js";
 const MIGRATIONS = readdirSync("migrations").filter((f) => f.includes("_broker_tools_")).sort().map((f) => `migrations/${f}`);
 const tag = randomUUID().slice(0, 8);
 const ADMIN = randomUUID(), STAFF = randomUUID();
-const contactId = randomUUID(), appId = randomUUID(), docId = randomUUID();
+const contactId = randomUUID(), appId = randomUUID(), docId = randomUUID(), companyId = randomUUID();
 const tok = (id: string, role: string) => `Bearer ${jwt.sign({ sub: id, id, userId: id, role, tokenVersion: 0, tv: 0 }, String(process.env.JWT_SECRET))}`;
 let savedPlan: Record<string, any> | null = null; // KS_ONLY_PLAN
 
@@ -56,10 +56,11 @@ describe("broker tools part 2 (real Postgres)", () => {
       await pool.query(`INSERT INTO users (id, email, active, role, first_name, last_name) VALUES ($1, $2, true, $3, $4, 'Broker')`, [id, `${first.toLowerCase()}-${tag}@example.com`, role, first]);
     }
     await pool.query(`INSERT INTO contacts (id, name, email, phone, silo) VALUES ($1, $2, $3, $4, 'BF')`, [contactId, `Client ${tag}`, `client-${tag}@example.com`, "+17805550199"]);
+    await pool.query(`INSERT INTO companies (id, name, legal_name, province, city, address_street) VALUES ($1, $2, $3, 'AB', 'Edmonton', '1 Main St')`, [companyId, `Dig ${tag}`, `Dig ${tag} Ltd.`]);
     await pool.query(
-      `INSERT INTO applications (id, name, pipeline_state, created_at, updated_at, silo, contact_id, requested_amount, owner_user_id, metadata, status, product_category)
-       VALUES ($1, $2, 'Accepted', now(), now(), 'BF', $3, 90000, $4, $5::jsonb, 'ACCEPTED', 'EQUIPMENT_FINANCE')`,
-      [appId, `Excavator ${tag}`, contactId, STAFF, JSON.stringify({ business: { province: "AB", legalName: `Dig ${tag} Ltd.` }, kyc: { yearsInBusiness: 6, annualRevenue: 1200000 } })],
+      `INSERT INTO applications (id, name, pipeline_state, created_at, updated_at, silo, contact_id, requested_amount, owner_user_id, metadata, status, product_category, company_id)
+       VALUES ($1, $2, 'Accepted', now(), now(), 'BF', $3, 90000, $4, $5::jsonb, 'ACCEPTED', 'EQUIPMENT_FINANCE', $6)`,
+      [appId, `Excavator ${tag}`, contactId, STAFF, JSON.stringify({ business: { province: "AB", legalName: `Dig ${tag} Ltd.` }, kyc: { yearsInBusiness: 6, annualRevenue: 1200000 } }), companyId],
     );
     await pool.query(`INSERT INTO documents (id, application_id, filename, created_at, category, status) VALUES ($1, $2, 'Kubota invoice.pdf', now(), 'equipment_invoice', 'uploaded')`, [docId, appId]);
     await pool.query(`INSERT INTO ocr_document_results (id, document_id, provider, model, extracted_text, created_at, updated_at) VALUES ($1, $2, 'test', 'test', $3, now(), now())`,
@@ -93,6 +94,7 @@ describe("broker tools part 2 (real Postgres)", () => {
     await del(`DELETE FROM documents WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM applications WHERE id = $1`, [appId]);
     await del(`DELETE FROM contacts WHERE id = $1`, [contactId]);
+    await del(`DELETE FROM companies WHERE id = $1`, [companyId]);
     await del(`DELETE FROM users WHERE id = ANY($1::uuid[])`, [[ADMIN, STAFF]]);
     // KS_ONLY_PLAN_START
     await pool.query(`DELETE FROM licensee_plan`);
@@ -270,6 +272,7 @@ describe("broker tools part 2 (real Postgres)", () => {
       expect(xml).toContain(`Lessee: Dig ${tag} Ltd.`);
       expect(xml).toContain("KX040-55123");
       expect(xml).toContain("Guarantor: Ann Client");
+      expect(preview.body.values["business.address"]).toContain("Edmonton");
       const pdf = await http().get(`${base}/${made.body.contract.id}/pdf`).set(as("Staff"));
       expect(pdf.headers["content-type"]).toBe("application/pdf");
 

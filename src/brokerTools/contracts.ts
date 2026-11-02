@@ -64,12 +64,12 @@ export function mergeValuesFrom(input: {
   }
   const clientName = s(contact?.name) || [first(md, "applicant.firstName", "applicant.first_name"), first(md, "applicant.lastName", "applicant.last_name")].filter(Boolean).join(" ");
   const st = input.structure ?? null;
-  const address = [first(md, "business.address", "business.street") || s(company?.address), first(md, "business.city") || s(company?.city),
+  const address = [first(md, "business.address", "business.street") || s(company?.address_street), first(md, "business.city") || s(company?.city),
     first(md, "business.province", "business.state") || s(company?.province), first(md, "business.postalCode", "business.zip")].filter(Boolean).join(", ");
   return {
     "today": input.today ?? new Date().toISOString().slice(0, 10),
     "broker.name": brand(),
-    "business.legal_name": first(md, "business.legalName", "company.legalName") || s(company?.name) || s(app.name),
+    "business.legal_name": first(md, "business.legalName", "company.legalName") || s(company?.legal_name) || s(company?.name) || s(app.name),
     "business.operating_name": first(md, "business.businessName", "business.operatingName", "business.dbaName") || s(company?.name) || s(app.name),
     "business.address": address,
     "business.province": first(md, "business.province", "business.state") || s(company?.province),
@@ -100,7 +100,7 @@ export function mergeValuesFrom(input: {
 
 export async function mergeValues(q: Q, app: Record<string, any>): Promise<Record<string, string>> {
   const contact = app.contact_id ? (await q.query(`SELECT name, email, phone FROM contacts WHERE id::text = $1 LIMIT 1`, [String(app.contact_id)])).rows[0] ?? null : null;
-  const company = app.company_id ? (await q.query(`SELECT name, province, city, address FROM companies WHERE id::text = $1 LIMIT 1`, [String(app.company_id)])).rows[0] ?? null : null;
+  const company = app.company_id ? (await q.query(`SELECT name, legal_name, province, city, address_street FROM companies WHERE id::text = $1 LIMIT 1`, [String(app.company_id)])).rows[0] ?? null : null;
   const st = (await q.query(`SELECT chosen FROM deal_structures WHERE application_id = $1 AND chosen IS NOT NULL ORDER BY created_at DESC LIMIT 1`, [String(app.id)])).rows[0]?.chosen ?? null;
   const lender = app.lender_id ? (await q.query(`SELECT name FROM lenders WHERE id::text = $1 LIMIT 1`, [String(app.lender_id)])).rows[0]?.name ?? null : null;
   return mergeValuesFrom({ app, contact, company, structure: st, lenderName: lender });
