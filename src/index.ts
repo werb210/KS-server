@@ -446,6 +446,11 @@ export async function start(): Promise<void> {
     await workerStagger();
     try { const w = startOutboundWebhookWorker(pool); workerStops.push(w.stop); console.log("[startup] outbound-webhook worker started"); }
     catch (err) { console.error("[startup] outbound-webhook worker failed to start:", err); }
+    // KS_SERVER_LENDER_API - lender API submit retries and status polling (growth and up).
+    const { startLenderSyncWorker } = await import("./workers/lenderSyncWorker.js");
+    await workerStagger();
+    try { const w = startLenderSyncWorker(pool); workerStops.push(w.stop); console.log("[startup] lender-sync worker started"); }
+    catch (err) { console.error("[startup] lender-sync worker failed to start:", err); }
     const { startDataImportWorker } = await import("./workers/dataImportWorker.js");
     await workerStagger();
     try { const w = startDataImportWorker(pool); workerStops.push(w.stop); console.log("[startup] data-import worker started"); }
