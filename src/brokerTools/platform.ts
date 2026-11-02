@@ -16,7 +16,17 @@ export type BrokerFeature =
   | "invoice_reading" | "credit_lines" | "rate_cards" | "credit_scorecards" | "contract_templates" | "vendor_portal" | "credit_bureau";
 
 /** 402 feature_not_in_plan unless the plan (or trial) includes the feature. */
+// Credit bureau pulls are not a plan feature yet: the real Equifax and TransUnion connectors wait for each
+// bureau's API specification, so the feature is off (and not listed in any plan) unless the server turns it on with
+// CREDIT_BUREAU_ENABLED=on (or the labelled test provider with CREDIT_BUREAU_MOCK=on).
+export function creditBureauEnabled(): boolean {
+  return process.env.CREDIT_BUREAU_ENABLED === "on" || process.env.CREDIT_BUREAU_MOCK === "on";
+}
+
 export function gate(feature: BrokerFeature): RequestHandler {
+  if (feature === "credit_bureau") {
+    return (_req, res, next) => (creditBureauEnabled() ? next() : void res.status(404).json({ ok: false, error: "not_available" }));
+  }
   return requireFeature(feature);
 }
 
@@ -40,6 +50,7 @@ export function staffPortalUrl(): string {
 
 /** Is the feature in the plan right now (for work that runs outside a request, e.g. the reminders worker)? */
 export async function featureOn(feature: BrokerFeature): Promise<boolean> {
+  if (feature === "credit_bureau") return creditBureauEnabled();
   try {
     const { checkFeature } = await import("../plans/catalogue.js");
     const { getPlanState } = await import("../plans/state.js");

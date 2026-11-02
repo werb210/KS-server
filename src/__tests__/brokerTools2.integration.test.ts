@@ -364,6 +364,9 @@ describe("broker tools part 2 (real Postgres)", () => {
 
   // KS_BROKER_TOOLS_CREDIT_BUREAU
   describe("6 credit bureau pulls", () => {
+    // Credit bureau is off unless the server switches it on (no plan key until the real connectors exist).
+    beforeAll(() => { process.env.CREDIT_BUREAU_MOCK = "on"; });
+    afterAll(() => { delete process.env.CREDIT_BUREAU_MOCK; });
     it("staff ask for consent, the client gives it in the client app, staff pull; the score feeds the scorecard", async () => {
       const base = `/api/deal-desk/applications/${appId}/credit-bureau`;
       const clientTok = `Bearer ${jwt.sign({ phone: "+17805550199", role: "client" }, String(process.env.JWT_SECRET))}`;

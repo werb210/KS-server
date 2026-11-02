@@ -115,7 +115,6 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "contract_templates", label: "Contracts from Word templates: merge fields, Word and PDF, sent for e-signature", plan: "growth" },
   // KS_BROKER_TOOLS_CREDIT_BUREAU - Equifax Canada / TransUnion Canada pulls with client consent, growth and up. Each real pull is
   // one usage event (credit_pull), billed by Keystone operations at the bureau's cost.
-  { key: "credit_bureau", label: "Credit bureau pulls (Equifax and TransUnion Canada) with the client's consent", plan: "growth" },
   // pro
   { key: "multiple_lines", label: "Multiple business lines and a direct line for each person", plan: "pro" },
   // KS_SERVER_MARKETING_ADDON - Starter and Growth see Google Ads results only; the full tools are Pro (or the add-on).
