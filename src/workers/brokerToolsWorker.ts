@@ -13,6 +13,8 @@ export const STEPS: Step[] = [
   { name: "invoice_assets", feature: "invoice_reading", run: async (db) => (await import("../brokerTools/invoices.js")).syncPendingInvoiceAssets(db) },
   // Approved credit lines: expired lines are marked; a reminder task before each expiry date.
   { name: "credit_line_reminders", feature: "credit_lines", run: async (db, now) => (await import("../brokerTools/creditLines.js")).creditLineReminders(db, now.toISOString().slice(0, 10)) },
+  // Contracts out for signature: the signed PDF is filed when everyone has signed.
+  { name: "contract_signatures", feature: "contract_templates", run: async (db) => (await import("../brokerTools/contracts.js")).refreshSentContracts(db) },
 ];
 
 export async function runBrokerToolsTick(db: Q, now = new Date()): Promise<Record<string, number>> {

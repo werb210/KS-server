@@ -60,6 +60,12 @@ export async function recordUsage(kind: string, ref: string): Promise<void> {
   }
 }
 
+/** Counts each signer of a signature request against the plan's e-signing allowance (once per group, email and role). */
+export async function countSignings(groupId: string, signers: { email: string; role: string }[]): Promise<void> {
+  const { countSignings: count } = await import("../plans/meters.js");
+  await count(signers.map((x) => ({ document: groupId, email: x.email, role: x.role })));
+}
+
 export function passThrough(_req: Request, _res: Response, next: NextFunction): void {
   next();
 }

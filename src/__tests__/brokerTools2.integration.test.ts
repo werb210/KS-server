@@ -13,6 +13,7 @@ import { deps } from "../system/deps.js";
 import { setInvoiceReader } from "../brokerTools/invoices.js";
 import { afterFunded } from "../brokerTools/hooks.js";
 import { creditLineReminders } from "../brokerTools/creditLines.js";
+import { simpleDocx, unzip } from "../brokerTools/docx.js";
 
 const MIGRATIONS = readdirSync("migrations").filter((f) => f.includes("_broker_tools_")).sort().map((f) => `migrations/${f}`);
 const tag = randomUUID().slice(0, 8);
@@ -68,6 +69,8 @@ describe("broker tools part 2 (real Postgres)", () => {
     await del(`DELETE FROM active_contracts WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM vendor_invoices WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM deal_structures WHERE application_id = $1`, [appId]);
+    await del(`DELETE FROM contract_documents WHERE application_id = $1`, [appId]);
+    await del(`DELETE FROM contract_templates WHERE name LIKE $1`, [`%${tag}%`]);
     await del(`DELETE FROM application_scorecards WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM banking_analyses WHERE application_id = $1`, [appId]);
     await del(`DELETE FROM credit_scorecard_settings WHERE id = 1 AND updated_by = ANY($1::uuid[])`, [[ADMIN, STAFF]]);
@@ -233,6 +236,43 @@ describe("broker tools part 2 (real Postgres)", () => {
       expect((await http().get(base).set(as("Staff"))).body.result.grade).toBe("A");
       expect((await http().get(`/api/deal-desk/applications/${appId}/structure`).set(as("Staff"))).body.defaults.tier).toBe("A");
       expect((await http().post("/api/deal-desk/scorecard/reset").set(as("Admin"))).status).toBe(200);
+    });
+  });
+
+  // KS_BROKER_TOOLS_CONTRACTS
+  describe("8 contracts from Word templates", () => {
+    it("an Admin uploads a .docx; staff make the contract with the deal's values and a typed-over value; it waits for e-signing set-up", async () => {
+      const tpl = simpleDocx(["# Equipment Lease", "Lessee: {{business.legal_name}}", "Equipment: {{equipment.description}} ({{equipment.serial_numbers}})", "Guarantor: {{guarantor.name}}"]);
+      expect((await http().post("/api/deal-desk/contract-templates").set(as("Staff")).attach("file", tpl, "lease.docx").field("name", `Lease ${tag}`)).status).toBe(403);
+      expect((await http().post("/api/deal-desk/contract-templates").set(as("Admin")).attach("file", Buffer.from("not a docx"), "x.docx")).status).toBe(400);
+      const up = await http().post("/api/deal-desk/contract-templates").set(as("Admin")).attach("file", tpl, "lease.docx").field("name", `Lease ${tag}`);
+      expect(up.status).toBe(201);
+      expect(up.body.template).toMatchObject({ fields: ["business.legal_name", "equipment.description", "equipment.serial_numbers", "guarantor.name"], unknown_fields: ["guarantor.name"] });
+
+      const base = `/api/deal-desk/applications/${appId}/contracts`;
+      const preview = await http().get(base).set(as("Staff"));
+      expect(preview.body.values["business.legal_name"]).toBe(`Dig ${tag} Ltd.`);
+      const made = await http().post(base).set(as("Staff")).send({ template_id: up.body.template.id, values: { "guarantor.name": "Ann Client" }, signers: [{ name: "Ann Client", email: "ann@example.com" }] });
+      expect(made.status).toBe(201);
+      expect(made.body.contract).toMatchObject({ status: "generated", missing: [] });
+      const docx = await http().get(`${base}/${made.body.contract.id}/docx`).set(as("Staff")).buffer(true).parse((res, cb) => { const c: Buffer[] = []; res.on("data", (d: Buffer) => c.push(d)); res.on("end", () => cb(null, Buffer.concat(c))); });
+      const xml = unzip(docx.body as Buffer).find((f) => f.name === "word/document.xml")!.data.toString();
+      expect(xml).toContain(`Lessee: Dig ${tag} Ltd.`);
+      expect(xml).toContain("KX040-55123");
+      expect(xml).toContain("Guarantor: Ann Client");
+      const pdf = await http().get(`${base}/${made.body.contract.id}/pdf`).set(as("Staff"));
+      expect(pdf.headers["content-type"]).toBe("application/pdf");
+
+      const prev = process.env.SIGNNOW_API_KEY;
+      delete process.env.SIGNNOW_API_KEY;
+      try {
+        const send = await http().post(`${base}/${made.body.contract.id}/send`).set(as("Staff")).send({});
+        expect(send.status).toBe(409);
+        expect(send.body.message).toContain("E-signing is not set up");
+      } finally {
+        if (prev !== undefined) process.env.SIGNNOW_API_KEY = prev;
+      }
+      expect((await http().post(`${base}/${made.body.contract.id}/cancel`).set(as("Staff"))).status).toBe(200);
     });
   });
 });

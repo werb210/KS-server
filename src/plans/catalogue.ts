@@ -111,6 +111,8 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "rate_cards", label: "Rate cards and deal structuring: payment options across lenders side by side, with sales tax", plan: "growth" },
   // KS_BROKER_TOOLS_SCORECARDS - admin-weighted credit scorecard, pre-decision rules and lender ranking (signals only), growth and up.
   { key: "credit_scorecards", label: "Credit scorecards and pre-decision rules: grade, rule hits and lender ranking on each application", plan: "growth" },
+  // KS_BROKER_TOOLS_CONTRACTS - contracts from Word templates with merge fields, Word + PDF, sent for e-signature, growth and up.
+  { key: "contract_templates", label: "Contracts from Word templates: merge fields, Word and PDF, sent for e-signature", plan: "growth" },
   // pro
   { key: "multiple_lines", label: "Multiple business lines and a direct line for each person", plan: "pro" },
   // KS_SERVER_MARKETING_ADDON - Starter and Growth see Google Ads results only; the full tools are Pro (or the add-on).
