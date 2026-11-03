@@ -1,6 +1,6 @@
 -- BROKER_TOOLS_5_RATE_CARDS - lender rate cards (per lender product: term x amount band x credit tier -> rate or factor,
 -- fees, residual options) and the deal structures staff build from them (side-by-side payment options). Idempotent.
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- KS_SHARED_HOSTING_v1: no pgcrypto (Azure allow-lists only vector; gen_random_uuid() is built into Postgres 13+).
 
 CREATE TABLE IF NOT EXISTS rate_cards (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

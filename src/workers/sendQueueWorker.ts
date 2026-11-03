@@ -3,6 +3,7 @@
 // SKIP LOCKED (safe across instances) and persists progress as it sends. Email
 // channel here; SMS reuses this worker once its runner lands.
 import { workersPaused } from "./claim.js";
+import { serialAcrossTenants } from "../tenancy/jobs.js"; // KS_SHARED_HOSTING_v1 - one brokerage at a time
 import type { Pool } from "pg";
 import { runEmailSend, runSmsSend } from "../services/marketingSendRunner.js";
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
@@ -92,7 +93,7 @@ export function startSendQueueWorker(pool: Pool): { stop: () => void } {
       }
     } catch { /* next tick */ } finally { running = false; }
   };
-  const timer = setInterval(() => { void tick(); }, TICK_MS);
-  void tick();
+  const timer = setInterval(() => { void serialAcrossTenants("send_queue", tick); }, TICK_MS);
+  void serialAcrossTenants("send_queue", tick);
   return { stop: () => { stopped = true; clearInterval(timer); } };
 }

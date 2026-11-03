@@ -9,6 +9,7 @@
 // legacy applications.contact_id, matched on the last 10 phone digits.
 import { pool } from "../../db.js";
 import { sendClientPush } from "../clientPushService.js";
+import { tenantLocal } from "../../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 export type ApplicantPushCategory = "DOCUMENT_REQUEST" | "APPLICATION_UPDATE" | "OFFER_READY";
 
@@ -57,7 +58,7 @@ export async function applicantPushUserIds(applicationId: string): Promise<strin
 type Sender = typeof sendClientPush;
 let sender: Sender = sendClientPush;
 
-const recent = new Map<string, number>();
+const recentSlot = tenantLocal(() => new Map<string, number>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 const DEDUPE_MS = 10 * 60 * 1000;
 
 /** Never throws: a push is a courtesy on top of the SMS and in-app message. */
@@ -72,9 +73,9 @@ export async function notifyApplicant(input: {
   if (!applicationId) return { sent: 0 };
   const key = `${applicationId}:${input.categoryId}:${input.dedupeKey ?? ""}`;
   const now = Date.now();
-  const last = recent.get(key);
+  const last = recentSlot.value.get(key);
   if (last && now - last < DEDUPE_MS) return { sent: 0 };
-  recent.set(key, now);
+  recentSlot.value.set(key, now);
   try {
     const userIds = await applicantPushUserIds(applicationId);
     const url = applicantDeepLink(input.categoryId, applicationId);
@@ -105,7 +106,7 @@ export async function notifyApplicant(input: {
 
 /** Test seams. */
 export function __resetApplicantPushDedupe(): void {
-  recent.clear();
+  recentSlot.value.clear();
 }
 export function __setApplicantPushSender(next: Sender | null): void {
   sender = next ?? sendClientPush;

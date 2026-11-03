@@ -20,7 +20,8 @@ const VOICE_ENV_KEYS = [
   "TWILIO_VOICE_CALLER_ID",
 ] as const;
 
-const VOICE_ENV_MAP: Record<(typeof VOICE_ENV_KEYS)[number], string | undefined> = {
+// KS_SHARED_HOSTING_v1 - read when used (the Twilio settings are each brokerage's own on the shared server).
+const voiceEnvMap = (): Record<(typeof VOICE_ENV_KEYS)[number], string | undefined> => ({
   TWILIO_ACCOUNT_SID: config.twilio.accountSid,
   TWILIO_AUTH_TOKEN: config.twilio.authToken,
   TWILIO_API_KEY_SID: config.twilio.apiKey,
@@ -31,7 +32,7 @@ const VOICE_ENV_MAP: Record<(typeof VOICE_ENV_KEYS)[number], string | undefined>
     config.twilio.number ??
     config.twilio.phone ??
     config.twilio.phoneNumber,
-};
+});
 
 const TERMINAL_STATUSES: CallStatus[] = [
   "completed",
@@ -53,14 +54,14 @@ const NORMALIZED_LIFECYCLE_STATUSES: CallStatus[] = [
 
 export function fetchVoiceAvailability(): { enabled: boolean; missing: string[] } {
   const missing = VOICE_ENV_KEYS.filter((key) => {
-    const value = VOICE_ENV_MAP[key];
+    const value = voiceEnvMap()[key];
     return !value || !value.trim();
   });
   return { enabled: missing.length === 0, missing };
 }
 
-function requireVoiceEnv(name: keyof typeof VOICE_ENV_MAP): string {
-  const value = VOICE_ENV_MAP[name];
+function requireVoiceEnv(name: keyof ReturnType<typeof voiceEnvMap>): string {
+  const value = voiceEnvMap()[name];
   if (!value || !value.trim()) {
     const error = new AppError(
       "voice_disabled",

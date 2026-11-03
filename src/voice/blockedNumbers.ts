@@ -3,6 +3,7 @@
 //   texts  ignored: no inbox message, no alert, no automation, no reply (a STOP is still honoured)
 // Every blocked call and text is logged in blocked_number_events, so an Admin can see what was stopped.
 import { readSetting, writeSetting, type Q } from "../settingsPack/common.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 export type CallAction = "reject" | "voicemail";
 export type BlockedSettings = { call_action: CallAction };
@@ -19,25 +20,25 @@ export function normalizeNumber(raw: unknown): string | null {
   return null;
 }
 
-let cache: { at: number; numbers: Set<string> } | null = null;
+const cacheSlot = tenantLocal<{ at: number; numbers: Set<string> } | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 const CACHE_MS = 30_000;
-export function clearBlockedCache(): void { cache = null; }
+export function clearBlockedCache(): void { cacheSlot.value = null; }
 
 /** Is this caller blocked? A lookup failure is logged and lets the call through (a blocked list must never take the
  *  phones down). */
 export async function isBlocked(db: Q, raw: unknown, now = Date.now()): Promise<boolean> {
   const n = normalizeNumber(raw);
   if (!n) return false;
-  if (!cache || now - cache.at > CACHE_MS) {
+  if (!cacheSlot.value || now - cacheSlot.value.at > CACHE_MS) {
     try {
       const r = await db.query(`SELECT number FROM blocked_numbers`);
-      cache = { at: now, numbers: new Set(r.rows.map((x) => String(x.number))) };
+      cacheSlot.value = { at: now, numbers: new Set(r.rows.map((x) => String(x.number))) };
     } catch (err) {
       console.error("[blocked-numbers] list could not be read; letting the call or text through", { message: err instanceof Error ? err.message : String(err) });
       return false;
     }
   }
-  return cache.numbers.has(n);
+  return cacheSlot.value.numbers.has(n);
 }
 
 export async function blockedSettings(db: Q): Promise<BlockedSettings> {

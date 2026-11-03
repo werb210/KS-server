@@ -23,10 +23,21 @@ import { clientUrl, portalUrl, serverUrl, websiteUrl } from "./licensee/urls.js"
 import { pool as demoPool } from "./db.js"; // KS_SERVER_v10_DEMO
 import { demoMode } from "./demo/config.js"; // KS_SERVER_v10_DEMO
 import { demoGate, mountDemo } from "./demo/index.js"; // KS_SERVER_v10_DEMO
+import { isMultiBrokerage } from "./tenancy/mode.js"; // KS_SHARED_HOSTING_v1
+import { patchExpressForTenantContext, tenantMiddleware } from "./tenancy/middleware.js"; // KS_SHARED_HOSTING_v1
+import { tenantOpsRouter, type TenantOpsHooks } from "./tenancy/opsRoutes.js"; // KS_SHARED_HOSTING_v1
 
-export function createApp() {
+export function createApp(opts: { tenantOps?: TenantOpsHooks } = {}) {
   const app = express();
   app.set("trust proxy", 1); // BF_SERVER_RATELIMIT_TRUSTPROXY_v1 - Azure runs one proxy hop; lets express-rate-limit read the real client IP
+  // KS_SHARED_HOSTING_v1 - the shared server finds the request's brokerage before anything else runs (before CORS,
+  // body parsing and auth), and KS-Ops' tenant endpoints sit beside it. Single-brokerage mode adds nothing.
+  const multiBrokerage = isMultiBrokerage();
+  if (multiBrokerage) {
+    patchExpressForTenantContext();
+    app.use(tenantMiddleware());
+    app.use("/api/ops/tenants", express.json({ limit: "64kb" }), tenantOpsRouter(opts.tenantOps));
+  }
   /**
    * CORS configuration
    *
@@ -45,6 +56,16 @@ export function createApp() {
   const allowedOrigins = typeof envOrigins === "string" && envOrigins.length > 0
     ? envOrigins.split(",").map((origin) => origin.trim()).filter(Boolean)
     : defaultOrigins;
+  // KS_SHARED_HOSTING_v1 - on the shared server the portal/client/website origins are the request's brokerage's,
+  // so they are read per request (inside the brokerage's context).
+  const originAllowed = (origin: string): boolean => {
+    if (!multiBrokerage) return allowedOrigins.includes(origin);
+    const cors = process.env.CORS_ALLOWED_ORIGINS;
+    const list = typeof cors === "string" && cors.length > 0
+      ? cors.split(",").map((o) => o.trim()).filter(Boolean)
+      : [portalUrl(), clientUrl(), websiteUrl()];
+    return list.includes(origin);
+  };
   // BF_SERVER_CORS_LOCAL_PREVIEW_v1 - allow the native app (capacitor://localhost)
   // and local dev preview (localhost / 127.0.0.1 / RFC1918 LAN on any port) in
   // addition to the configured allowlist. Non-browser and same-origin requests
@@ -56,7 +77,7 @@ export function createApp() {
   const corsOptions: cors.CorsOptions = {
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (originAllowed(origin)) return callback(null, true);
       if (isLocalPreviewOrigin(origin)) return callback(null, true);
       return callback(null, false);
     },
@@ -88,10 +109,10 @@ export function createApp() {
         ],
         connectSrc: [
           "'self'",
-          serverUrl(),
-          serverUrl().replace(/^http/, "ws"),
-          portalUrl(),
-          clientUrl(),
+          // KS_SHARED_HOSTING_v1 - per request on the shared server (the brokerage's own addresses).
+          ...(multiBrokerage
+            ? [() => serverUrl(), () => serverUrl().replace(/^http/, "ws"), () => portalUrl(), () => clientUrl()]
+            : [serverUrl(), serverUrl().replace(/^http/, "ws"), portalUrl(), clientUrl()]),
 
           // Twilio REST / signaling
           "https://voice-js.twilio.com",

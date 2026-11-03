@@ -4,6 +4,7 @@
 // colours come from the licensee_settings row (edited by the licensee's admin through PUT /api/licensee), falling back
 // to the KS_* App Service settings, then to neutral defaults. Nothing here is Boreal's.
 import { clientUrl, portalUrl, serverUrl, websiteUrl } from "./urls.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[] }> };
 
@@ -51,16 +52,16 @@ export function checkConnectionField(field: ConnectionField, raw: unknown): { ok
   return { ok: true, value: value.toLowerCase() };
 }
 
-let lastConnections: LicenseeConnections | null = null;
+const lastConnectionsSlot = tenantLocal<LicenseeConnections | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 /** The connection settings last loaded, or null before the first load. */
 export function lastLoadedConnections(): LicenseeConnections | null {
-  return lastConnections;
+  return lastConnectionsSlot.value;
 }
 
 /** Test hook. */
 export function setLastLoadedConnections(v: LicenseeConnections | null): void {
-  lastConnections = v;
+  lastConnectionsSlot.value = v;
 }
 
 /** The saved connection settings (empty strings when unset). */
@@ -69,7 +70,7 @@ export async function getLicenseeConnections(db: Q): Promise<LicenseeConnections
   const row = r.rows[0] ?? {};
   const value = { ...EMPTY_CONNECTIONS };
   for (const f of CONNECTION_FIELDS) value[f] = String(row[f] ?? "").trim();
-  lastConnections = value;
+  lastConnectionsSlot.value = value;
   return value;
 }
 export type LicenseeSettings = Record<LicenseeField, string>;
@@ -135,29 +136,29 @@ export function checkField(field: LicenseeField, raw: unknown): { ok: true; valu
   return { ok: true, value: field === "country" ? value.toUpperCase() : value };
 }
 
-let cache: { at: number; value: LicenseeSettings } | null = null;
+const cacheSlot = tenantLocal<{ at: number; value: LicenseeSettings } | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 const CACHE_MS = 60_000;
 // KS_SERVER_v4_BRANDING - the last settings read from the database, kept after the cache expires so code that
 // cannot await (message constants, templates) still has the licensee's name. See ./brand.ts.
-let lastLoaded: LicenseeSettings | null = null;
+const lastLoadedSlot = tenantLocal<LicenseeSettings | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 /** The settings last loaded by getLicenseeSettings, or null before the first load. */
 export function lastLoadedLicensee(): LicenseeSettings | null {
-  return lastLoaded;
+  return lastLoadedSlot.value;
 }
 
 /** Test hook: forget the last loaded settings too. */
 export function resetLastLoadedLicensee(): void {
-  lastLoaded = null;
+  lastLoadedSlot.value = null;
 }
 
 export function clearLicenseeCache(): void {
-  cache = null;
+  cacheSlot.value = null;
 }
 
 /** Saved values over the KS_* settings over neutral defaults. An empty saved value falls back. */
 export async function getLicenseeSettings(db: Q, now = Date.now()): Promise<LicenseeSettings> {
-  if (cache && now - cache.at < CACHE_MS) return cache.value;
+  if (cacheSlot.value && now - cacheSlot.value.at < CACHE_MS) return cacheSlot.value.value;
   const base = envDefaults();
   const r = await db.query(`SELECT ${LICENSEE_FIELDS.join(", ")} FROM licensee_settings WHERE id = 1`);
   const row = r.rows[0] ?? {};
@@ -166,8 +167,8 @@ export async function getLicenseeSettings(db: Q, now = Date.now()): Promise<Lice
     const v = String(row[f] ?? "").trim();
     if (v) value[f] = v;
   }
-  cache = { at: now, value };
-  lastLoaded = value;
+  cacheSlot.value = { at: now, value };
+  lastLoadedSlot.value = value;
   return value;
 }
 

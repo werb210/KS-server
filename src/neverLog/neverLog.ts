@@ -8,6 +8,7 @@
 //
 // A domain entry covers its subdomains (example.com also covers mail.example.com).
 import type { Q } from "../settingsPack/common.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 export type NeverLogEntry = { id: string; value: string; kind: "email" | "domain"; note: string | null; created_at: string };
 
@@ -44,21 +45,21 @@ export function matcher(entries: Array<Pick<NeverLogEntry, "value" | "kind">>): 
   };
 }
 
-let cache: { at: number; test: (a: string) => boolean } | null = null;
+const cacheSlot = tenantLocal<{ at: number; test: (a: string) => boolean } | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 const CACHE_MS = 60_000;
 
 export function clearNeverLogCache(): void {
-  cache = null;
+  cacheSlot.value = null;
 }
 
 /** The list as a matcher (cached a minute). A read failure is logged and nothing is blocked: logging carries on as it
  *  did before the list existed rather than dropping mail silently. */
 export async function neverLogMatcher(db: Q, now = Date.now()): Promise<(address: string) => boolean> {
-  if (cache && now - cache.at < CACHE_MS) return cache.test;
+  if (cacheSlot.value && now - cacheSlot.value.at < CACHE_MS) return cacheSlot.value.test;
   try {
     const r = await db.query(`SELECT value, kind FROM never_log_entries`);
-    cache = { at: now, test: matcher(r.rows as Array<Pick<NeverLogEntry, "value" | "kind">>) };
-    return cache.test;
+    cacheSlot.value = { at: now, test: matcher(r.rows as Array<Pick<NeverLogEntry, "value" | "kind">>) };
+    return cacheSlot.value.test;
   } catch (err) {
     console.error("[never-log] list could not be read; mail is logged as before", { message: err instanceof Error ? err.message : String(err) });
     return () => false;

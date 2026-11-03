@@ -7,6 +7,10 @@ import type { IncomingMessage, Server } from "node:http";
 import type { Socket } from "node:net";
 import { WebSocket, WebSocketServer } from "ws";
 import { authenticateUrlTicket } from "../auth/urlTicket.js";
+import { runWithTenant, tenantKey } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
+import { isMultiBrokerage } from "../tenancy/mode.js"; // KS_SHARED_HOSTING_v1
+import { resolveTenant } from "../tenancy/middleware.js"; // KS_SHARED_HOSTING_v1
+import { contextFor } from "../tenancy/pools.js"; // KS_SHARED_HOSTING_v1
 
 const sockets = new Map<string, Set<WebSocket>>();
 let wss: WebSocketServer | null = null;
@@ -14,7 +18,7 @@ let wss: WebSocketServer | null = null;
 export function broadcastToUsers(userIds: string[], payload: unknown): void {
   const data = JSON.stringify(payload);
   for (const uid of new Set(userIds)) {
-    const set = sockets.get(uid);
+    const set = sockets.get(tenantKey(uid)); // KS_SHARED_HOSTING_v1 - "<brokerage>:<user>" on the shared server
     if (!set) continue;
     for (const ws of set) {
       if (ws.readyState === WebSocket.OPEN) {
@@ -26,7 +30,7 @@ export function broadcastToUsers(userIds: string[], payload: unknown): void {
 
 // BF_SERVER_TEAM_PREFS_v643 - has this person got the portal open (a live Team socket)?
 export function isConnected(userId: string): boolean {
-  return (sockets.get(userId)?.size ?? 0) > 0;
+  return (sockets.get(tenantKey(userId))?.size ?? 0) > 0;
 }
 
 function register(userId: string, ws: WebSocket): void {
@@ -54,13 +58,24 @@ export function initTeamWebSocket(server: Server): void {
     // POST /api/auth/url-ticket (a full staff JWT in the URL is refused); the
     // ticket's user must still be an active staff account at the ticket's tv.
     const token = url.searchParams.get("token") ?? "";
-    void authenticateUrlTicket(token).then(
-      (result) => {
+    // KS_SHARED_HOSTING_v1 - upgrades skip Express, so the shared server finds the brokerage here (X-KS-Tenant, then
+    // Host), and checks the ticket against that brokerage's database and JWT secret.
+    const authenticate = async () => {
+      if (!isMultiBrokerage()) return { result: await authenticateUrlTicket(token), ctx: null };
+      const r = await resolveTenant(req.headers as Record<string, string | string[] | undefined>);
+      if (!r.ok) return { result: { ok: false } as Awaited<ReturnType<typeof authenticateUrlTicket>>, ctx: null };
+      const ctx = contextFor(r.tenant);
+      return { result: await runWithTenant(ctx, () => authenticateUrlTicket(token)), ctx };
+    };
+    void authenticate().then(
+      ({ result, ctx }) => {
         // authenticateUrlTicket admits staff roles only (checkStaffUser).
         const uid = result.ok ? String(result.user.userId ?? "") : "";
         if (!uid || socket.destroyed) { socket.destroy(); return; }
+        // The key is taken now, inside the brokerage; the upgrade callback may run outside it.
+        const key = ctx ? runWithTenant(ctx, () => tenantKey(uid)) : uid;
         wss!.handleUpgrade(req, socket, head, (ws: WebSocket) => {
-          register(uid, ws);
+          register(key, ws);
           try { ws.send(JSON.stringify({ type: "ready" })); } catch { /* ignore */ }
         });
       },

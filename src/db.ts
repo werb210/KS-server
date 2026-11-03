@@ -3,8 +3,10 @@ import type { QueryResult, QueryResultRow } from "pg";
 
 import { runQuery as runQueryFromDeps } from "./db/index.js";
 import { deps } from "./system/deps.js";
+import { isMultiBrokerage } from "./tenancy/mode.js"; // KS_SHARED_HOSTING_v1
 
-if (!process.env.DATABASE_URL && process.env.NODE_ENV !== "test") {
+// KS_SHARED_HOSTING_v1 - the shared server has no DATABASE_URL of its own: each brokerage's comes from the registry.
+if (!process.env.DATABASE_URL && process.env.NODE_ENV !== "test" && !isMultiBrokerage()) {
   throw new Error("DATABASE_URL missing");
 }
 

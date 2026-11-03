@@ -15,7 +15,8 @@ import { websiteHost } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 // SERVER_URL. This only ever worked because of the hardcoded default, which
 // would have been silently wrong the moment the host changed. Read the names
 // that are actually configured, keeping the old one first for compatibility.
-const PUBLIC_URL = (
+// KS_SHARED_HOSTING_v1 - read when used (each brokerage's own server address on the shared server).
+const publicUrl = (): string => (
   process.env.PUBLIC_SERVER_URL ||
   process.env.PUBLIC_BASE_URL ||
   process.env.SERVER_URL ||
@@ -87,7 +88,7 @@ export function smsMarketingConfigured(): boolean {
 
 export function trackedLink(sendId: string, url: string): string {
   const token = jwt.sign({ sid: sendId, u: url }, String(process.env.JWT_SECRET), { expiresIn: "30d" });
-  return `${PUBLIC_URL}/api/r/${token}`;
+  return `${publicUrl()}/api/r/${token}`;
 }
 
 export async function sendMarketingSms(to: string, body: string): Promise<{ ok: boolean; sid?: string; optedOut?: boolean; error?: string }> {
@@ -102,7 +103,7 @@ export async function sendMarketingSms(to: string, body: string): Promise<{ ok: 
   if (isUndeliverableNumber(to)) return { ok: false, error: "undeliverable_number" };
   try {
     const client = fetchTwilioClient();
-    const msg = await client.messages.create({ to, from, body, statusCallback: `${PUBLIC_URL}/api/r/status` });
+    const msg = await client.messages.create({ to, from, body, statusCallback: `${publicUrl()}/api/r/status` });
     await countOutboundText(msg as any); // KS_SERVER_v8_USAGE
     // KS_SERVER_MARKETING_ADDON - also a marketing text: the add-on's 1,000 bonus marketing texts cover these first.
     const sid = String((msg as any)?.sid ?? "");

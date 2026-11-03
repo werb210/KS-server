@@ -15,6 +15,7 @@
 import type { Request } from "express";
 import { checkFeature } from "../plans/catalogue.js";
 import { getPlanState, type Q } from "../plans/state.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 export const VISIBILITIES = ["all", "team", "own"] as const;
 export type Visibility = (typeof VISIBILITIES)[number];
@@ -53,10 +54,10 @@ function isMissingRelation(err: unknown): boolean {
 }
 
 const CACHE_MS = 15_000;
-const cache = new Map<string, { at: number; scope: RecordScope }>();
+const cacheSlot = tenantLocal(() => new Map<string, { at: number; scope: RecordScope }>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 /** Called after any change to teams, members or visibility settings. Other instances catch up within 15 s. */
 export function clearVisibilityCache(): void {
-  cache.clear();
+  cacheSlot.value.clear();
 }
 
 /** Does the plan in force include teams? (false -> every user sees every record) */
@@ -76,7 +77,7 @@ export async function resolveScope(db: Q, userId: string | null | undefined, rol
   if (!(await teamsInPlan(db))) return { ...ALL_SCOPE, userId: userId ?? null };
   if (!userId || !UUID_RE.test(userId)) return custom ? NOTHING_SCOPE : resolveRoleOnlyScope(db, r);
   const key = `${userId}|${r}|${custom ?? ""}`;
-  const hit = cache.get(key);
+  const hit = cacheSlot.value.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.scope;
   let scope: RecordScope;
   try {
@@ -109,7 +110,7 @@ export async function resolveScope(db: Q, userId: string | null | undefined, rol
     if (!isMissingRelation(err)) throw err;
     scope = { mode: "all", visibility: "all", userId };
   }
-  cache.set(key, { at: Date.now(), scope });
+  cacheSlot.value.set(key, { at: Date.now(), scope });
   return scope;
 }
 

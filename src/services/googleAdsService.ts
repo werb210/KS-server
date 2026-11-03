@@ -3,6 +3,7 @@
 // credentials are set, so the portal degrades gracefully. In-memory cached.
 import { googleAdsCustomerIdSetting } from "../licensee/connections.js"; // KS_SERVER_v8_CONNECTIONS - licensee setting, then env
 import { logError } from "../observability/logger.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 export const GOOGLE_ADS_API_VERSION = "v24";
 const API_VERSION = GOOGLE_ADS_API_VERSION;
@@ -31,9 +32,9 @@ export function googleAdsConfigured(): boolean {
   );
 }
 
-let tokenCache: { token: string; expiresAt: number } | null = null;
+const tokenCacheSlot = tenantLocal<{ token: string; expiresAt: number } | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 async function getAccessToken(): Promise<string> {
-  if (tokenCache && tokenCache.expiresAt > Date.now() + 60_000) return tokenCache.token;
+  if (tokenCacheSlot.value && tokenCacheSlot.value.expiresAt > Date.now() + 60_000) return tokenCacheSlot.value.token;
   const body = new URLSearchParams({
     client_id: String(process.env.GOOGLE_ADS_CLIENT_ID),
     client_secret: String(process.env.GOOGLE_ADS_CLIENT_SECRET),
@@ -49,7 +50,7 @@ async function getAccessToken(): Promise<string> {
   const j = (await r.json()) as { access_token?: string; expires_in?: number };
   const token = String(j.access_token ?? "");
   if (!token) throw new Error("google_ads_token_empty");
-  tokenCache = { token, expiresAt: Date.now() + (j.expires_in ?? 3600) * 1000 };
+  tokenCacheSlot.value = { token, expiresAt: Date.now() + (j.expires_in ?? 3600) * 1000 };
   return token;
 }
 
@@ -89,12 +90,12 @@ function dateRange(days: number): { start: string; end: string } {
   return { start: fmt(start), end: fmt(end) };
 }
 
-let reportCache = new Map<number, { at: number; report: AdsReport }>();
+const reportCacheSlot = tenantLocal(() => new Map<number, { at: number; report: AdsReport }>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 const CACHE_MS = 30 * 60_000;
 
 export async function runGoogleAdsReport(days: number): Promise<AdsReport | AdsNotConfigured> {
   if (!googleAdsConfigured()) return { configured: false };
-  const cached = reportCache.get(days);
+  const cached = reportCacheSlot.value.get(days);
   if (cached && Date.now() - cached.at < CACHE_MS) return { ...cached.report, cached: true };
   const { start, end } = dateRange(days);
   const W = `segments.date BETWEEN '${start}' AND '${end}'`;
@@ -117,7 +118,7 @@ export async function runGoogleAdsReport(days: number): Promise<AdsReport | AdsN
     }
     base.totals.cpa = base.totals.conversions ? Math.round((base.totals.cost / base.totals.conversions) * 100) / 100 : 0;
     base.totals.roas = base.totals.cost ? Math.round((base.totals.convValue / base.totals.cost) * 100) / 100 : 0;
-    reportCache.set(days, { at: Date.now(), report: base });
+    reportCacheSlot.value.set(days, { at: Date.now(), report: base });
     return base;
   } catch (e) {
     logError("google_ads_report_failed");
@@ -159,7 +160,7 @@ export async function googleAdsDiagnostics(): Promise<{
   // Step 1: refresh token -> access token.
   let accessToken = "";
   try {
-    tokenCache = null; // force a fresh exchange for the test
+    tokenCacheSlot.value = null; // force a fresh exchange for the test
     accessToken = await getAccessToken();
   } catch (e) {
     return { ...base, tokenExchange: e instanceof Error ? e.message : String(e), diagnosis: "refresh_token_or_oauth_client_invalid" };

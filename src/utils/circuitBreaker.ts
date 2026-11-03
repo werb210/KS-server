@@ -1,3 +1,4 @@
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 export type CircuitBreakerState = "CLOSED" | "OPEN" | "HALF_OPEN";
 
 export type CircuitBreakerOptions = {
@@ -11,7 +12,7 @@ type CircuitBreakerSnapshot = {
   openedAt: number | null;
 };
 
-const breakers = new Map<string, CircuitBreaker>();
+const breakersSlot = tenantLocal(() => new Map<string, CircuitBreaker>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 class CircuitBreaker {
   private failures = 0;
@@ -64,44 +65,44 @@ export function fetchCircuitBreaker(
   name: string,
   options: CircuitBreakerOptions
 ): CircuitBreaker {
-  const existing = breakers.get(name);
+  const existing = breakersSlot.value.get(name);
   if (existing) {
     return existing;
   }
   const breaker = new CircuitBreaker(options);
-  breakers.set(name, breaker);
+  breakersSlot.value.set(name, breaker);
   return breaker;
 }
 
 export function resetCircuitBreakers(): void {
-  breakers.clear();
+  breakersSlot.value.clear();
 }
 
 
-let globalFailureCount = 0;
-let globalBlockedUntil = 0;
+const globalFailureCountSlot = tenantLocal(() => 0); // KS_SHARED_HOSTING_v1 - one per brokerage
+const globalBlockedUntilSlot = tenantLocal(() => 0); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 export function canProceed(): boolean {
-  if (Date.now() < globalBlockedUntil) return false;
+  if (Date.now() < globalBlockedUntilSlot.value) return false;
   return true;
 }
 
 export function recordFailure(): void {
-  globalFailureCount += 1;
-  if (globalFailureCount > 5) {
-    globalBlockedUntil = Date.now() + 60_000;
+  globalFailureCountSlot.value += 1;
+  if (globalFailureCountSlot.value > 5) {
+    globalBlockedUntilSlot.value = Date.now() + 60_000;
   }
 }
 
 export function recordSuccess(): void {
-  globalFailureCount = 0;
-  globalBlockedUntil = 0;
+  globalFailureCountSlot.value = 0;
+  globalBlockedUntilSlot.value = 0;
 }
 
 
 export function circuitGuard(): void {
   const now = Date.now();
-  if (globalFailureCount > 5 && now - (globalBlockedUntil - 60_000) < 30_000 && now < globalBlockedUntil) {
+  if (globalFailureCountSlot.value > 5 && now - (globalBlockedUntilSlot.value - 60_000) < 30_000 && now < globalBlockedUntilSlot.value) {
     throw new Error("AI temporarily disabled due to repeated failures.");
   }
   if (!canProceed()) {

@@ -15,6 +15,7 @@ import { m365AppOnly } from "../modules/o365/m365App.js"; // KS_SERVER_M365_ONE_
 // pre-check never matched it and the worker re-downloaded it every 5 minutes for
 // two days. Cap the attempts instead.
 const MAX_ATTEMPTS = 3;
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 async function shouldSkipMessage(pool: Pool, silo: string, messageId: string): Promise<boolean> {
   try {
@@ -55,13 +56,13 @@ const INITIAL_DELAY_MS = 30 * 1000; // let startup settle before the first pass
 // BF_INBOUND_ATTACHMENT_SHARED_MAILBOX_v1 - app-only (client-credentials) Graph token, used to
 // read shared mailboxes (info@, submissions@, ...). Requires the Mail.Read APPLICATION permission
 // on the "Boreal Financial Server" app registration; without it the mailbox reads 403 and we skip.
-let appToken: { token: string; expiresAt: number; tenant: string } | null = null;
+const appTokenSlot = tenantLocal<{ token: string; expiresAt: number; tenant: string } | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 async function getAppOnlyToken(): Promise<string | null> {
   // KS_SERVER_M365_ONE_CLICK - the connected tenant and Keystone's app (modules/o365/m365App.ts).
   const creds = m365AppOnly();
   if (!creds) return null;
   const { tenant, clientId, clientSecret } = creds;
-  if (appToken && appToken.tenant === tenant && appToken.expiresAt > Date.now() + 60000) return appToken.token;
+  if (appTokenSlot.value && appTokenSlot.value.tenant === tenant && appTokenSlot.value.expiresAt > Date.now() + 60000) return appTokenSlot.value.token;
   try {
     const url = `https://login.microsoftonline.com/${encodeURIComponent(tenant)}/oauth2/v2.0/token`;
     const body = new URLSearchParams({
@@ -75,7 +76,7 @@ async function getAppOnlyToken(): Promise<string | null> {
     const json = (await resp.json()) as { access_token?: string; expires_in?: number };
     const token = String(json.access_token ?? "");
     if (!token) return null;
-    appToken = { token, expiresAt: Date.now() + Number(json.expires_in ?? 3600) * 1000, tenant };
+    appTokenSlot.value = { token, expiresAt: Date.now() + Number(json.expires_in ?? 3600) * 1000, tenant };
     return token;
   } catch {
     return null;

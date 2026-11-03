@@ -1,7 +1,7 @@
 -- BROKER_TOOLS_4_CREDIT_LINES - approved credit lines per client: lender, limit, expiry and conditions; each draw
 -- reduces what is available (a repayment restores it); reminder tasks before a line expires (once per expiry date).
 -- Idempotent.
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- KS_SHARED_HOSTING_v1: no pgcrypto (Azure allow-lists only vector; gen_random_uuid() is built into Postgres 13+).
 
 CREATE TABLE IF NOT EXISTS credit_lines (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

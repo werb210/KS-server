@@ -12,6 +12,7 @@
 // last Admin - is locked out: they sign in by text and add a passkey. The switch can only be turned on from a
 // strong session, so the Admin turning it on has already proven they can meet it.
 import { readSetting, writeSetting, type Q } from "../settingsPack/common.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 export type SessionMethod = "otp" | "passkey" | "sso" | "device";
 export const STRONG_METHODS: ReadonlySet<SessionMethod> = new Set(["passkey", "sso", "device"]);
@@ -123,22 +124,22 @@ export async function markSessionStrong(db: Q, sessionId: string, userId: string
 export type SecuritySettings = { require_strong_sign_in: boolean };
 const normalize = (raw: unknown): SecuritySettings => ({ require_strong_sign_in: (raw as any)?.require_strong_sign_in === true });
 
-let current: SecuritySettings = { require_strong_sign_in: false };
+const currentSlot = tenantLocal<SecuritySettings>(() => ({ require_strong_sign_in: false })); // KS_SHARED_HOSTING_v1 - one per brokerage
 /** The switch as last loaded (refreshed every minute by startSecuritySettingsRefresh, and on save). */
 export function strongSignInRequired(): boolean {
-  return current.require_strong_sign_in;
+  return currentSlot.value.require_strong_sign_in;
 }
 export function setSecuritySettingsForTests(v: SecuritySettings): void {
-  current = v;
+  currentSlot.value = v;
 }
 
 export async function loadSecuritySettings(db: Q): Promise<SecuritySettings> {
-  current = await readSetting(db, "security", normalize);
-  return current;
+  currentSlot.value = await readSetting(db, "security", normalize);
+  return currentSlot.value;
 }
 export async function saveSecuritySettings(db: Q, v: SecuritySettings, actor: string | null): Promise<void> {
   await writeSetting(db, "security", v, actor);
-  current = v;
+  currentSlot.value = v;
 }
 
 export function startSecuritySettingsRefresh(db: Q, everyMs = 60_000): { stop: () => void } {

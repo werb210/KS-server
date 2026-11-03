@@ -3,13 +3,13 @@ import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 // KS_SERVER_MARKETING_ADDON - every signature request SignNow accepts is metered here, the one place invites are made:
 // one signing per signer (4 a month included, then $2.50 each on the next bill). Never blocks a signing.
 import { countSignings } from "../plans/meters.js";
-const BASE_URL = process.env.SIGNNOW_API_BASE_URL || "https://api.signnow.com";
+const baseUrl = () => process.env.SIGNNOW_API_BASE_URL || "https://api.signnow.com"; // KS_SHARED_HOSTING_v1 - read when used
 export class SignNowError extends Error { constructor(message: string, public readonly status?: number, public readonly body?: unknown) { super(message); this.name = "SignNowError"; } }
 export function isApiKeyConfigured(): boolean { return (process.env.SIGNNOW_API_KEY ?? "").trim().length > 0; }
 function getApiKey(): string { const k = (process.env.SIGNNOW_API_KEY ?? "").trim(); if (!k) throw new SignNowError("SIGNNOW_API_KEY not set — real SignNow integration requires a bearer token. Set SIGNNOW_STUB_MODE=1 to use the test stub instead."); return k; }
 async function signnowFetch(path: string, init: RequestInit): Promise<unknown> {
   const apiKey = getApiKey(); const headers = new Headers(init.headers); headers.set("Authorization", `Bearer ${apiKey}`); if (!headers.has("Accept")) headers.set("Accept", "application/json");
-  const res = await fetch(`${BASE_URL}${path}`, { ...init, headers }); const text = await res.text(); let body: unknown; try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+  const res = await fetch(`${baseUrl()}${path}`, { ...init, headers }); const text = await res.text(); let body: unknown; try { body = text ? JSON.parse(text) : null; } catch { body = text; }
   if (!res.ok) throw new SignNowError(`SignNow ${init.method ?? "GET"} ${path} failed: ${res.status} ${(typeof body === "string" ? body : JSON.stringify(body ?? "")).slice(0, 400)}`, res.status, body); return body;
 }
 export type UploadDocumentResult = { documentId: string };
@@ -216,7 +216,7 @@ export async function downloadDocument(documentId: string): Promise<Buffer | nul
   const k = (process.env.SIGNNOW_API_KEY ?? "").trim();
   if (!k) return null;
   try {
-    const res = await fetch(`${BASE_URL}/document/${encodeURIComponent(documentId)}/download?type=collapsed`, {
+    const res = await fetch(`${baseUrl()}/document/${encodeURIComponent(documentId)}/download?type=collapsed`, {
       method: "GET",
       headers: { Authorization: `Bearer ${k}`, Accept: "application/pdf" },
     });

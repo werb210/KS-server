@@ -15,6 +15,7 @@ import { parseExpressCaslConsent, recordExpressCaslConsent } from "../services/s
 import { assistantName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 const router = Router();
+import { tenantKey, tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 // BF_SERVER_v789_ESCALATE_LIMITS - escalate is public and texts staff, so it is
 // limited per IP (5 a minute) and per contact (20 a day per phone, 20 a day per
@@ -44,7 +45,7 @@ const escalatePhoneLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "RATE_LIMITED" },
   skip: (req) => !escalatePhoneKey(req as Request),
-  keyGenerator: (req) => "phone:" + escalatePhoneKey(req as Request),
+  keyGenerator: (req) => tenantKey("phone:" + escalatePhoneKey(req as Request)), // KS_SHARED_HOSTING_v1
 });
 const escalateEmailLimiter = rateLimit({
   windowMs: 24 * 60 * 60 * 1000,
@@ -53,23 +54,23 @@ const escalateEmailLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "RATE_LIMITED" },
   skip: (req) => !escalateEmailKey(req as Request),
-  keyGenerator: (req) => "email:" + escalateEmailKey(req as Request),
+  keyGenerator: (req) => tenantKey("email:" + escalateEmailKey(req as Request)), // KS_SHARED_HOSTING_v1
 });
 
 export const STAFF_ALERT_COOLDOWN_MS = 10 * 60 * 1000;
-const lastStaffAlertAt = new Map<string, number>();
+const lastStaffAlertAtSlot = tenantLocal(() => new Map<string, number>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 // True when a staff SMS for this contact may go out now (and records it).
 export function claimStaffAlert(key: string, now: number = Date.now()): boolean {
-  if (lastStaffAlertAt.size > 5000) {
-    for (const [k, t] of lastStaffAlertAt) if (now - t >= STAFF_ALERT_COOLDOWN_MS) lastStaffAlertAt.delete(k);
+  if (lastStaffAlertAtSlot.value.size > 5000) {
+    for (const [k, t] of lastStaffAlertAtSlot.value) if (now - t >= STAFF_ALERT_COOLDOWN_MS) lastStaffAlertAtSlot.value.delete(k);
   }
-  const last = lastStaffAlertAt.get(key);
+  const last = lastStaffAlertAtSlot.value.get(key);
   if (last !== undefined && now - last < STAFF_ALERT_COOLDOWN_MS) return false;
-  lastStaffAlertAt.set(key, now);
+  lastStaffAlertAtSlot.value.set(key, now);
   return true;
 }
 export function resetStaffAlertThrottleForTests(): void {
-  lastStaffAlertAt.clear();
+  lastStaffAlertAtSlot.value.clear();
 }
 function staffAlertKey(kind: string, req: Request, contactId: string | null): string {
   const who = contactId || escalatePhoneKey(req) || escalateEmailKey(req) || "ip:" + rateLimitKeyFromRequest(req);

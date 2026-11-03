@@ -2,6 +2,7 @@
 // points at an Outlook draft (already fully built at schedule time). When send_at
 // passes we call Graph /me/messages/{id}/send, then mark the row sent.
 import { workersPaused } from "./claim.js";
+import { serialAcrossTenants } from "../tenancy/jobs.js"; // KS_SHARED_HOSTING_v1 - one brokerage at a time
 import type { Pool } from "pg";
 import { getGraphForUser } from "../modules/o365/graphClient.js";
 
@@ -53,7 +54,7 @@ export function startScheduledEmailWorker(pool: Pool): { stop: () => void } {
     }
   };
 
-  const timer = setInterval(() => { void tick(); }, TICK_MS);
-  setTimeout(() => { void tick(); }, 5_000);
+  const timer = setInterval(() => { void serialAcrossTenants("scheduled_email", tick); }, TICK_MS);
+  setTimeout(() => { void serialAcrossTenants("scheduled_email", tick); }, 5_000);
   return { stop: () => { stopped = true; clearInterval(timer); } };
 }

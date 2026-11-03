@@ -1,5 +1,6 @@
 import { safeImport } from "../utils/safeImport.js";
 import { logError } from "../observability/logger.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 // BF_SERVER_GA4_SERVICE_v2 — server-side GA4 (Analytics Data API) via a service-account key.
 export type Ga4Row = { dim: string; sessions: number; users: number };
@@ -69,9 +70,9 @@ function collapse(rows: Ga4Row[], topN = 10): Ga4Row[] {
 // Now: one cached report per date range (30 min), one request in flight per
 // range, at most 4 GA4 calls at a time, and after a failure the last good
 // figures are served (marked stale) while GA4 is left alone for a while.
-const cache = new Map<string, { at: number; report: Ga4Report }>();
-const inflight = new Map<string, Promise<Ga4Report | Ga4Error>>();
-const failures = new Map<string, { at: number; error: Ga4Error; backoffMs: number }>();
+const cacheSlot = tenantLocal(() => new Map<string, { at: number; report: Ga4Report }>()); // KS_SHARED_HOSTING_v1 - one per brokerage
+const inflightSlot = tenantLocal(() => new Map<string, Promise<Ga4Report | Ga4Error>>()); // KS_SHARED_HOSTING_v1 - one per brokerage
+const failuresSlot = tenantLocal(() => new Map<string, { at: number; error: Ga4Error; backoffMs: number }>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 const MAX_CONCURRENT_REPORTS = 4;
 const QUOTA_BACKOFF_MS = 10 * 60_000;
 const ERROR_BACKOFF_MS = 2 * 60_000;
@@ -95,9 +96,9 @@ export function __setGa4GoogleForTests(google: unknown): void {
   googleForTests = google;
 }
 export function __resetGa4StateForTests(): void {
-  cache.clear();
-  inflight.clear();
-  failures.clear();
+  cacheSlot.value.clear();
+  inflightSlot.value.clear();
+  failuresSlot.value.clear();
 }
 
 export async function runGa4Report(days: number): Promise<Ga4Report | Ga4Error | null> {
@@ -107,15 +108,15 @@ export async function runGa4Report(days: number): Promise<Ga4Report | Ga4Error |
   if (!propertyId) return { configured: true, days, error: "GA4_PROPERTY_ID is not set." };
 
   const key = `${propertyId}:${days}`;
-  const hit = cache.get(key);
+  const hit = cacheSlot.value.get(key);
   if (hit && Date.now() - hit.at < cacheMinutes() * 60_000) {
     return { ...hit.report, cached: true };
   }
-  const failed = failures.get(key);
+  const failed = failuresSlot.value.get(key);
   if (failed && Date.now() - failed.at < failed.backoffMs) {
     return hit ? { ...hit.report, cached: true, stale: true } : failed.error;
   }
-  const pending = inflight.get(key);
+  const pending = inflightSlot.value.get(key);
   if (pending) return pending;
 
   const run = (async (): Promise<Ga4Report | Ga4Error> => {
@@ -191,8 +192,8 @@ export async function runGa4Report(days: number): Promise<Ga4Report | Ga4Error |
       newVsReturning: toRows(nvr), countries: toRows(ctry), cities: toRows(city),
       browsers: toRows(br), operatingSystems: toRows(os), devices: toRows(dev), trend,
     };
-    cache.set(key, { at: Date.now(), report: report_ });
-    failures.delete(key);
+    cacheSlot.value.set(key, { at: Date.now(), report: report_ });
+    failuresSlot.value.delete(key);
     return report_;
   } catch (e: any) {
     const msg = e?.response?.data?.error?.message || e?.errors?.[0]?.message || e?.message || String(e);
@@ -205,11 +206,11 @@ export async function runGa4Report(days: number): Promise<Ga4Report | Ga4Error |
         ? "Google Analytics is over its request limit right now; it will refresh automatically in a few minutes."
         : String(msg).slice(0, 400),
     };
-    failures.set(key, { at: Date.now(), error, backoffMs: quota ? QUOTA_BACKOFF_MS : ERROR_BACKOFF_MS });
-    const last = cache.get(key);
+    failuresSlot.value.set(key, { at: Date.now(), error, backoffMs: quota ? QUOTA_BACKOFF_MS : ERROR_BACKOFF_MS });
+    const last = cacheSlot.value.get(key);
     return last ? { ...last.report, cached: true, stale: true } : error;
   }
-  })().finally(() => inflight.delete(key));
-  inflight.set(key, run);
+  })().finally(() => inflightSlot.value.delete(key));
+  inflightSlot.value.set(key, run);
   return run;
 }

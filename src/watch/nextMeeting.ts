@@ -4,6 +4,7 @@
 // The Watch already fetches /api/watch/face itself; the meeting now rides along.
 // Read from the user's Outlook calendar (next 24 h), cached 5 minutes per user so
 // a face refresh every 15 minutes is at most one Graph call. Never throws.
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 export type NextMeeting = { title: string; startsAt: string } | null;
 type GraphEvent = {
   subject?: string | null;
@@ -28,12 +29,12 @@ export function pickNextMeeting(events: GraphEvent[], now: Date = new Date()): N
 }
 
 const TTL_MS = 5 * 60 * 1000;
-const cache = new Map<string, { at: number; value: NextMeeting }>();
+const cacheSlot = tenantLocal(() => new Map<string, { at: number; value: NextMeeting }>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 export async function nextMeetingFor(userId: string, deps: Deps = defaultDeps): Promise<NextMeeting> {
   if (!userId) return null;
   const now = deps.now();
-  const hit = cache.get(userId);
+  const hit = cacheSlot.value.get(userId);
   if (hit && now.getTime() - hit.at < TTL_MS && (!hit.value || Date.parse(hit.value.startsAt) > now.getTime())) {
     return hit.value;
   }
@@ -43,7 +44,7 @@ export async function nextMeetingFor(userId: string, deps: Deps = defaultDeps): 
   } catch (err: any) {
     console.warn("[watch-face] next_meeting_failed", { userId, message: err?.message });
   }
-  cache.set(userId, { at: now.getTime(), value });
+  cacheSlot.value.set(userId, { at: now.getTime(), value });
   return value;
 }
 
@@ -67,5 +68,5 @@ const defaultDeps: Deps = {
 };
 
 export function __clearNextMeetingCache(): void {
-  cache.clear();
+  cacheSlot.value.clear();
 }

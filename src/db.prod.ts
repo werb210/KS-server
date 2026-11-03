@@ -8,6 +8,9 @@ import pg, {
 } from "pg";
 import { logError, logInfo, logWarn } from "./observability/logger.js";
 import { markNotReady, markReady, isReady } from "./startupState.js";
+import { isMultiBrokerage } from "./tenancy/mode.js"; // KS_SHARED_HOSTING_v1
+import { createTenantPoolProxy } from "./tenancy/pools.js"; // KS_SHARED_HOSTING_v1
+import { pingControlDb } from "./tenancy/registry.js"; // KS_SHARED_HOSTING_v1
 
 const { Pool } = pg;
 
@@ -65,7 +68,11 @@ function buildPoolConfig(): PoolConfig {
   };
 }
 
-export const pool: PgPool = new Pool(buildPoolConfig());
+// KS_SHARED_HOSTING_v1 - in multi-brokerage mode (KS_CONTROL_DATABASE_URL set) `pool` / `db` are the current
+// brokerage's pool: every use goes to the pool of the brokerage whose request or job is running, and use outside one
+// throws no_brokerage_context (never another brokerage's database). Single-brokerage mode: the one Pool, as always.
+const multiBrokerage = isMultiBrokerage();
+export const pool: PgPool = multiBrokerage ? createTenantPoolProxy() : new Pool(buildPoolConfig());
 export const db = pool;
 
 export async function query(text: string, params?: any[]): Promise<QueryResult> {
@@ -136,10 +143,12 @@ export function setDbTestPoolMetricsOverride(): void {}
 export function setDbTestFailureInjection(): void {}
 export function clearDbTestFailureInjection(): void {}
 
-pool.on("error", (err: any) => {
-  markNotReady("db_unavailable");
-  logWarn("db_connection_error", { message: err.message });
-});
+if (!multiBrokerage) {
+  pool.on("error", (err: any) => {
+    markNotReady("db_unavailable");
+    logWarn("db_connection_error", { message: err.message });
+  });
+}
 
 // v701: self-heal DB readiness. dbGuard returns 503 for all requests when
 // !isReady(). A transient DB blip (Azure failover/maintenance) calls
@@ -151,8 +160,9 @@ let dbRecoveryTimer: ReturnType<typeof setInterval> | null = null;
 function startDbReadinessProbe(): void {
   if (dbRecoveryTimer) return;
   dbRecoveryTimer = setInterval(() => {
-    void pool
-      .query("SELECT 1")
+    // KS_SHARED_HOSTING_v1 - the shared server's own database is the control database (each brokerage's pool logs
+    // its own connection errors).
+    void (multiBrokerage ? pingControlDb() : pool.query("SELECT 1"))
       .then(() => {
         if (!isReady()) {
           markReady();

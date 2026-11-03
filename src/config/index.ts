@@ -1,5 +1,6 @@
 import { EnvSchema } from "./schema.js";
-import { API_BASE } from "./api.js";
+import { API_BASE, apiBase } from "./api.js";
+import { isMultiBrokerage } from "../tenancy/mode.js"; // KS_SHARED_HOSTING_v1
 
 const safeEnv = EnvSchema.safeParse({
   NODE_ENV: process.env.NODE_ENV,
@@ -259,6 +260,45 @@ export const config = {
     clientBase: parsed.CLIENT_BASE_URL,
   },
 } as const;
+
+// KS_SHARED_HOSTING_v1 - on the shared server the per-brokerage values in `config` are read when used, through the
+// process.env overlay, so each request and job sees its own brokerage's secrets, Twilio account and addresses.
+// Single-brokerage mode keeps the values read at startup, exactly as before.
+if (isMultiBrokerage()) {
+  const e = (name: string): string | undefined => process.env[name];
+  const live = (obj: object, key: string, read: () => unknown): void => {
+    Object.defineProperty(obj, key, { get: read, enumerable: true, configurable: true });
+  };
+  live(config.auth, "jwtSecret", () => e("JWT_SECRET") ?? "");
+  live(config.auth, "otpHashSalt", () => e("OTP_HASH_SALT"));
+  live(config.auth, "refreshSecret", () => e("JWT_REFRESH_SECRET"));
+  live(config.jwt, "secret", () => e("JWT_SECRET") ?? "");
+  live(config.db, "url", () => e("DATABASE_URL") ?? "");
+  live(config.api, "baseUrl", () => apiBase());
+  live(config.urls, "apiBase", () => apiBase());
+  live(config.urls, "publicBase", () => e("PUBLIC_BASE_URL"));
+  live(config.client, "url", () => e("CLIENT_URL"));
+  const t = config.twilio;
+  live(t, "sid", () => e("TWILIO_ACCOUNT_SID") ?? "");
+  live(t, "token", () => e("TWILIO_AUTH_TOKEN") ?? "");
+  live(t, "phone", () => e("TWILIO_PHONE") ?? e("TWILIO_FROM_NUMBER") ?? e("TWILIO_CALLER_ID"));
+  live(t, "accountSid", () => e("TWILIO_ACCOUNT_SID") ?? "");
+  live(t, "apiKey", () => e("TWILIO_API_KEY"));
+  live(t, "apiSecret", () => e("TWILIO_API_SECRET"));
+  live(t, "authToken", () => e("TWILIO_AUTH_TOKEN") ?? "");
+  live(t, "from", () => e("TWILIO_FROM") ?? e("TWILIO_FROM_NUMBER") ?? e("TWILIO_CALLER_ID"));
+  live(t, "number", () => e("TWILIO_NUMBER") ?? e("TWILIO_FROM_NUMBER") ?? e("TWILIO_CALLER_ID"));
+  live(t, "phoneNumber", () => e("TWILIO_PHONE_NUMBER") ?? e("TWILIO_FROM_NUMBER") ?? e("TWILIO_CALLER_ID"));
+  live(t, "fromNumber", () => e("TWILIO_FROM_NUMBER") ?? e("TWILIO_CALLER_ID"));
+  live(t, "callerId", () => e("TWILIO_CALLER_ID") ?? e("TWILIO_FROM_NUMBER"));
+  live(t, "verifyServiceSid", () => e("TWILIO_VERIFY_SERVICE_SID"));
+  live(t, "voiceAppSid", () => e("TWILIO_VOICE_APP_SID"));
+  const g = config.google;
+  live(g, "clientId", () => e("GOOGLE_CLIENT_ID"));
+  live(g, "clientSecret", () => e("GOOGLE_CLIENT_SECRET"));
+  live(g, "redirectUri", () => e("GOOGLE_REDIRECT_URI"));
+  live(g, "refreshToken", () => e("GOOGLE_SHEETS_REFRESH_TOKEN"));
+}
 
 export type Config = typeof config;
 

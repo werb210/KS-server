@@ -1,4 +1,5 @@
 import { m365AppOnly, m365SendAsMailbox, tokenEndpoint } from "../../modules/o365/m365App.js";
+import { tenantLocal } from "../../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 export type GraphAttachment = { filename: string; contentType: string; content: Buffer };
 export type GraphSendInput = { to: string | string[]; cc?: string | string[]; bcc?: string | string[]; subject: string; bodyText: string; bodyHtml?: string; attachments?: GraphAttachment[]; sendAs?: string; signatureHtml?: string };
 export type GraphSendResult = { ok: true; messageId: string | null } | { ok: false; error: string; status?: number };
@@ -12,7 +13,7 @@ const UPLOAD_CHUNK_SIZE = 5 * 1024 * 1024; // 16 × Graph's required 320 KiB blo
 // KS_SERVER_M365_ONE_CLICK - app-only settings come from modules/o365/m365App.ts: the tenant the brokerage's admin
 // connected, Keystone's app (or MS_GRAPH_* on servers with their own), and the shared mailbox saved on Settings >
 // Connections (else MS_GRAPH_SEND_AS).
-let cachedToken: { token: string; expiresAt: number; key: string } | null = null;
+const cachedTokenSlot = tenantLocal<{ token: string; expiresAt: number; key: string } | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 function asArray(value: string | string[] | undefined): string[] { return value ? (Array.isArray(value) ? value : [value]) : []; }
 export function isConfigured(): { ok: true } | { ok: false; reason: string } {
@@ -36,14 +37,14 @@ async function getAccessToken(): Promise<string> {
   const creds = m365AppOnly();
   if (!creds) throw new Error("graph_not_configured");
   const key = `${creds.tenant}|${creds.clientId}`;
-  if (cachedToken && cachedToken.key === key && cachedToken.expiresAt > Date.now() + 60_000) return cachedToken.token;
+  if (cachedTokenSlot.value && cachedTokenSlot.value.key === key && cachedTokenSlot.value.expiresAt > Date.now() + 60_000) return cachedTokenSlot.value.token;
   const body = new URLSearchParams({ client_id: creds.clientId, client_secret: creds.clientSecret, grant_type: "client_credentials", scope: "https://graph.microsoft.com/.default" });
   const response = await fetch(tokenEndpoint(creds.tenant), { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
   if (!response.ok) throw new Error(`graph_token_failed status=${response.status} body=${(await response.text().catch(() => "")).slice(0, 300)}`);
   const json = await response.json() as { access_token?: string; expires_in?: number };
   if (!json.access_token) throw new Error("graph_token_empty");
-  cachedToken = { token: json.access_token, expiresAt: Date.now() + Number(json.expires_in ?? 3600) * 1000, key };
-  return cachedToken.token;
+  cachedTokenSlot.value = { token: json.access_token, expiresAt: Date.now() + Number(json.expires_in ?? 3600) * 1000, key };
+  return cachedTokenSlot.value.token;
 }
 
 /** The body Graph sends: the HTML (or text) with the sender's signature after it. KS_SERVER_v12_DEMO_REAL_PACKAGE -

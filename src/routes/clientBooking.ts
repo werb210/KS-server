@@ -14,14 +14,15 @@ import {
   offeredTypes, removeCalendarEvent, slugOf, staffForSlug, type BookingMessageInput,
 } from "../booking/bookingPages.js";
 import type { Q } from "../settingsPack/common.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 const router = Router();
 const db = (): Q => pool as unknown as Q;
-const hits = new Map<string, number[]>();
+const hitsSlot = tenantLocal(() => new Map<string, number[]>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 function tooMany(ip: string, limit = 10): boolean {
   const now = Date.now();
-  const recent = (hits.get(ip) ?? []).filter((t) => now - t < 3_600_000);
-  recent.push(now); hits.set(ip, recent);
+  const recent = (hitsSlot.value.get(ip) ?? []).filter((t) => now - t < 3_600_000);
+  recent.push(now); hitsSlot.value.set(ip, recent);
   return recent.length > limit;
 }
 // KS_SETTINGS_PACK_v1_BOOKING - the licensee's own number in failure messages (was another brokerage's line).

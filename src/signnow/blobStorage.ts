@@ -1,13 +1,16 @@
 // BF_SERVER_BLOCK_v201_SIGNNOW_REAL_BUILD_v1
 import { AzureBlobBackend } from "../lib/storage/azureBlob.js";
-const CONTAINER = process.env.SIGNNOW_BLOB_CONTAINER || "signed-applications";
-let cached: AzureBlobBackend | null = null;
+// KS_SHARED_HOSTING_v1 - SIGNNOW_BLOB_CONTAINER is read when used (a brokerage's own value on the shared server), and
+// one backend is kept per container and connection string.
+const cached = new Map<string, AzureBlobBackend>();
 function getBackend(): AzureBlobBackend | null {
-  if (cached) return cached;
+  const container = process.env.SIGNNOW_BLOB_CONTAINER || "signed-applications";
   const conn = process.env.AZURE_STORAGE_CONNECTION_STRING;
   if (!conn) return null;
-  cached = new AzureBlobBackend(CONTAINER, conn);
-  return cached;
+  const key = `${container}\n${conn}`;
+  let b = cached.get(key);
+  if (!b) { b = new AzureBlobBackend(container, conn); cached.set(key, b); }
+  return b;
 }
 export async function downloadBlobAsset(blobName: string): Promise<Buffer | null> {
   const b = getBackend();

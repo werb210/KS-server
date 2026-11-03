@@ -41,6 +41,7 @@ import { assertLenderBinding } from "../../auth/lenderBinding.js";
 import { resolveOtpHashSalt, warnIfOtpHashSaltDerived } from "./otpHashSalt.js"; // BF_SERVER_v789_OTP_HASH_SALT
 
 const OTP_SESSION_TTL_MS = 10 * 60 * 1000;
+import { tenantLocal } from "../../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 type RefreshTokenPayload = JwtPayload & {
   sub?: string;
@@ -65,7 +66,7 @@ type VerifyOtpFailure = {
   error: { code: string; message: string };
 };
 
-const refreshReplayGuard = new Map<string, NodeJS.Timeout>();
+const refreshReplayGuardSlot = tenantLocal(() => new Map<string, NodeJS.Timeout>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 const MAX_RUNTIME_AUTH_ENTRIES = 1000;
 
 function trimMapSize(map: Map<string, unknown>, max = MAX_RUNTIME_AUTH_ENTRIES): void {
@@ -78,13 +79,13 @@ function trimMapSize(map: Map<string, unknown>, max = MAX_RUNTIME_AUTH_ENTRIES):
 }
 
 function registerRefreshReplay(tokenHash: string, windowMs: number): boolean {
-  if (refreshReplayGuard.has(tokenHash)) {
+  if (refreshReplayGuardSlot.value.has(tokenHash)) {
     return false;
   }
-  const timeout = setTimeout(() => refreshReplayGuard.delete(tokenHash), windowMs);
+  const timeout = setTimeout(() => refreshReplayGuardSlot.value.delete(tokenHash), windowMs);
   timeout.unref();
-  refreshReplayGuard.set(tokenHash, timeout);
-  trimMapSize(refreshReplayGuard as unknown as Map<string, unknown>);
+  refreshReplayGuardSlot.value.set(tokenHash, timeout);
+  trimMapSize(refreshReplayGuardSlot.value as unknown as Map<string, unknown>);
   return true;
 }
 
@@ -230,17 +231,20 @@ type TwilioErrorDetails = {
 };
 
 const OTP_VERIFY_DEDUP_WINDOW_MS = 1500;
-const otpVerifyInFlight = new Map<string, NodeJS.Timeout>();
+const otpVerifyInFlightSlot = tenantLocal(() => new Map<string, NodeJS.Timeout>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 const OTP_VERIFICATION_MAX_AGE_MS = 10 * 60 * 1000;
 const OTP_ATTEMPT_WINDOW_MS = 10 * 60 * 1000;
 const OTP_MAX_VERIFY_ATTEMPTS = 5;
-const otpAttemptState = new Map<string, { count: number; resetAt: number; lastCodeHash: string }>();
+const otpAttemptStateSlot = tenantLocal(() => new Map<string, { count: number; resetAt: number; lastCodeHash: string }>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 setInterval(() => {
   const now = Date.now();
-  for (const [phone, state] of otpAttemptState.entries()) {
-    if (state.resetAt <= now) {
-      otpAttemptState.delete(phone);
+  // KS_SHARED_HOSTING_v1 - every brokerage's map (this timer runs outside any brokerage).
+  for (const attempts of otpAttemptStateSlot.all()) {
+    for (const [phone, state] of attempts.entries()) {
+      if (state.resetAt <= now) {
+        attempts.delete(phone);
+      }
     }
   }
 }, 60_000).unref();
@@ -265,7 +269,7 @@ export function hashOtpCode(code: string): string {
 }
 
 function assertOtpAttemptLimit(phoneE164: string): void {
-  const current = otpAttemptState.get(phoneE164);
+  const current = otpAttemptStateSlot.value.get(phoneE164);
   const now = Date.now();
   if (!current || current.resetAt <= now) {
     return;
@@ -277,10 +281,10 @@ function assertOtpAttemptLimit(phoneE164: string): void {
 
 function recordOtpAttempt(phoneE164: string, codeHash: string): void {
   const now = Date.now();
-  const current = otpAttemptState.get(phoneE164);
+  const current = otpAttemptStateSlot.value.get(phoneE164);
   if (!current || current.resetAt <= now) {
-    otpAttemptState.set(phoneE164, { count: 1, resetAt: now + OTP_ATTEMPT_WINDOW_MS, lastCodeHash: codeHash });
-    trimMapSize(otpAttemptState as unknown as Map<string, unknown>);
+    otpAttemptStateSlot.value.set(phoneE164, { count: 1, resetAt: now + OTP_ATTEMPT_WINDOW_MS, lastCodeHash: codeHash });
+    trimMapSize(otpAttemptStateSlot.value as unknown as Map<string, unknown>);
     return;
   }
   current.count += 1;
@@ -288,14 +292,14 @@ function recordOtpAttempt(phoneE164: string, codeHash: string): void {
 }
 
 function clearOtpAttemptLimit(phoneE164: string): void {
-  otpAttemptState.delete(phoneE164);
+  otpAttemptStateSlot.value.delete(phoneE164);
 }
 
 function assertSingleVerifyAttempt(phoneE164: string): void {
   if (config.env === "test") {
     return;
   }
-  if (otpVerifyInFlight.has(phoneE164)) {
+  if (otpVerifyInFlightSlot.value.has(phoneE164)) {
     throw new AppError(
       "otp_verify_in_progress",
       "OTP verification already in progress.",
@@ -303,18 +307,18 @@ function assertSingleVerifyAttempt(phoneE164: string): void {
     );
   }
   const timeout = setTimeout(() => {
-    otpVerifyInFlight.delete(phoneE164);
+    otpVerifyInFlightSlot.value.delete(phoneE164);
   }, OTP_VERIFY_DEDUP_WINDOW_MS);
   timeout.unref();
-  otpVerifyInFlight.set(phoneE164, timeout);
-  trimMapSize(otpVerifyInFlight as unknown as Map<string, unknown>);
+  otpVerifyInFlightSlot.value.set(phoneE164, timeout);
+  trimMapSize(otpVerifyInFlightSlot.value as unknown as Map<string, unknown>);
 }
 
 function clearVerifyAttempt(phoneE164: string): void {
-  const timeout = otpVerifyInFlight.get(phoneE164);
+  const timeout = otpVerifyInFlightSlot.value.get(phoneE164);
   if (timeout) {
     clearTimeout(timeout);
-    otpVerifyInFlight.delete(phoneE164);
+    otpVerifyInFlightSlot.value.delete(phoneE164);
   }
 }
 

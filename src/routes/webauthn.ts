@@ -20,9 +20,10 @@ import { SSO_REQUIRED_MESSAGE, ssoRequiredFor } from "../sso/settings.js"; // KS
 import { refreshFieldsForSignIn } from "../auth/staffRefresh.js"; // KS_NATIVE_DESKTOP_v1_SLIDING_REFRESH
 
 const router = Router();
-const RP_ID = process.env.WEBAUTHN_RP_ID || hostOf(portalUrl()); // KS_SERVER_v4_BRANDING - this copy's portal, not Boreal's
+// KS_SHARED_HOSTING_v1 - read per request: on the shared server each brokerage has its own portal.
+const rpId = () => process.env.WEBAUTHN_RP_ID || hostOf(portalUrl()); // KS_SERVER_v4_BRANDING - this copy's portal, not Boreal's
 const rpName = () => process.env.WEBAUTHN_RP_NAME || brandName();
-const ORIGINS = (process.env.WEBAUTHN_ORIGINS || `https://${RP_ID}`)
+const origins = () => (process.env.WEBAUTHN_ORIGINS || `https://${rpId()}`)
   .split(",").map((s) => s.trim()).filter(Boolean);
 
 function mintStaffToken(user: any, ksid?: string | null): string {
@@ -55,7 +56,7 @@ router.post("/register/options", requireAuth, safeHandler(async (req: any, res) 
       `SELECT credential_id, transports FROM webauthn_credentials WHERE user_id = $1`, [userId])
     .then((r) => r.rows).catch((swallowedErr: unknown) => logWarnSwallowed(swallowedErr, "routes/webauthn.ts:46", []));
   const options = await generateRegistrationOptions({
-    rpName: rpName(), rpID: RP_ID,
+    rpName: rpName(), rpID: rpId(),
     userName: (user as any).email || (user as any).phoneNumber || String(user.id),
     userDisplayName: [(user as any).first_name, (user as any).last_name].filter(Boolean).join(" ") || undefined,
     userID: new TextEncoder().encode(String(user.id)),
@@ -78,7 +79,7 @@ router.post("/register/verify", requireAuth, safeHandler(async (req: any, res) =
   if (!ch) return res.status(400).json({ error: "no_pending_challenge" });
   let verification: any;
   try {
-    verification = await verifyRegistrationResponse({ response: req.body, expectedChallenge: ch.challenge, expectedOrigin: ORIGINS, expectedRPID: RP_ID, requireUserVerification: false }); // BF_SERVER_WEBAUTHN_UV_PREFERRED_v1
+    verification = await verifyRegistrationResponse({ response: req.body, expectedChallenge: ch.challenge, expectedOrigin: origins(), expectedRPID: rpId(), requireUserVerification: false }); // BF_SERVER_WEBAUTHN_UV_PREFERRED_v1
   } catch (err: any) { return res.status(400).json({ error: "verification_failed", detail: err?.message }); }
   if (!verification.verified || !verification.registrationInfo) return res.status(400).json({ error: "not_verified" });
   const cred = verification.registrationInfo.credential;
@@ -97,7 +98,7 @@ router.post("/register/verify", requireAuth, safeHandler(async (req: any, res) =
 }));
 
 router.post("/login/options", safeHandler(async (_req, res) => {
-  const options = await generateAuthenticationOptions({ rpID: RP_ID, userVerification: "preferred" });
+  const options = await generateAuthenticationOptions({ rpID: rpId(), userVerification: "preferred" });
   await purgeExpiredChallenges();
   await pool.query(`INSERT INTO webauthn_challenges (challenge, kind) VALUES ($1, 'login')`, [options.challenge]);
   return res.json(options);
@@ -123,7 +124,7 @@ router.post("/login/verify", safeHandler(async (req: any, res) => {
   let verification: any;
   try {
     verification = await verifyAuthenticationResponse({
-      response: body, expectedChallenge: issuedChallenge, expectedOrigin: ORIGINS, expectedRPID: RP_ID,
+      response: body, expectedChallenge: issuedChallenge, expectedOrigin: origins(), expectedRPID: rpId(),
       requireUserVerification: false, // BF_SERVER_WEBAUTHN_UV_PREFERRED_v1 — options use "preferred"; verify must not force UV
       credential: {
         id: cred.credential_id,
@@ -138,7 +139,7 @@ router.post("/login/verify", safeHandler(async (req: any, res) => {
     // in WEBAUTHN_ORIGINS, RP_ID mismatch vs where the passkey was registered, or a stale
     // public key from an older lib version). Log the exact reason + expected RP/origin so the
     // failure is diagnosable from the server logs instead of a generic 401.
-    console.warn("[webauthn] login/verify failed", { detail: err?.message, credentialId: body.id, expectedRPID: RP_ID, expectedOrigin: ORIGINS });
+    console.warn("[webauthn] login/verify failed", { detail: err?.message, credentialId: body.id, expectedRPID: rpId(), expectedOrigin: origins() });
     return res.status(401).json({ error: "verification_failed", detail: err?.message });
   }
   if (!verification.verified) return res.status(401).json({ error: "not_verified" });

@@ -2,7 +2,7 @@
 -- Templates per lender / lender product (blank = every deal), and one checklist row per condition on an application.
 -- A file can move to Funded only when every condition is cleared or waived (an Admin may override with a reason,
 -- which is written to the audit log). Idempotent.
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- KS_SHARED_HOSTING_v1: no pgcrypto (Azure allow-lists only vector; gen_random_uuid() is built into Postgres 13+).
 
 CREATE TABLE IF NOT EXISTS funding_condition_templates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

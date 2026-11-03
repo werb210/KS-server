@@ -1,4 +1,5 @@
 import { logError } from "../observability/logger.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 // BF_SERVER_CLARITY_SERVICE_v2 — Microsoft Clarity Data Export API, multi-project.
 // Supports two projects (Website + Client app), each with its own token + cache.
@@ -37,11 +38,11 @@ function dashboardUrl(projectId?: string): string | null {
   return projectId ? `https://clarity.microsoft.com/projects/view/${projectId}/dashboard` : null;
 }
 
-const cache = new Map<string, { at: number; report: ClarityProjectReport }>();
+const cacheSlot = tenantLocal(() => new Map<string, { at: number; report: ClarityProjectReport }>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 async function fetchProject(cfg: ProjectCfg, days: number): Promise<ClarityProjectReport> {
   const key = `${cfg.name}:${days}`;
-  const cached = cache.get(key);
+  const cached = cacheSlot.value.get(key);
   if (cached && Date.now() - cached.at < cacheMinutes() * 60_000) {
     return { ...cached.report, cached: true };
   }
@@ -67,7 +68,7 @@ async function fetchProject(cfg: ProjectCfg, days: number): Promise<ClarityProje
       rows: Array.isArray(m?.information) ? m.information : [],
     }));
     const report: ClarityProjectReport = { ...base, metrics };
-    cache.set(key, { at: Date.now(), report });
+    cacheSlot.value.set(key, { at: Date.now(), report });
     return report;
   } catch {
     logError("clarity_fetch_failed");

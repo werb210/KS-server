@@ -1,7 +1,7 @@
 -- BROKER_TOOLS_9_VENDOR_PORTAL - equipment vendors / dealers as partners: their profile and fee terms (the login is a
 -- users row with role Referrer and partner_kind 'vendor', like the broker portal), the point-of-sale quotes they make
 -- from the rate cards, and the vendor fees owed on funded deals they sent. Idempotent.
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- KS_SHARED_HOSTING_v1: no pgcrypto (Azure allow-lists only vector; gen_random_uuid() is built into Postgres 13+).
 
 CREATE TABLE IF NOT EXISTS vendor_profiles (
   user_id uuid PRIMARY KEY,

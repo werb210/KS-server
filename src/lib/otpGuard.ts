@@ -18,6 +18,7 @@ const NON_CA_US_NANP_AREA_CODES: ReadonlySet<string> = new Set([
   "671", "684", "721", "758", "767", "784", "787", "809", "829", "849", "868", "869", "876",
   "939", "900",
 ]);
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 export function isAllowedOtpDestination(e164: string): boolean {
   const match = /^\+1(\d{10})$/.exec(String(e164 ?? "").trim());
@@ -47,9 +48,9 @@ export const OTP_GUARD_STATUS: Record<OtpGuardRefusal, number> = {
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
-const perPhone = new Map<string, number[]>();
-let allSends: number[] = [];
-let breakerLoggedAt = 0;
+const perPhoneSlot = tenantLocal(() => new Map<string, number[]>()); // KS_SHARED_HOSTING_v1 - one per brokerage
+const allSendsSlot = tenantLocal<number[]>(() => []); // KS_SHARED_HOSTING_v1 - one per brokerage
+const breakerLoggedAtSlot = tenantLocal(() => 0); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 function positiveIntEnv(name: string, fallback: number): number {
   const n = Number(process.env[name]);
@@ -65,38 +66,38 @@ function maskPhone(e164: string): string {
 export function checkOtpSend(phone: string, opts: { trusted?: boolean; now?: number } = {}): OtpGuardResult {
   if (!isAllowedOtpDestination(phone)) return { ok: false, reason: "unsupported_country" };
   const now = opts.now ?? Date.now();
-  allSends = allSends.filter((t) => now - t < HOUR_MS);
-  const sent = (perPhone.get(phone) ?? []).filter((t) => now - t < DAY_MS);
+  allSendsSlot.value = allSendsSlot.value.filter((t) => now - t < HOUR_MS);
+  const sent = (perPhoneSlot.value.get(phone) ?? []).filter((t) => now - t < DAY_MS);
 
   if (!opts.trusted) {
     const hourlyCap = positiveIntEnv("OTP_HOURLY_CAP", 60);
-    if (allSends.length >= hourlyCap) {
-      if (now - breakerLoggedAt > HOUR_MS / 4) {
-        breakerLoggedAt = now;
+    if (allSendsSlot.value.length >= hourlyCap) {
+      if (now - breakerLoggedAtSlot.value > HOUR_MS / 4) {
+        breakerLoggedAtSlot.value = now;
         console.error("[otp-guard] hourly cap of " + hourlyCap + " sign-in codes reached - new codes paused (possible SMS pumping)");
       }
       return { ok: false, reason: "otp_busy" };
     }
     if (sent.length >= positiveIntEnv("OTP_DAILY_PER_PHONE", 8)) {
-      perPhone.set(phone, sent);
+      perPhoneSlot.value.set(phone, sent);
       console.warn("[otp-guard] daily per-number cap reached for " + maskPhone(phone));
       return { ok: false, reason: "otp_phone_daily_limit" };
     }
   }
 
   sent.push(now);
-  perPhone.set(phone, sent);
-  allSends.push(now);
-  if (perPhone.size > 5000) {
-    for (const [key, times] of perPhone) {
-      if (!times.some((t) => now - t < DAY_MS)) perPhone.delete(key);
+  perPhoneSlot.value.set(phone, sent);
+  allSendsSlot.value.push(now);
+  if (perPhoneSlot.value.size > 5000) {
+    for (const [key, times] of perPhoneSlot.value) {
+      if (!times.some((t) => now - t < DAY_MS)) perPhoneSlot.value.delete(key);
     }
   }
   return { ok: true };
 }
 
 export function _resetOtpGuard(): void {
-  perPhone.clear();
-  allSends = [];
-  breakerLoggedAt = 0;
+  perPhoneSlot.value.clear();
+  allSendsSlot.value = [];
+  breakerLoggedAtSlot.value = 0;
 }

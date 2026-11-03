@@ -12,6 +12,7 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { randomUUID } from "node:crypto";
 import type { Q } from "../plans/state.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 export type RiskKind = "banking_details_changed" | "approved_own_file" | "bulk_export" | "off_hours" | "high_volume" | "export" | "off_hours_write";
 
@@ -73,7 +74,7 @@ export type InsiderDeps = {
 };
 
 // In-memory: distinct files opened per user this hour (per instance; enough to notice a scrape).
-const opened = new Map<string, { hour: number; apps: Set<string>; alerted: boolean }>();
+const openedSlot = tenantLocal(() => new Map<string, { hour: number; apps: Set<string>; alerted: boolean }>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 export function hourlyFileLimit(env: NodeJS.ProcessEnv = process.env): number {
   const n = Number(env.FRAUD_STAFF_HOURLY_FILE_LIMIT);
@@ -82,14 +83,14 @@ export function hourlyFileLimit(env: NodeJS.ProcessEnv = process.env): number {
 
 export function noteFileOpened(userId: string, appId: string, at: Date, limit = hourlyFileLimit()): boolean {
   const hour = Math.floor(at.getTime() / 3_600_000);
-  let e = opened.get(userId);
-  if (!e || e.hour !== hour) { e = { hour, apps: new Set(), alerted: false }; opened.set(userId, e); }
+  let e = openedSlot.value.get(userId);
+  if (!e || e.hour !== hour) { e = { hour, apps: new Set(), alerted: false }; openedSlot.value.set(userId, e); }
   e.apps.add(appId);
   if (e.apps.size > limit && !e.alerted) { e.alerted = true; return true; }
   return false;
 }
 
-export function _resetInsiderCounters(): void { opened.clear(); }
+export function _resetInsiderCounters(): void { openedSlot.value.clear(); }
 
 function staffUser(req: Request): { id: string; label: string } | null {
   const u = (req as any).user;
@@ -151,7 +152,7 @@ const ALERT_TEXT: Record<string, string> = {
   approved_own_file: "moved a file they own to Accepted",
   bulk_export: "exported data in bulk",
   off_hours: "changed several files during the night",
-  high_volume: "opened an unusual number of files in an hour",
+  high_volume: "openedSlot.value an unusual number of files in an hour",
 };
 
 /** In-app notification to every active Admin for events not yet alerted. Returns how many events were alerted. */

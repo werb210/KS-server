@@ -2,6 +2,7 @@
 // OCR worker: replaced silent .catch handlers with console.error so failures
 // appear in Azure App Service log stream (was silently dropping errors).
 import { randomUUID } from "node:crypto";
+import { serialAcrossTenants } from "../../tenancy/jobs.js"; // KS_SHARED_HOSTING_v1 - one brokerage at a time
 import { config } from "../../config/index.js";
 import { isKillSwitchEnabled } from "../ops/ops.service.js";
 import { clearExpiredOcrLocks, lockOcrJobs } from "./ocr.repo.js";
@@ -47,12 +48,12 @@ export function startOcrWorker(): { stop: () => void } {
   };
 
   const timer = setInterval(() => {
-    tick().catch((err) => { console.error("[ocr.worker] tick skipped (no job lost):", (err && err.message) || err); });
+    serialAcrossTenants("ocr", tick).catch((err) => { console.error("[ocr.worker] tick skipped (no job lost):", (err && err.message) || err); });
   }, pollInterval);
 
   clearExpiredOcrLocks().catch((err) => { console.error("[ocr.worker] clearing expired OCR locks failed:", (err && err.message) || err); });
 
-  tick().catch((err) => { console.error("[ocr.worker] tick skipped (no job lost):", (err && err.message) || err); });
+  serialAcrossTenants("ocr", tick).catch((err) => { console.error("[ocr.worker] tick skipped (no job lost):", (err && err.message) || err); });
 
   const stop = () => {
     stopped = true;

@@ -4,6 +4,7 @@ import { isVisibility, type Visibility } from "../visibility/scope.js";
 import {
   BASE_ROLES, beyondBase, clampToBase, isBaseRole, normalizePermissions, templateFor, type BaseRole, type PermissionSet,
 } from "./permissions.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 export const ROLE_LIMITS = { roles: 100, nameChars: 60, descriptionChars: 300 };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -42,10 +43,10 @@ export function rowToRole(row: Record<string, any>): CustomRole {
 }
 
 const CACHE_MS = 15_000;
-const cache = new Map<string, { at: number; role: CustomRole | null }>();
+const cacheSlot = tenantLocal(() => new Map<string, { at: number; role: CustomRole | null }>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 /** Called after any role change. Other instances catch up within 15 s. */
 export function clearCustomRoleCache(): void {
-  cache.clear();
+  cacheSlot.value.clear();
 }
 
 /**
@@ -54,14 +55,14 @@ export function clearCustomRoleCache(): void {
  */
 export async function loadCustomRole(db: Q, id: string, nowMs = Date.now()): Promise<CustomRole | null> {
   if (!isUuid(id)) return null;
-  const hit = cache.get(id);
+  const hit = cacheSlot.value.get(id);
   if (hit && nowMs - hit.at < CACHE_MS) return hit.role;
   const r = await db.query(
     `SELECT id::text AS id, name, description, base_role, permissions, record_visibility, archived_at FROM custom_roles WHERE id = $1`,
     [id],
   );
   const role = r.rows[0] ? rowToRole(r.rows[0]) : null;
-  cache.set(id, { at: nowMs, role });
+  cacheSlot.value.set(id, { at: nowMs, role });
   return role;
 }
 

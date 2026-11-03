@@ -11,6 +11,7 @@
 // 7pm, and inbound calls answered "no agents are available". The named zone
 // tracks DST.
 import { pool } from "../../db.js";
+import { forEachTenant } from "../../tenancy/jobs.js"; // KS_SHARED_HOSTING_v1
 import { sqlZoneLiteral } from "../../lib/brokerageTime.js"; // KS_SETTINGS_PACK_v1_TIME_ZONE
 // BF_SERVER_v817_DIALER_MESSAGING - business hours deliberately stay on ALBERTA_TZ (America/Regina):
 // Alberta is on UTC-6 all year from 2026 and older tzdata still moves the Edmonton zone to UTC-7 in
@@ -114,7 +115,8 @@ export function startPresenceCron(): void {
   if (started) return;
   started = true;
   setInterval(() => {
-    void recomputePresence();
+    // KS_SHARED_HOSTING_v1 - once per brokerage on the shared server; once, as before, otherwise.
+    void forEachTenant(() => recomputePresence(), { job: "presence" });
   }, 60_000).unref();
 }
 

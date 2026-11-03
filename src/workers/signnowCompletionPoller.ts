@@ -7,8 +7,9 @@ import { claimedTick } from "./claim.js"; // BF_SERVER_v789_WORKER_CLAIM
 // never reaches /webhooks/signnow. This poller checks in-flight signings
 // (signnow_document_id set, signnow_app_signed_at null) against the live
 // SignNow document-group status and runs the same finalize the webhook would.
-const POLL_MS = Math.max(5000, Number(process.env.SIGNNOW_POLL_MS || 20000));
-const BATCH = Math.max(1, Number(process.env.SIGNNOW_POLL_BATCH || 5));
+// KS_SHARED_HOSTING_v1 - read when used (SIGNNOW_* values are each brokerage's own on the shared server).
+const pollMs = () => Math.max(5000, Number(process.env.SIGNNOW_POLL_MS || 20000));
+const batchSize = () => Math.max(1, Number(process.env.SIGNNOW_POLL_BATCH || 5));
 
 type Row = { id: string; contact_id: string | null; signnow_document_id: string; doc_ids: unknown };
 
@@ -39,7 +40,7 @@ export function startSignNowCompletionPoller(pool: Pool): { stop: () => void } {
             AND updated_at > now() - interval '30 days'
           ORDER BY updated_at DESC
           LIMIT $1`,
-        [BATCH]
+        [batchSize()]
       );
       for (const app of rows.rows) {
         try {
@@ -71,7 +72,7 @@ export function startSignNowCompletionPoller(pool: Pool): { stop: () => void } {
   };
   const tick = claimedTick("signnow_completion", tickUnclaimed); // BF_SERVER_v789_WORKER_CLAIM - one instance per tick
 
-  const timer = setInterval(() => { void tick(); }, POLL_MS);
+  const timer = setInterval(() => { void tick(); }, pollMs());
   void tick();
   return { stop: () => { stopped = true; clearInterval(timer); } };
 }
