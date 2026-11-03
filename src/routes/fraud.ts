@@ -54,7 +54,8 @@ router.get("/applications/:id", ...staff, safeHandler(async (req: any, res) => {
   const allowed = await allowedChecks(db());
   const rows = await listResults(db(), app.id);
   const docs = await db().query(
-    `SELECT id::text AS id, COALESCE(display_name, filename, title) AS filename, COALESCE(category, document_type) AS category
+    `SELECT id::text AS id, COALESCE(display_name, filename, title) AS filename, COALESCE(category, document_type) AS category,
+            (COALESCE(uploaded_by, '') = 'system') AS generated
        FROM documents WHERE application_id::text = $1 ORDER BY created_at ASC`,
     [app.id],
   );
@@ -71,8 +72,17 @@ router.get("/applications/:id", ...staff, safeHandler(async (req: any, res) => {
   const documents = docs.rows.map((d: any) => {
     const tamper = allowed.has("fraud_1") ? rows.find((r) => r.check_key === "fraud_1" && r.subject === d.id) : undefined;
     const math = allowed.has("fraud_2") ? rows.find((r) => r.check_key === "fraud_2" && r.subject === d.id) : undefined;
+    // BF_SERVER_v885_FRAUD_TEXT - forms the system generates (the signed application, PNW, SBA forms) are never
+    // scanned, so they are not "waiting to run" and are not in the duplicate check's file count.
+    if (d.generated && !tamper) {
+      return {
+        document_id: d.id, filename: d.filename, category: d.category, generated: true,
+        tamper: { status: "not_applicable", reasons: [{ code: "generated_by_system", severity: "info", text: "Created by the system (a signed form), so it is not scanned." }], checked_at: null },
+        statement_math: null,
+      };
+    }
     return {
-      document_id: d.id, filename: d.filename, category: d.category,
+      document_id: d.id, filename: d.filename, category: d.category, generated: Boolean(d.generated),
       tamper: tamper ? { status: tamper.status, reasons: tamper.reasons, checked_at: tamper.checked_at } : null,
       statement_math: math ? { status: math.status, reasons: math.reasons, checked_at: math.checked_at } : null,
     };
@@ -86,10 +96,18 @@ router.get("/applications/:id", ...staff, safeHandler(async (req: any, res) => {
     queued: Boolean(queue.queued),
     pendingDocuments,
   }) : null;
+  // BF_SERVER_v885_FRAUD_TEXT - the score shown is from the last finished run; say so while a new run waits,
+  // instead of "Checks are running" next to a score that reads as final.
+  const lastRun = rows.reduce<string | null>((m, r) => { const t = r.checked_at ? new Date(r.checked_at as any).toISOString() : null; return t && (!m || t > m) ? t : m; }, null);
+  const queueMessage = !queue.queued ? null
+    : queue.last_error ? `The last run did not finish (${queue.last_error.slice(0, 120)}). It will try again shortly; the results below are from the last run that finished.`
+    : lastRun ? "A new run is queued. The results below are from the last run that finished, and will update when it does."
+    : "Checks are queued and have not run yet.";
   return res.json({
     ok: true, application_id: app.id, checks, documents, score,
     include_prescreen_in_package: app.include ?? (await getFraudSettings(db())).include_prescreen_in_package,
-    queue,
+    queue: { ...queue, message: queueMessage, results_from: lastRun },
+    scanned_documents: documents.filter((d: any) => !d.generated).length,
   });
 }));
 
