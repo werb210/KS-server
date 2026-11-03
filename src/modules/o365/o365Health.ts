@@ -1,10 +1,11 @@
 // BF_SERVER_O365_VISIBILITY_v274
 // Office 365 failures are logged with Microsoft's error code and translated
 // into explanations that routes and the portal can act on.
+import { tenantLocal } from "../../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 export type O365Failure = { stage: string; status?: number | null; code?: string | null; message?: string | null; at: string };
 
-const failures = new Map<string, O365Failure>();
+const failuresSlot = tenantLocal(() => new Map<string, O365Failure>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 /** Reads Microsoft identity (AADSTS...) and Graph error bodies. Never returns tokens. */
 export function parseMicrosoftError(text: string): { code: string | null; message: string | null } {
@@ -29,17 +30,17 @@ export function parseMicrosoftError(text: string): { code: string | null; messag
 
 export function recordO365Failure(userId: string | null, failure: Omit<O365Failure, "at">): O365Failure {
   const entry: O365Failure = { ...failure, at: new Date().toISOString() };
-  if (userId) failures.set(userId, entry);
+  if (userId) failuresSlot.value.set(userId, entry);
   console.error(JSON.stringify({ event: "o365_failure", userId, ...entry }));
   return entry;
 }
 
 export function lastO365Failure(userId: string): O365Failure | null {
-  return failures.get(userId) ?? null;
+  return failuresSlot.value.get(userId) ?? null;
 }
 
 export function clearO365Failure(userId: string): void {
-  failures.delete(userId);
+  failuresSlot.value.delete(userId);
 }
 
 export function explainO365Failure(f: O365Failure | null): string {

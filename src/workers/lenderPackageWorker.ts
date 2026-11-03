@@ -4,6 +4,7 @@
 // this safe under multiple replicas.
 
 import { workersPaused } from "./claim.js";
+import { serialAcrossTenants } from "../tenancy/jobs.js"; // KS_SHARED_HOSTING_v1 - one brokerage at a time
 import type { Pool } from "pg";
 import {
   dispatchToSelected,
@@ -247,9 +248,9 @@ export function startLenderPackageWorker(pool: Pool): { stop: () => void } {
   };
 
   const timer = setInterval(() => {
-    tick().catch(() => {});
+    serialAcrossTenants("lender_package", tick).catch(() => {});
   }, POLL_MS);
-  tick().catch(() => {});
+  serialAcrossTenants("lender_package", tick).catch(() => {});
 
   const stop = () => {
     stopped = true;

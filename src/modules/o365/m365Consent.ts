@@ -13,6 +13,7 @@ import { clearLicenseeCache, getLicenseeConnections } from "../../licensee/setti
 import { APPLICATION_PERMISSIONS, DELEGATED_LABELS, DELEGATED_SCOPES, isTenantGuid, m365App, m365AppOnly, m365TenantInfo, tokenEndpoint, tokenRoles } from "./m365App.js";
 import { parseMicrosoftError } from "./o365Health.js";
 import { logWarnSwallowed } from "../../lib/logWarnSwallowed.js";
+import { tenantLocal } from "../../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 export type Db = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount?: number | null }> };
 
@@ -96,11 +97,11 @@ export type M365Health =
   | { state: "ok"; roles: string[]; missing: string[]; checkedAt: string }
   | { state: "revoked" | "app_key" | "not_checked" | "unreachable"; code: string | null; message: string; checkedAt: string };
 
-let healthCache: { at: number; tenant: string; value: M365Health } | null = null;
+const healthCacheSlot = tenantLocal<{ at: number; tenant: string; value: M365Health } | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 const HEALTH_TTL_MS = 10 * 60 * 1000;
 
 export function resetM365HealthCache(): void {
-  healthCache = null;
+  healthCacheSlot.value = null;
 }
 
 /** Revoked / removed / never consented in that tenant: the brokerage must reconnect. */
@@ -117,7 +118,7 @@ export async function checkM365Health(opts: { refresh?: boolean; fetcher?: typeo
   const creds = m365AppOnly();
   const checkedAt = new Date(now).toISOString();
   if (!creds) return { state: "not_checked", code: null, message: "Microsoft 365 is not connected.", checkedAt };
-  if (!opts.refresh && healthCache && healthCache.tenant === creds.tenant && now - healthCache.at < HEALTH_TTL_MS) return healthCache.value;
+  if (!opts.refresh && healthCacheSlot.value && healthCacheSlot.value.tenant === creds.tenant && now - healthCacheSlot.value.at < HEALTH_TTL_MS) return healthCacheSlot.value.value;
   const fetcher = opts.fetcher ?? fetch;
   let value: M365Health;
   try {
@@ -149,7 +150,7 @@ export async function checkM365Health(opts: { refresh?: boolean; fetcher?: typeo
   } catch (err) {
     value = { state: "unreachable", code: null, message: `Could not reach Microsoft: ${(err as Error)?.message ?? String(err)}`.slice(0, 200), checkedAt };
   }
-  healthCache = { at: now, tenant: creds.tenant, value };
+  healthCacheSlot.value = { at: now, tenant: creds.tenant, value };
   return value;
 }
 

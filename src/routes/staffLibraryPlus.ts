@@ -13,6 +13,7 @@ import * as g from "../modules/library/libraryGraph.js";
 import { serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 
 const router = Router();
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 export const SEND_TO_CLIENT_MAX_BYTES = 3 * 1024 * 1024; // a chat attachment; bigger files go as a link
 export const ZIP_MAX_FILES = 1000;
@@ -34,7 +35,7 @@ export function clampDays(raw: unknown, dflt: number): number {
 
 type Ctx = { graph: GraphClient; lib: repo.LibraryRow & { drive_id: string }; actor: { id: string; name: string | null } };
 
-const redeemed = new Set<string>();
+const redeemedSlot = tenantLocal(() => new Set<string>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 // The caller's Graph client and the library. Redeeming the organization link once gives a staff member who is not
 // the library's owner lasting access to it (same as v777).
 async function ctx(req: any, res: any): Promise<Ctx | null> {
@@ -44,13 +45,13 @@ async function ctx(req: any, res: any): Promise<Ctx | null> {
   if (!lib || !lib.drive_id) { res.status(409).json({ error: "library_missing", message: "Create the Staff Library first." }); return null; }
   const graph = await getGraphForUser(pool, actor.id);
   if (!graph) { res.status(412).json({ error: "o365_not_connected" }); return null; }
-  if (!redeemed.has(actor.id)) {
+  if (!redeemedSlot.value.has(actor.id)) {
     const sid = "u!" + Buffer.from(lib.share_url).toString("base64").replace(/=+$/, "").replace(/\//g, "_").replace(/\+/g, "-");
     const r = await graph.fetch("/shares/" + sid + "/driveItem?$select=id", { headers: { Prefer: "redeemSharingLink" } }).catch((err: unknown) => {
       console.warn("[staff-library] redeem failed", err instanceof Error ? err.message : String(err));
       return null;
     });
-    if (r?.ok) redeemed.add(actor.id);
+    if (r?.ok) redeemedSlot.value.add(actor.id);
   }
   return { graph, lib: lib as Ctx["lib"], actor };
 }
@@ -61,14 +62,14 @@ function sendError(res: any, err: unknown): void {
 }
 
 // The library's own path in OneDrive, so an item can be checked to be inside it.
-const rootPathCache = new Map<string, string>();
+const rootPathCacheSlot = tenantLocal(() => new Map<string, string>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 async function libraryRootPath(c: Ctx): Promise<string> {
   const key = c.lib.drive_id + ":" + c.lib.item_id;
-  const hit = rootPathCache.get(key);
+  const hit = rootPathCacheSlot.value.get(key);
   if (hit) return hit;
   const root = await g.getItem(c.graph, c.lib.drive_id, c.lib.item_id);
   const p = String(root?.parentReference?.path ?? "") + "/" + String(root?.name ?? "");
-  rootPathCache.set(key, p);
+  rootPathCacheSlot.value.set(key, p);
   return p;
 }
 export function isUnder(itemParentPath: string | null | undefined, rootPath: string): boolean {

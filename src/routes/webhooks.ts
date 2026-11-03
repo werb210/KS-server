@@ -55,7 +55,7 @@ const router = Router();
 // is now imported alongside Router for this purpose.
 router.use(express.urlencoded({ extended: false }));
 
-const BASE_URL = process.env.PUBLIC_BASE_URL ?? serverUrl();
+const baseUrl = () => process.env.PUBLIC_BASE_URL ?? serverUrl(); // KS_SHARED_HOSTING_v1 - read per request
 
 // BF_SERVER_BLOCK_v305_TWILIO_WEBHOOK_SIGNATURES_v1
 // Five of six Twilio webhooks previously accepted unauthenticated POSTs:
@@ -614,7 +614,7 @@ router.post("/twilio/voice/no-answer", twilioWebhookValidation, safeHandler(asyn
   const vr = new VoiceResponse();
   vr.say({ voice: "Polly.Joanna" }, "Sorry, no agents are available right now. Please leave your name, number, and a brief message and we will call you back.");
   vr.record({
-    action: `${BASE_URL}/api/webhooks/twilio/voicemail`,
+    action: `${baseUrl()}/api/webhooks/twilio/voicemail`,
     method: "POST",
     maxLength: 120,
     transcribe: false,

@@ -9,6 +9,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { Pool } from "pg";
 import { decryptToken, encryptToken } from "../workspace/tokenCrypto.js";
 import { QBO_AUTH_URL, QBO_MINOR_VERSION, QBO_REVOKE_URL, QBO_SCOPE, QBO_TOKEN_URL, qboConfig, type QboConfig } from "./qboConfig.js";
+import { tenantLocal } from "../../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 export const STATE_TTL_MS = 10 * 60 * 1000;
 const KEY = "QBO_TOKEN_ENCRYPTION_KEY" as const;
@@ -160,14 +161,14 @@ export type QboClient = {
   query<T = any>(statement: string): Promise<T[]>;
 };
 
-let refreshing: Promise<string> | null = null;
+const refreshingSlot = tenantLocal<Promise<string> | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 async function accessToken(pool: Pool, cfg: QboConfig, c: ConnectionRow, force = false): Promise<string> {
   const current = open(c.access_token_enc);
   const exp = c.access_token_expires_at ? new Date(c.access_token_expires_at).getTime() : 0;
   if (!force && current && exp - Date.now() > 60_000) return current;
-  if (refreshing) return refreshing;
-  refreshing = (async () => {
+  if (refreshingSlot.value) return refreshingSlot.value;
+  refreshingSlot.value = (async () => {
     const refresh = open(c.refresh_token_enc);
     if (!refresh) throw new QboApiError("quickbooks_not_connected", 401, "no_refresh_token");
     try {
@@ -191,7 +192,7 @@ async function accessToken(pool: Pool, cfg: QboConfig, c: ConnectionRow, force =
       throw err;
     }
   })();
-  try { return await refreshing; } finally { refreshing = null; }
+  try { return await refreshingSlot.value; } finally { refreshingSlot.value = null; }
 }
 
 function qboErrorFrom(status: number, text: string): QboApiError {

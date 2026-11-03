@@ -6,13 +6,14 @@ import { logWarnSwallowed } from "../lib/logWarnSwallowed.js";
 import { claimedTick } from "./claim.js";
 import { runQueuedJobs } from "../import/engine.js";
 import { importJobDeps } from "../import/deps.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 const TICK_MS = 10 * 1000;
-let kick: (() => void) | null = null;
+const kickSlot = tenantLocal<(() => void) | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 /** Starts the next queued import job now instead of at the next poll (no-op until the worker is started). */
 export function kickDataImportWorker(): void {
-  if (kick) kick();
+  if (kickSlot.value) kickSlot.value();
 }
 
 export function startDataImportWorker(pool: Pool): { stop: () => void } {
@@ -30,8 +31,8 @@ export function startDataImportWorker(pool: Pool): { stop: () => void } {
     }
   };
   const tick = claimedTick("data_import", tickUnclaimed);
-  kick = () => { void tick(); };
+  kickSlot.value = () => { void tick(); };
   const first = setTimeout(() => void tick(), 20 * 1000);
   const timer = setInterval(() => void tick(), TICK_MS);
-  return { stop: () => { kick = null; clearTimeout(first); clearInterval(timer); } };
+  return { stop: () => { kickSlot.value = null; clearTimeout(first); clearInterval(timer); } };
 }

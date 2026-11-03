@@ -13,6 +13,7 @@
 import type { Request } from "express";
 import { ipKeyGenerator } from "express-rate-limit";
 import { isIP } from "node:net";
+import { tenantKey } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 // BF_SERVER_v789_XFF_RIGHTMOST - the left-most x-forwarded-for entry is whatever
 // the caller sent; only the entries appended by our own proxies can be trusted.
@@ -58,5 +59,7 @@ export function clientIpFromRequest(req: Request): string {
 }
 
 export function rateLimitKeyFromRequest(req: Request): string {
-  return ipKeyGenerator(clientIpFromRequest(req));
+  // KS_SHARED_HOSTING_v1 - "<brokerage>:<ip>" on the shared server, so one brokerage's traffic never uses up
+  // another's limit; the bare key otherwise.
+  return tenantKey(ipKeyGenerator(clientIpFromRequest(req)));
 }

@@ -12,13 +12,14 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      licensee:
+      target:
         description: >-
-          Only this licensee (its code in deploy/licensees.json, e.g. northwind). Empty deploys the development copy,
-          the demo server and every enabled licensee.
+          What to deploy: all (the development copy, the demo server and the shared server), dev (the development copy
+          and the demo server) or shared (only the shared server ks-shared-server).
         required: false
-        default: ''
-        type: string
+        default: all
+        type: choice
+        options: [all, dev, shared]
 
 concurrency:
   group: deploy-ks-server-dev
@@ -27,9 +28,9 @@ concurrency:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-24.04
-    # KS_LICENSEE_DEPLOY_v1 - a manual run for one licensee leaves the development copy alone.
+    # KS_SHARED_HOSTING_v1 - a manual run for the shared server only leaves the development copy alone.
     if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.licensee == '') ||
+      (github.event_name == 'workflow_dispatch' && inputs.target != 'shared') ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push')
 
@@ -108,60 +109,33 @@ jobs:
           app-name: ${{ vars.DEMO_WEBAPP_NAME || 'ks-demo-server' }}
           package: release.zip
 
-  # KS_LICENSEE_DEPLOY_v1 - every licensee's own copy (resource group ks-<code>). deploy/licensees.json lists the
-  # licensees; each one's settings live in its GitHub environment (normally ks-<code>, Settings > Environments):
-  #   secret   AZURE_CREDENTIALS   service principal limited to ks-<code> (provision-licensee.sh CREATE_DEPLOY_SP=1)
-  #   variable AZURE_WEBAPP_NAME   optional; default ks-<code>-server
-  # The database needs nothing here: KS-server applies its migrations itself on startup, with the DATABASE_URL app
-  # setting provision-licensee.sh wrote. Separate jobs from the development deploy above, so neither blocks the other,
-  # and one licensee failing never stops the rest (fail-fast: false).
-  licensee-plan:
+  # KS_SHARED_HOSTING_v1 - every brokerage now runs on ONE shared server (docs/SHARED_HOSTING.md): the app
+  # ks-shared-server in resource group ks-shared, which finds each request's brokerage and database itself. There is no
+  # per-licensee matrix any more; deploy/licensees.json is kept as the list of brokerages whose web builds are published.
+  # Settings live in the GitHub environment ks-shared (Settings > Environments):
+  #   variables AZURE_CLIENT_ID + AZURE_TENANT_ID + AZURE_SUBSCRIPTION_ID  a federated deploy identity (preferred), or
+  #   secret    AZURE_CREDENTIALS                                          a service principal limited to ks-shared
+  # The app name is the repository variable AZURE_WEBAPP_NAME_SHARED (default ks-shared-server; "off" skips this job).
+  # The app's own settings (KS_CONTROL_DATABASE_URL, KS_TENANT_KEY, KS_OPS_SERVICE_KEY and the Keystone-wide keys) are
+  # App Service settings written by KS-Ops, never by this workflow. Migrations run on startup, per brokerage database.
+  shared-deploy:
+    name: deploy shared server
     runs-on: ubuntu-24.04
     if: >-
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push')
-    outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
-      count: ${{ steps.plan.outputs.count }}
-      repo_credentials: ${{ steps.repo.outputs.credentials }}
-      repo_webapp_name: ${{ steps.repo.outputs.webapp_name }}
-      repo_client_id: ${{ steps.repo.outputs.client_id }}
-      repo_qbo_client_id: ${{ steps.repo.outputs.qbo_client_id }}
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-
-      - name: Licensees to deploy
-        id: plan
-        env:
-          WANTED: ${{ inputs.licensee }}
-        run: node deploy/licensee-matrix.mjs server "$WANTED"
-
-      # A licensee environment without its own value silently gets the repository's (the development copy's).
-      # Fingerprints let each licensee job notice that without the secret itself leaving this job.
-      - name: Repository-level settings (to tell them apart from a licensee's)
-        id: repo
-        env:
-          REPO_AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
-          REPO_AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
-          REPO_AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-          REPO_QBO_CLIENT_ID: ${{ secrets.QBO_CLIENT_ID }}
-        run: |
-          {
-            echo "credentials=$(printf '%s' "$REPO_AZURE_CREDENTIALS" | sha256sum | cut -d' ' -f1)"
-            echo "webapp_name=$REPO_AZURE_WEBAPP_NAME"
-            echo "client_id=$REPO_AZURE_CLIENT_ID"
-            echo "qbo_client_id=$(printf '%s' "$REPO_QBO_CLIENT_ID" | sha256sum | cut -d' ' -f1)"
-          } >> "$GITHUB_OUTPUT"
-
-  licensee-package:
-    needs: licensee-plan
-    if: needs.licensee-plan.outputs.count != '0'
-    runs-on: ubuntu-24.04
+      vars.AZURE_WEBAPP_NAME_SHARED != 'off' &&
+      ((github.event_name == 'workflow_dispatch' && inputs.target != 'dev') ||
+       (github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push'))
+    environment: ks-shared
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: deploy-ks-shared-server
+      cancel-in-progress: false
     env:
       SCM_DO_BUILD_DURING_DEPLOYMENT: false
+      WEBAPP: ${{ vars.AZURE_WEBAPP_NAME_SHARED || 'ks-shared-server' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -183,12 +157,15 @@ jobs:
       - name: Prune dev deps
         run: npm prune --omit=dev
 
-      # Import check only: nothing connects, so a placeholder database address and JWT secret are enough.
+      # Import check only: nothing connects, so placeholders are enough. KS_CONTROL_DATABASE_URL is set so the build
+      # is also imported in multi-brokerage mode.
       - name: Verify build
         env:
           DATABASE_URL: postgres://verify:verify@127.0.0.1:5432/verify
           JWT_SECRET: verify-build-only-${{ github.sha }}
-        run: node -e "require('./dist/routes/auth'); require('./dist/config/env');"
+        run: |
+          node -e "require('./dist/routes/auth'); require('./dist/config/env');"
+          KS_CONTROL_DATABASE_URL=postgres://verify:verify@127.0.0.1:5432/ks_control node -e "import('./dist/tenancy/index.js').then((m) => { if (!m.isMultiBrokerage()) process.exit(1); })"
 
       - name: Create deployment package
         run: |
@@ -200,69 +177,26 @@ jobs:
                ".github/*" \
                ".env"
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ks-server-release
-          path: release.zip
-          retention-days: 1
-
-  licensee-deploy:
-    name: deploy ${{ matrix.code }}
-    needs: [licensee-plan, licensee-package]
-    if: needs.licensee-plan.outputs.count != '0'
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.licensee-plan.outputs.matrix) }}
-    environment: ${{ matrix.environment }}
-    # KS_OPS_AUTO_PROVISION_v1 - id-token lets the job sign in with the licensee's federated deploy identity.
-    permissions:
-      contents: read
-      actions: read
-      id-token: write
-    concurrency:
-      group: deploy-ks-server-${{ matrix.code }}
-      cancel-in-progress: false
-    steps:
-      - name: Check the licensee's settings
-        id: settings
+      - name: Sign-in method
+        id: login
         env:
-          CODE: ${{ matrix.code }}
-          ENVIRONMENT: ${{ matrix.environment }}
           AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
-          AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-          REPO_CREDENTIALS: ${{ needs.licensee-plan.outputs.repo_credentials }}
-          REPO_WEBAPP_NAME: ${{ needs.licensee-plan.outputs.repo_webapp_name }}
-          REPO_CLIENT_ID: ${{ needs.licensee-plan.outputs.repo_client_id }}
-        # KS_OPS_AUTO_PROVISION_v1 - two ways to sign in, both from the licensee's own environment (a value inherited
-        # from the repository, i.e. the development copy's, never counts):
-        #   variables AZURE_CLIENT_ID + AZURE_TENANT_ID + AZURE_SUBSCRIPTION_ID  the managed identity ks-<code>-deploy
-        #             with a federated credential for this environment (automatic provisioning; no secret)
-        #   secret    AZURE_CREDENTIALS                                          a service principal's JSON (by hand)
         run: |
-          if [ -n "$AZURE_CLIENT_ID" ] && [ "$AZURE_CLIENT_ID" != "$REPO_CLIENT_ID" ] && [ -n "$AZURE_TENANT_ID" ] && [ -n "$AZURE_SUBSCRIPTION_ID" ]; then
-            echo "login=oidc" >> "$GITHUB_OUTPUT"
-          elif [ -n "$AZURE_CREDENTIALS" ] &&
-               [ "$(printf '%s' "$AZURE_CREDENTIALS" | sha256sum | cut -d' ' -f1)" != "$REPO_CREDENTIALS" ]; then
-            echo "login=creds" >> "$GITHUB_OUTPUT"
+          if [ -n "$AZURE_CLIENT_ID" ] && [ -n "$AZURE_TENANT_ID" ] && [ -n "$AZURE_SUBSCRIPTION_ID" ]; then
+            echo "method=oidc" >> "$GITHUB_OUTPUT"
+          elif [ -n "$AZURE_CREDENTIALS" ]; then
+            echo "method=creds" >> "$GITHUB_OUTPUT"
           else
-            echo "::error title=$CODE::Add to the GitHub environment '$ENVIRONMENT' the variables AZURE_CLIENT_ID, AZURE_TENANT_ID and AZURE_SUBSCRIPTION_ID (the licensee's deploy identity) or the secret AZURE_CREDENTIALS (its deploy service principal)."
+            echo "::error title=ks-shared::Add to the GitHub environment 'ks-shared' the variables AZURE_CLIENT_ID, AZURE_TENANT_ID and AZURE_SUBSCRIPTION_ID (a federated deploy identity) or the secret AZURE_CREDENTIALS."
             exit 1
           fi
-          app="$AZURE_WEBAPP_NAME"
-          if [ -z "$app" ] || [ "$app" = "$REPO_WEBAPP_NAME" ]; then app="ks-$CODE-server"; fi
-          echo "webapp=$app" >> "$GITHUB_OUTPUT"
-          echo "Deploying to $app"
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: ks-server-release
+          echo "Deploying to $WEBAPP"
 
       - name: Azure Login (federated deploy identity)
-        if: steps.settings.outputs.login == 'oidc'
+        if: steps.login.outputs.method == 'oidc'
         uses: azure/login@v2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
@@ -270,49 +204,13 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Azure Login
-        if: steps.settings.outputs.login == 'creds'
+        if: steps.login.outputs.method == 'creds'
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # KS_SERVER_v13_QUICKBOOKS - the licensee's own QuickBooks Online (Intuit) app, when its GitHub environment has
-      # one: secrets QBO_CLIENT_ID, QBO_CLIENT_SECRET (and optionally QBO_TOKEN_ENCRYPTION_KEY), variables
-      # QBO_ENVIRONMENT (sandbox|production, default sandbox) and QBO_REDIRECT_URI (optional). Written to the App
-      # Service settings. Without QBO_CLIENT_ID nothing is changed (QuickBooks stays off, or keeps the values
-      # provision-licensee.sh wrote). A value inherited from the repository (the development copy's) is never used.
-      - name: QuickBooks settings
-        env:
-          CODE: ${{ matrix.code }}
-          RG: ks-${{ matrix.code }}
-          WEBAPP: ${{ steps.settings.outputs.webapp }}
-          QBO_CLIENT_ID: ${{ secrets.QBO_CLIENT_ID }}
-          QBO_CLIENT_SECRET: ${{ secrets.QBO_CLIENT_SECRET }}
-          QBO_TOKEN_ENCRYPTION_KEY: ${{ secrets.QBO_TOKEN_ENCRYPTION_KEY }}
-          QBO_ENVIRONMENT: ${{ vars.QBO_ENVIRONMENT }}
-          QBO_REDIRECT_URI: ${{ vars.QBO_REDIRECT_URI }}
-          REPO_QBO_CLIENT_ID: ${{ needs.licensee-plan.outputs.repo_qbo_client_id }}
-        run: |
-          if [ -z "$QBO_CLIENT_ID" ]; then echo "No QBO_CLIENT_ID in this environment; QuickBooks settings left as they are."; exit 0; fi
-          if [ "$(printf '%s' "$QBO_CLIENT_ID" | sha256sum | cut -d' ' -f1)" = "$REPO_QBO_CLIENT_ID" ]; then
-            echo "::warning title=$CODE::QBO_CLIENT_ID comes from the repository, not the environment; QuickBooks settings left as they are."
-            exit 0
-          fi
-          if [ -z "$QBO_CLIENT_SECRET" ]; then echo "::error title=$CODE::QBO_CLIENT_ID is set but QBO_CLIENT_SECRET is missing."; exit 1; fi
-          case "${QBO_ENVIRONMENT:-sandbox}" in sandbox|production) ;; *) echo "::error title=$CODE::QBO_ENVIRONMENT must be sandbox or production."; exit 1;; esac
-          rg="$(az webapp list --query "[?name=='$WEBAPP'].resourceGroup | [0]" -o tsv)"
-          [ -n "$rg" ] || rg="$RG"
-          settings=("QBO_CLIENT_ID=$QBO_CLIENT_ID" "QBO_CLIENT_SECRET=$QBO_CLIENT_SECRET" "QBO_ENVIRONMENT=${QBO_ENVIRONMENT:-sandbox}")
-          [ -n "$QBO_REDIRECT_URI" ] && settings+=("QBO_REDIRECT_URI=$QBO_REDIRECT_URI")
-          [ -n "$QBO_TOKEN_ENCRYPTION_KEY" ] && settings+=("QBO_TOKEN_ENCRYPTION_KEY=$QBO_TOKEN_ENCRYPTION_KEY")
-          if [ -z "$QBO_TOKEN_ENCRYPTION_KEY" ] && [ -z "$(az webapp config appsettings list -g "$rg" -n "$WEBAPP" --query "[?name=='QBO_TOKEN_ENCRYPTION_KEY'].value | [0]" -o tsv)" ]; then
-            settings+=("QBO_TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32)")
-            echo "Generated QBO_TOKEN_ENCRYPTION_KEY on $WEBAPP (kept from now on)."
-          fi
-          az webapp config appsettings set -g "$rg" -n "$WEBAPP" --settings "${settings[@]}" --only-show-errors -o none
-          echo "QuickBooks settings written to $WEBAPP (${QBO_ENVIRONMENT:-sandbox})."
-
       - name: Deploy to Azure
         uses: azure/webapps-deploy@v3
         with:
-          app-name: ${{ steps.settings.outputs.webapp }}
+          app-name: ${{ env.WEBAPP }}
           package: release.zip

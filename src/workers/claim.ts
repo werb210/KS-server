@@ -17,6 +17,8 @@
 // If the lock cannot be checked at all (database unreachable), the tick is
 // skipped - failing closed is what prevents a double send.
 import type { Pool, PoolClient } from "pg";
+import { currentTenantCode as tenantCode, tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
+import { serialAcrossTenants } from "../tenancy/jobs.js"; // KS_SHARED_HOSTING_v1
 
 // int4 namespace for the two-key advisory-lock form, so worker locks can never
 // collide with the migration lock (single bigint key) or hashtext() locks.
@@ -130,11 +132,13 @@ export function createWorkerLock(getPool: () => Pool | Promise<Pool>): WorkerLoc
   return { withWorkerLock, close };
 }
 
-const shared = createWorkerLock(async () => (await import("../db.js")).pool);
+// KS_SHARED_HOSTING_v1 - one lock session per brokerage database on the shared server (advisory locks belong to a
+// database, and the session must come from that brokerage's own pool). Single-brokerage mode: the one lock, as before.
+const sharedLocks = tenantLocal(() => createWorkerLock(async () => (await import("../db.js")).pool));
 
 /** Run fn only if no other instance is running the worker `name` right now. */
 export function withWorkerLock<T>(name: string, fn: () => Promise<T>): Promise<WorkerLockResult<T>> {
-  return shared.withWorkerLock(name, fn);
+  return sharedLocks.value.withWorkerLock(name, fn);
 }
 
 // KS_SERVER_v8_SERVICE_STATUS - while the licensee is suspended or cancelled, background work stops (nothing contacts
@@ -162,18 +166,21 @@ export async function workersPaused(name: string): Promise<boolean> {
  * Wrap a worker's tick so it runs under withWorkerLock(name). The returned
  * function never rejects (it is called as `void tick()` from timers).
  */
-export function claimedTick(name: string, fn: () => Promise<unknown>, lock: Pick<WorkerLock, "withWorkerLock"> = shared): () => Promise<void> {
-  return async () => {
+export function claimedTick(name: string, fn: () => Promise<unknown>, lock?: Pick<WorkerLock, "withWorkerLock">): () => Promise<void> {
+  // KS_SHARED_HOSTING_v1 - on the shared server each brokerage runs its own copy of every worker; serialAcrossTenants
+  // makes the copies of one worker take turns (one brokerage at a time). Single-brokerage mode: unchanged.
+  return () => serialAcrossTenants(name, async () => {
     try {
       if (await workersPaused(name)) return; // KS_SERVER_v8_SERVICE_STATUS
-      await lock.withWorkerLock(name, fn);
+      await (lock ?? sharedLocks.value).withWorkerLock(name, fn);
     } catch (err) {
-      console.error("[worker-lock] tick failed", { worker: name, message: errMessage(err) });
+      const code = tenantCode();
+      console.error("[worker-lock] tick failed", code ? { worker: name, tenant: code, message: errMessage(err) } : { worker: name, message: errMessage(err) });
     }
-  };
+  });
 }
 
 /** Return the lock session to the pool (graceful shutdown, before pool.end()). */
-export function closeWorkerLocks(): Promise<void> {
-  return shared.close();
+export async function closeWorkerLocks(): Promise<void> {
+  for (const lock of sharedLocks.all()) await lock.close();
 }

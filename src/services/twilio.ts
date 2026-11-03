@@ -1,10 +1,11 @@
 import process from "node:process"
 import { createRequire } from "node:module";
 import { config } from "../config/index.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 const require = createRequire(import.meta.url);
 
-let client: any | null = null
+const clientSlot = tenantLocal<any | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 let twilioFactory: any | null | undefined;
 
 function fetchTwilioFactory(): any | null {
@@ -35,18 +36,18 @@ function fetchClient() {
     throw new Error("Missing required environment variable")
   }
 
-  if (!client) {
+  if (!clientSlot.value) {
     const twilioFactory = fetchTwilioFactory();
     if (!twilioFactory) {
       throw new Error("Twilio SDK unavailable");
     }
-    client = twilioFactory(
+    clientSlot.value = twilioFactory(
       config.twilio.accountSid!,
       config.twilio.authToken!
     )
   }
 
-  return client
+  return clientSlot.value
 }
 
 export function fetchTwilioClient() {

@@ -4,6 +4,7 @@
 import type { Pool } from "pg";
 import { sendOne, mergeFields } from "../services/sendgridService.js";
 import { withWorkerLock } from "./claim.js"; // BF_SERVER_v789_WORKER_CLAIM
+import { serialAcrossTenants } from "../tenancy/jobs.js"; // KS_SHARED_HOSTING_v1 - one brokerage at a time
 import { meter } from "../plans/meters.js"; // KS_SERVER_MARKETING_ADDON
 
 const TICK_MS = 5 * 60_000;
@@ -105,7 +106,7 @@ export function startSmsCascadeWorker(pool: Pool): { stop: () => void } {
       console.error("[sms-cascade] tick failed", { message: errMessage(err) });
     } finally { running = false; }
   };
-  const h = setInterval(() => { void tick(); }, TICK_MS);
-  const first = setTimeout(() => { void tick(); }, 15_000);
+  const h = setInterval(() => { void serialAcrossTenants("sms_cascade", tick); }, TICK_MS);
+  const first = setTimeout(() => { void serialAcrossTenants("sms_cascade", tick); }, 15_000);
   return { stop: () => { stopped = true; clearInterval(h); clearTimeout(first); } };
 }

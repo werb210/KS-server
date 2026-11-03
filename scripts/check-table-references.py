@@ -24,6 +24,8 @@ BASELINE = pathlib.Path("scripts/table-references-baseline.json")
 
 # Things that look like a table in a FROM/JOIN but are not one.
 NOT_TABLES = {
+    # KS_SHARED_HOSTING_v1 - the brokerage registry lives in the control database (ks_control), owned by KS-Ops.
+    "ks_tenants",
     "information_schema", "unnest", "generate_series", "jsonb_array_elements",
     "jsonb_each", "lateral", "json_array_elements", "jsonb_to_recordset",
     # Google Ads API resources, queried through GAQL rather than Postgres.

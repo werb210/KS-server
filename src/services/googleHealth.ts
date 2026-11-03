@@ -13,6 +13,7 @@ import { claimedTick } from "../workers/claim.js"; // BF_SERVER_v789_WORKER_CLAI
 import { brandName, supportEmail } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
 export type HealthStatus = "ok" | "fail" | "off";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 export type HealthCheck = { key: string; label: string; status: HealthStatus; detail: string };
 export type HealthReport = { checkedAt: string; checks: HealthCheck[] };
 
@@ -92,15 +93,15 @@ export async function runGoogleHealthChecks(fetchImpl: typeof fetch = fetch): Pr
   return { checkedAt: new Date().toISOString(), checks };
 }
 
-let latest: HealthReport | null = null;
-let lastAlertAt = 0;
-let lastFailingKeys = "";
+const latestSlot = tenantLocal<HealthReport | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
+const lastAlertAtSlot = tenantLocal(() => 0); // KS_SHARED_HOSTING_v1 - one per brokerage
+const lastFailingKeysSlot = tenantLocal(() => ""); // KS_SHARED_HOSTING_v1 - one per brokerage
 const ALERT_REPEAT_MS = 24 * 60 * 60_000;
 
 export async function getGoogleHealth(refresh: boolean): Promise<HealthReport> {
-  if (!refresh && latest && Date.now() - Date.parse(latest.checkedAt) < 10 * 60_000) return latest;
-  latest = await runGoogleHealthChecks();
-  return latest;
+  if (!refresh && latestSlot.value && Date.now() - Date.parse(latestSlot.value.checkedAt) < 10 * 60_000) return latestSlot.value;
+  latestSlot.value = await runGoogleHealthChecks();
+  return latestSlot.value;
 }
 
 function listFrom(value: string | undefined, fallback: string): string[] {
@@ -109,11 +110,11 @@ function listFrom(value: string | undefined, fallback: string): string[] {
 
 export async function alertIfFailing(report: HealthReport, now = Date.now()): Promise<boolean> {
   const failing = report.checks.filter((c) => c.status === "fail");
-  if (!failing.length) { lastAlertAt = 0; lastFailingKeys = ""; return false; }
+  if (!failing.length) { lastAlertAtSlot.value = 0; lastFailingKeysSlot.value = ""; return false; }
   const keys = failing.map((c) => c.key).sort().join(",");
-  if (keys === lastFailingKeys && now - lastAlertAt < ALERT_REPEAT_MS) return false;
-  lastAlertAt = now;
-  lastFailingKeys = keys;
+  if (keys === lastFailingKeysSlot.value && now - lastAlertAtSlot.value < ALERT_REPEAT_MS) return false;
+  lastAlertAtSlot.value = now;
+  lastFailingKeysSlot.value = keys;
   const summary = failing.map((c) => c.label).join("; ");
   const phones = listFrom(process.env.GOOGLE_HEALTH_ALERT_PHONES, process.env.LEAD_ALERT_SMS_TO ?? "");
   const emails = listFrom(process.env.GOOGLE_HEALTH_ALERT_EMAILS, supportEmail());
@@ -148,4 +149,4 @@ export function startGoogleHealthMonitor(): { stop: () => void } {
   return { stop: () => { clearTimeout(first); clearInterval(timer); } };
 }
 
-export function __resetGoogleHealthForTests(): void { latest = null; lastAlertAt = 0; lastFailingKeys = ""; }
+export function __resetGoogleHealthForTests(): void { latestSlot.value = null; lastAlertAtSlot.value = 0; lastFailingKeysSlot.value = ""; }

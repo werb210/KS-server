@@ -4,6 +4,7 @@ import {
   LIMITS, mergeValues, validateDefinition, validateValues, type CleanDefinition, type DefinitionInput, type FieldDefinition,
   type ObjectType,
 } from "./definitions.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 export const RECORD_TABLE: Record<ObjectType, { table: string; idCast: string }> = {
   contact: { table: "contacts", idCast: "uuid" },
@@ -25,9 +26,9 @@ function rowToDef(r: any): FieldDefinition {
 
 // Definitions change rarely and are read on every list request: cache them for a short time per process.
 const CACHE_MS = 15_000;
-const cache = new Map<ObjectType, { at: number; defs: FieldDefinition[] }>();
+const cacheSlot = tenantLocal(() => new Map<ObjectType, { at: number; defs: FieldDefinition[] }>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 export function clearCustomFieldCache(): void {
-  cache.clear();
+  cacheSlot.value.clear();
 }
 
 function isMissingRelation(err: unknown): boolean {
@@ -37,7 +38,7 @@ function isMissingRelation(err: unknown): boolean {
 
 /** Every definition of an object type (archived too), in display order. [] before the migration has run. */
 export async function listDefinitions(db: Q, object: ObjectType, opts: { includeArchived?: boolean; fresh?: boolean } = {}): Promise<FieldDefinition[]> {
-  const hit = cache.get(object);
+  const hit = cacheSlot.value.get(object);
   let defs: FieldDefinition[];
   if (!opts.fresh && hit && Date.now() - hit.at < CACHE_MS) defs = hit.defs;
   else {
@@ -53,7 +54,7 @@ export async function listDefinitions(db: Q, object: ObjectType, opts: { include
       console.warn("[custom-fields] definitions table missing; treating as no fields");
       defs = [];
     }
-    cache.set(object, { at: Date.now(), defs });
+    cacheSlot.value.set(object, { at: Date.now(), defs });
   }
   return opts.includeArchived ? defs : defs.filter((d) => !d.archived_at);
 }

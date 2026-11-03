@@ -4,15 +4,16 @@ import { normaliseAddons, type AddonKey } from "./addons.js"; // KS_SERVER_BANK_
 import {
   TRIAL_DAYS, checkFeature, defaultPlan, isPlan, isServiceStatus, trialStatus, type Plan, type PlanState, type ServiceStatus,
 } from "./catalogue.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 export type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount?: number | null }> };
 
 const CACHE_MS = 30_000;
 const FAILED_CACHE_MS = 10_000;
-let cache: { at: number; ttl: number; value: PlanState } | null = null;
+const cacheSlot = tenantLocal<{ at: number; ttl: number; value: PlanState } | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 export function clearPlanCache(): void {
-  cache = null;
+  cacheSlot.value = null;
 }
 
 function asDate(v: unknown): Date | null {
@@ -43,15 +44,15 @@ const SELECT_PLAN_SQL = `SELECT plan, trial_started_at, trial_ends_at, extra_sto
  * blip) the failure is logged and the default plan applies for 10 s - a read error must not take features away.
  */
 export async function getPlanState(db: Q, nowMs = Date.now()): Promise<PlanState> {
-  if (cache && nowMs - cache.at < cache.ttl) return cache.value;
+  if (cacheSlot.value && nowMs - cacheSlot.value.at < cacheSlot.value.ttl) return cacheSlot.value.value;
   try {
     const r = await db.query(SELECT_PLAN_SQL);
     const value = rowToState(r?.rows?.[0]);
-    cache = { at: nowMs, ttl: CACHE_MS, value };
+    cacheSlot.value = { at: nowMs, ttl: CACHE_MS, value };
     return value;
   } catch (err) {
     const value = logWarnSwallowed(err, "plans/state.ts:getPlanState", rowToState(null));
-    cache = { at: nowMs, ttl: FAILED_CACHE_MS, value };
+    cacheSlot.value = { at: nowMs, ttl: FAILED_CACHE_MS, value };
     return value;
   }
 }

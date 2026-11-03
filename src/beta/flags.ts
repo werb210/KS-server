@@ -12,6 +12,7 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { pool } from "../db.js";
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 export type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount?: number | null }> };
 
@@ -85,10 +86,10 @@ export const enabledKeys = (features: BetaFeature[]): string[] => features.filte
 
 const CACHE_MS = 30_000;
 const FAILED_CACHE_MS = 10_000;
-let cache: { at: number; ttl: number; value: BetaFeature[] } | null = null;
+const cacheSlot = tenantLocal<{ at: number; ttl: number; value: BetaFeature[] } | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 export function clearBetaCache(): void {
-  cache = null;
+  cacheSlot.value = null;
 }
 
 const SELECT_SQL = "SELECT beta_features FROM licensee_plan WHERE id = 1";
@@ -96,15 +97,15 @@ const defaultDb = (): Q => pool as unknown as Q;
 
 /** This copy's beta features, cached for 30 s. A read failure is logged and means "nothing on" for 10 s. */
 export async function getBetaFeatures(db: Q = defaultDb(), nowMs = Date.now()): Promise<BetaFeature[]> {
-  if (cache && nowMs - cache.at < cache.ttl) return cache.value;
+  if (cacheSlot.value && nowMs - cacheSlot.value.at < cacheSlot.value.ttl) return cacheSlot.value.value;
   try {
     const r = await db.query(SELECT_SQL);
     const value = normaliseFeatures(r?.rows?.[0]?.beta_features);
-    cache = { at: nowMs, ttl: CACHE_MS, value };
+    cacheSlot.value = { at: nowMs, ttl: CACHE_MS, value };
     return value;
   } catch (err) {
     const value = logWarnSwallowed<BetaFeature[]>(err, "beta/flags.ts:getBetaFeatures", []);
-    cache = { at: nowMs, ttl: FAILED_CACHE_MS, value };
+    cacheSlot.value = { at: nowMs, ttl: FAILED_CACHE_MS, value };
     return value;
   }
 }

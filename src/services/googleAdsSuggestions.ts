@@ -8,6 +8,7 @@
 import { googleAdsCustomerIdSetting } from "../licensee/connections.js"; // KS_SERVER_v8_CONNECTIONS - licensee setting, then env
 import { createHash } from "crypto";
 import { logError } from "../observability/logger.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 const API_VERSION = "v24";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -33,9 +34,9 @@ export type AdAction =
   | { type: "set_budget"; resourceName: string; amountMicros: number };
 export type Suggestion = { id: string; kind: string; title: string; rationale: string; severity: "info" | "warn"; action: AdAction };
 
-let tokenCache: { token: string; expiresAt: number } | null = null;
+const tokenCacheSlot = tenantLocal<{ token: string; expiresAt: number } | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 async function accessToken(): Promise<string> {
-  if (tokenCache && tokenCache.expiresAt > Date.now() + 60_000) return tokenCache.token;
+  if (tokenCacheSlot.value && tokenCacheSlot.value.expiresAt > Date.now() + 60_000) return tokenCacheSlot.value.token;
   const body = new URLSearchParams({
     client_id: String(process.env.GOOGLE_ADS_CLIENT_ID),
     client_secret: String(process.env.GOOGLE_ADS_CLIENT_SECRET),
@@ -51,7 +52,7 @@ async function accessToken(): Promise<string> {
   const j = (await r.json()) as { access_token?: string; expires_in?: number };
   const token = String(j.access_token ?? "");
   if (!token) throw new Error("google_ads_token_empty");
-  tokenCache = { token, expiresAt: Date.now() + (j.expires_in ?? 3600) * 1000 };
+  tokenCacheSlot.value = { token, expiresAt: Date.now() + (j.expires_in ?? 3600) * 1000 };
   return token;
 }
 

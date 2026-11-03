@@ -8,6 +8,7 @@
 // application is only marked uploaded on success.
 import { pool } from "../db.js";
 import { logError } from "../observability/logger.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 const TOKEN_URL = "https://www.linkedin.com/oauth/v2/accessToken";
 const REST_BASE = "https://api.linkedin.com/rest";
@@ -52,9 +53,9 @@ export async function findPendingLinkedInConversions(limit = 200): Promise<Pendi
   return rows.map((r) => ({ applicationId: r.id, liFatId: String(r.li_fat_id), value: Number(r.value ?? 0), fundedAt: r.funded_at }));
 }
 
-let tokenCache: { token: string; expiresAt: number } | null = null;
+const tokenCacheSlot = tenantLocal<{ token: string; expiresAt: number } | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 async function accessToken(): Promise<string> {
-  if (tokenCache && tokenCache.expiresAt > Date.now() + 60_000) return tokenCache.token;
+  if (tokenCacheSlot.value && tokenCacheSlot.value.expiresAt > Date.now() + 60_000) return tokenCacheSlot.value.token;
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: String(process.env.LINKEDIN_ADS_REFRESH_TOKEN),
@@ -66,7 +67,7 @@ async function accessToken(): Promise<string> {
   const j = (await r.json()) as { access_token?: string; expires_in?: number };
   const token = String(j.access_token ?? "");
   if (!token) throw new Error("linkedin_ads_token_empty");
-  tokenCache = { token, expiresAt: Date.now() + (j.expires_in ?? 3600) * 1000 };
+  tokenCacheSlot.value = { token, expiresAt: Date.now() + (j.expires_in ?? 3600) * 1000 };
   return token;
 }
 

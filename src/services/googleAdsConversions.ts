@@ -12,6 +12,7 @@ import { userIdentifiersFor, type UserIdentifier } from "./googleAdsEnhanced.js"
 import { commissionRate, ingestConversions } from "./googleDataManager.js"; // BF_SERVER_DATA_MANAGER_v703
 
 const API_VERSION = "v24";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const FUNDED_STATES = ["Accepted", "Funded"];
 
@@ -58,10 +59,10 @@ export async function findPendingConversions(limit = 200): Promise<PendingConver
   return rows.map((r) => ({ applicationId: r.id, gclid: String(r.gclid), value: Number(r.value ?? 0), fundedAt: r.funded_at, clickField: r.click_field ?? "gclid", userIdentifiers: userIdentifiersFor((r as any).contact_email, (r as any).contact_phone, (r as any).ad_consent) }));
 }
 
-let tokenCache: { token: string; expiresAt: number } | null = null;
+const tokenCacheSlot = tenantLocal<{ token: string; expiresAt: number } | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 // BF_SERVER_AD_NEGATIVES_v1 - shared with googleAdsNegatives.ts
 export async function accessToken(): Promise<string> {
-  if (tokenCache && tokenCache.expiresAt > Date.now() + 60_000) return tokenCache.token;
+  if (tokenCacheSlot.value && tokenCacheSlot.value.expiresAt > Date.now() + 60_000) return tokenCacheSlot.value.token;
   const body = new URLSearchParams({
     client_id: String(process.env.GOOGLE_ADS_CLIENT_ID),
     client_secret: String(process.env.GOOGLE_ADS_CLIENT_SECRET),
@@ -77,7 +78,7 @@ export async function accessToken(): Promise<string> {
   const j = (await r.json()) as { access_token?: string; expires_in?: number };
   const token = String(j.access_token ?? "");
   if (!token) throw new Error("google_ads_token_empty");
-  tokenCache = { token, expiresAt: Date.now() + (j.expires_in ?? 3600) * 1000 };
+  tokenCacheSlot.value = { token, expiresAt: Date.now() + (j.expires_in ?? 3600) * 1000 };
   return token;
 }
 

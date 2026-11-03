@@ -18,12 +18,13 @@ import { bankConnectEnabled } from "../plans/addonGate.js"; // KS_SERVER_BANK_CO
 import { safeHandler } from "../middleware/safeHandler.js"; // BF_SERVER_v789_SAFE_HANDLERS // BF_SERVER_SILENT_QUERIES_v678
 
 const router = Router();
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 // BF_SERVER_APPLICANT_ACTION_CENTER_v197
 // GET /api/client/documents-needed/action-center?applicationId=...
 // The single outstanding-work list for the applicant home screen. Lives beside
 // the existing docs-needed route because it shares the same ownership check.
-export const lastActionCenterCounts = new Map<string, string>(); // BF_SERVER_QUIET_ACTION_CENTER_v751
+const lastActionCenterCountsSlot = tenantLocal(() => new Map<string, string>()); // KS_SHARED_HOSTING_v1 - one per brokerage // BF_SERVER_QUIET_ACTION_CENTER_v751
 router.get("/action-center", safeHandler(async (req: Request, res: Response) => {
   const applicationId = String((req.query as any)?.applicationId ?? "").trim();
   if (!/^[0-9a-f-]{36}$/i.test(applicationId)) {
@@ -42,9 +43,9 @@ router.get("/action-center", safeHandler(async (req: Request, res: Response) => 
   // BF_SERVER_QUIET_ACTION_CENTER_v751 - the portal refreshes this every 30 seconds, so logging every
   // build buried everything else. Log only when an application's counts change.
   const counts = data.outstandingCount + "/" + data.completed.length;
-  if (lastActionCenterCounts.get(applicationId) !== counts) {
-    lastActionCenterCounts.set(applicationId, counts);
-    if (lastActionCenterCounts.size > 5000) lastActionCenterCounts.clear();
+  if (lastActionCenterCountsSlot.value.get(applicationId) !== counts) {
+    lastActionCenterCountsSlot.value.set(applicationId, counts);
+    if (lastActionCenterCountsSlot.value.size > 5000) lastActionCenterCountsSlot.value.clear();
     logInfo("action_center_built", { applicationId, outstanding: data.outstandingCount, completed: data.completed.length });
   }
   return res.json(data);

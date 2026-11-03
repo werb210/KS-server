@@ -3,6 +3,7 @@
 // { configured:false } until LINKEDIN_ADS_* credentials are set, so the portal
 // degrades gracefully. Mirrors googleAdsService's shape. In-memory cached.
 import { logError } from "../observability/logger.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 // LinkedIn ships a new versioned Marketing API monthly (YYYYMM), supported for
 // >=1 year. Bump via LINKEDIN_API_VERSION env when the current one nears sunset.
@@ -32,9 +33,9 @@ export function linkedInAdsConfigured(): boolean {
 
 // LinkedIn access tokens expire (60-day refresh-token rotation); refresh on
 // demand and cache until just before expiry.
-let tokenCache: { token: string; expiresAt: number } | null = null;
+const tokenCacheSlot = tenantLocal<{ token: string; expiresAt: number } | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 async function getAccessToken(): Promise<string> {
-  if (tokenCache && tokenCache.expiresAt > Date.now() + 60_000) return tokenCache.token;
+  if (tokenCacheSlot.value && tokenCacheSlot.value.expiresAt > Date.now() + 60_000) return tokenCacheSlot.value.token;
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: String(process.env.LINKEDIN_ADS_REFRESH_TOKEN),
@@ -46,7 +47,7 @@ async function getAccessToken(): Promise<string> {
   const j = (await r.json()) as { access_token?: string; expires_in?: number };
   const token = String(j.access_token ?? "");
   if (!token) throw new Error("linkedin_ads_token_empty");
-  tokenCache = { token, expiresAt: Date.now() + (j.expires_in ?? 3600) * 1000 };
+  tokenCacheSlot.value = { token, expiresAt: Date.now() + (j.expires_in ?? 3600) * 1000 };
   return token;
 }
 
@@ -63,11 +64,11 @@ function liDateRange(days: number): string {
 }
 
 const CACHE_MS = 5 * 60_000;
-const reportCache = new Map<number, { at: number; report: LiAdsReport }>();
+const reportCacheSlot = tenantLocal(() => new Map<number, { at: number; report: LiAdsReport }>()); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 export async function runLinkedInAdsReport(days: number): Promise<LiAdsReport | LiAdsNotConfigured> {
   if (!linkedInAdsConfigured()) return { configured: false };
-  const cached = reportCache.get(days);
+  const cached = reportCacheSlot.value.get(days);
   if (cached && Date.now() - cached.at < CACHE_MS) return { ...cached.report, cached: true };
 
   const base: LiAdsReport = {
@@ -120,7 +121,7 @@ export async function runLinkedInAdsReport(days: number): Promise<LiAdsReport | 
     base.totals.cpc = base.totals.clicks ? base.totals.cost / base.totals.clicks : 0;
     base.totals.cpa = base.totals.conversions ? base.totals.cost / base.totals.conversions : 0;
     base.campaigns.sort((a, b) => b.cost - a.cost);
-    reportCache.set(days, { at: Date.now(), report: base });
+    reportCacheSlot.value.set(days, { at: Date.now(), report: base });
     return base;
   } catch (e) {
     logError("linkedin_ads_report_failed", { error: e instanceof Error ? e.message : String(e) });

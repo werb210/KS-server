@@ -5,15 +5,16 @@ import { requireAuth } from "../middleware/auth.js";
 import { DELEGATED_SCOPE_STRING, m365Delegated, tokenEndpoint } from "../modules/o365/m365App.js"; // KS_SERVER_M365_ONE_CLICK
 import { clearO365Failure, explainO365Failure, lastO365Failure, parseMicrosoftError, recordO365Failure, type O365Failure } from "../modules/o365/o365Health.js"; // BF_SERVER_O365_VISIBILITY_v274
 
-let lastTokenEndpointFailure: Omit<O365Failure, "at"> | null = null;
+const lastTokenEndpointFailureSlot = tenantLocal<Omit<O365Failure, "at"> | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 const router = express.Router();
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 async function refreshMicrosoftAccessToken(refresh: string): Promise<{ accessToken: string; refreshToken: string | null; expiresAt: Date } | null> {
   // KS_SERVER_M365_ONE_CLICK - the connected tenant (saved by the admin consent, else MSAL_TENANT_ID) and the app.
   const ms = m365Delegated();
   if (!ms) {
-    lastTokenEndpointFailure = { stage: "not_configured" };
+    lastTokenEndpointFailureSlot.value = { stage: "not_configured" };
     return null;
   }
   const body = new URLSearchParams({
@@ -29,7 +30,7 @@ async function refreshMicrosoftAccessToken(refresh: string): Promise<{ accessTok
     body,
   });
   if (!r.ok) {
-    lastTokenEndpointFailure = { stage: "refresh", status: r.status, ...parseMicrosoftError(await r.text().catch(() => "")) };
+    lastTokenEndpointFailureSlot.value = { stage: "refresh", status: r.status, ...parseMicrosoftError(await r.text().catch(() => "")) };
     return null;
   }
   const tok = await r.json();
@@ -156,10 +157,10 @@ router.post("/o365-refresh", requireAuth, safeHandler(async (req: any, res: any)
   const refresh = rows[0]?.o365_refresh_token;
   if (!refresh) return res.status(412).json({ error: "no_refresh_token" });
 
-  lastTokenEndpointFailure = null;
+  lastTokenEndpointFailureSlot.value = null;
   const refreshed = await refreshMicrosoftAccessToken(refresh);
   if (!refreshed) {
-    const failure = recordO365Failure(userId, lastTokenEndpointFailure ?? { stage: "refresh" });
+    const failure = recordO365Failure(userId, lastTokenEndpointFailureSlot.value ?? { stage: "refresh" });
     if (failure.stage === "not_configured") return res.status(503).json({ error: "msal_not_configured", reason: explainO365Failure(failure) });
     return res.status(401).json({ error: "o365_reauth_required", code: failure.code ?? null, reason: explainO365Failure(failure) });
   }

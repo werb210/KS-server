@@ -5,6 +5,7 @@
 // Loaded at startup and every 5 minutes on every instance, and straight away when KS-Ops pushes a change. A copy KS-Ops
 // never pushed anything to (the development copy, a manual setup) keeps the old behaviour: nothing is held.
 import type { Q } from "../plans/state.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 export const REG_KINDS = ["toll_free", "a2p_10dlc"] as const;
 export type RegKind = (typeof REG_KINDS)[number];
@@ -20,19 +21,19 @@ export type TextingSnapshot = {
 };
 
 const empty = (): TextingSnapshot => ({ registrations: {}, addressSid: null, bundleSid: null, loadedAt: null });
-let snapshot: TextingSnapshot = empty();
+const snapshotSlot = tenantLocal<TextingSnapshot>(() => empty()); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 export function textingSnapshot(): TextingSnapshot {
-  return snapshot;
+  return snapshotSlot.value;
 }
 
 /** Tests set the snapshot directly (null = nothing pushed). */
 export function setTextingSnapshotForTests(s: Partial<TextingSnapshot> | null): void {
-  snapshot = s ? { ...empty(), ...s, loadedAt: Date.now() } : empty();
+  snapshotSlot.value = s ? { ...empty(), ...s, loadedAt: Date.now() } : empty();
 }
 
 /** True when KS-Ops manages this copy's texting registration (it pushed at least one status). */
-export function textingManaged(s: TextingSnapshot = snapshot): boolean {
+export function textingManaged(s: TextingSnapshot = snapshotSlot.value): boolean {
   return Object.keys(s.registrations).length > 0;
 }
 
@@ -46,11 +47,11 @@ export async function loadTextingState(db: Q): Promise<TextingSnapshot> {
         registrations[r.kind as RegKind] = { kind: r.kind, status: r.status, phone_number: r.phone_number ?? null, reason: r.reason ?? null, message: r.message ?? null, updated_at: r.updated_at ? new Date(r.updated_at).toISOString() : null };
       }
     }
-    snapshot = { registrations, addressSid: comp.rows[0]?.address_sid ?? null, bundleSid: comp.rows[0]?.bundle_sid ?? null, loadedAt: Date.now() };
+    snapshotSlot.value = { registrations, addressSid: comp.rows[0]?.address_sid ?? null, bundleSid: comp.rows[0]?.bundle_sid ?? null, loadedAt: Date.now() };
   } catch (err) {
     console.error("[texting] registration state not loaded; keeping the last one", { message: (err as Error)?.message ?? String(err) });
   }
-  return snapshot;
+  return snapshotSlot.value;
 }
 
 const E164 = /^\+[1-9]\d{7,14}$/;
@@ -108,16 +109,16 @@ export async function saveCompliance(db: Q, input: { address_sid?: unknown; bund
 
 /** The address / bundle for purchases: the App Service setting wins, then what KS-Ops registered. */
 export function addressSidFor(env: NodeJS.ProcessEnv = process.env): string {
-  return String(env.TWILIO_ADDRESS_SID ?? "").trim() || snapshot.addressSid || "";
+  return String(env.TWILIO_ADDRESS_SID ?? "").trim() || snapshotSlot.value.addressSid || "";
 }
 export function bundleSidFor(env: NodeJS.ProcessEnv = process.env): string {
-  return String(env.TWILIO_BUNDLE_SID ?? "").trim() || snapshot.bundleSid || "";
+  return String(env.TWILIO_BUNDLE_SID ?? "").trim() || snapshotSlot.value.bundleSid || "";
 }
 
 export const CARRIER_TIME = "usually 3-10 business days";
 
 /** The plain sentences Settings > Phone lines shows about texting. */
-export function textingMessages(s: TextingSnapshot = snapshot): string[] {
+export function textingMessages(s: TextingSnapshot = snapshotSlot.value): string[] {
   if (!textingManaged(s)) {
     return ["Texting from a toll-free number needs toll-free verification, and texting US numbers from a local line needs A2P 10DLC registration. Keystone support sets these up. Calls work straight away."];
   }

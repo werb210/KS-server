@@ -14,6 +14,7 @@
 // a user changed outside the normal screens (an import, SQL), is corrected by the next tick.
 import { createHash } from "node:crypto";
 import { opsConfig, postToOps, type OpsFetch } from "../plans/opsLink.js";
+import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[] }> };
 
@@ -72,9 +73,9 @@ export function entriesDigest(entries: StaffEntry[]): string {
 }
 
 // What this instance last sent (a restart sends once more; KS-Ops replaces the list, so that is harmless).
-let last: { digest: string; at: number } | null = null;
+const lastSlot = tenantLocal<{ digest: string; at: number } | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 export function resetStaffDirectoryState(): void {
-  last = null;
+  lastSlot.value = null;
 }
 
 export type SyncResult =
@@ -90,7 +91,7 @@ export async function syncStaffDirectory(
   const now = opts.now ?? Date.now();
   const entries = await collectStaffEntries(db);
   const digest = entriesDigest(entries);
-  if (!opts.force && last && last.digest === digest && now - last.at < REFRESH_MS) {
+  if (!opts.force && lastSlot.value && lastSlot.value.digest === digest && now - lastSlot.value.at < REFRESH_MS) {
     return { pushed: false, reason: "unchanged", count: entries.length };
   }
   const r = await postToOps("staff-directory", { entries }, { env, fetchImpl: opts.fetchImpl });
@@ -98,11 +99,11 @@ export async function syncStaffDirectory(
     console.warn("[staff-directory] push to operations failed", { status: r.status, error: r.error });
     return { pushed: false, reason: "failed", count: entries.length, error: r.error };
   }
-  last = { digest, at: now };
+  lastSlot.value = { digest, at: now };
   return { pushed: true, count: entries.length };
 }
 
-let nudgeTimer: ReturnType<typeof setTimeout> | null = null;
+const nudgeTimerSlot = tenantLocal<ReturnType<typeof setTimeout> | null>(() => null); // KS_SHARED_HOSTING_v1 - one per brokerage
 
 /**
  * A user was created, changed or removed: push the staff list a few seconds from now (several calls in a row make one
@@ -110,9 +111,9 @@ let nudgeTimer: ReturnType<typeof setTimeout> | null = null;
  */
 export function requestStaffDirectorySync(env: NodeJS.ProcessEnv = process.env): void {
   try {
-    if (!opsConfig(env) || nudgeTimer) return;
-    nudgeTimer = setTimeout(() => {
-      nudgeTimer = null;
+    if (!opsConfig(env) || nudgeTimerSlot.value) return;
+    nudgeTimerSlot.value = setTimeout(() => {
+      nudgeTimerSlot.value = null;
       void (async () => {
         try {
           const { pool } = await import("../db.js");
@@ -122,7 +123,7 @@ export function requestStaffDirectorySync(env: NodeJS.ProcessEnv = process.env):
         }
       })();
     }, NUDGE_DELAY_MS);
-    nudgeTimer.unref?.();
+    nudgeTimerSlot.value.unref?.();
   } catch (err) {
     console.error("[staff-directory] could not schedule a sync:", (err as { message?: string })?.message ?? err);
   }
