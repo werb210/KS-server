@@ -135,6 +135,9 @@ export const CONTRACT_COLUMNS = `c.id::text AS id, c.silo, c.company_id::text AS
   rr.rule_type AS product_rule_type, rr.percent_threshold AS product_percent_threshold, rr.approach_points AS product_approach_points,
   rr.months_before_maturity AS product_months_before_maturity, rr.eligible_after_months AS product_eligible_after_months,
   lb.balance AS reported_balance, lb.as_of AS reported_as_of, lb.source AS reported_source, lb.payments_made AS reported_payments_made,
+  lr.balance AS lr_balance, lr.as_of AS lr_as_of, lr.lender_name AS lr_lender_name, lr.payments_made AS lr_payments_made,
+  lr.next_payment_date AS lr_next_payment_date, lr.next_payment_amount AS lr_next_payment_amount, lr.lender_status AS lr_lender_status,
+  sb.balance AS sb_balance, sb.as_of AS sb_as_of, sb.source AS sb_source,
   (SELECT count(*)::int FROM active_contract_statement_reviews sr WHERE sr.contract_id = c.id AND sr.status = 'pending') AS pending_statements,
   op.id::text AS open_opportunity_id, op.status AS open_opportunity_status, op.kind AS open_opportunity_kind, op.application_id AS open_opportunity_application_id`;
 export const CONTRACT_FROM = `active_contracts c
@@ -143,7 +146,12 @@ export const CONTRACT_FROM = `active_contracts c
   LEFT JOIN users u ON u.id = c.owner_user_id
   LEFT JOIN lender_product_renewal_rules rr ON rr.lender_product_id = c.lender_product_id
   LEFT JOIN LATERAL (SELECT b.balance, b.as_of, b.source, b.payments_made FROM active_contract_balances b
-                      WHERE b.contract_id = c.id ORDER BY b.as_of DESC, b.created_at DESC LIMIT 1) lb ON true
+                      WHERE b.contract_id = c.id ORDER BY b.as_of DESC, (b.source = 'lender_portal') ASC, b.created_at DESC LIMIT 1) lb ON true
+  LEFT JOIN LATERAL (SELECT b.balance, b.as_of, b.lender_name, b.payments_made, b.next_payment_date, b.next_payment_amount, b.lender_status
+                       FROM active_contract_balances b
+                      WHERE b.contract_id = c.id AND b.source = 'lender_portal' ORDER BY b.as_of DESC, b.created_at DESC LIMIT 1) lr ON true
+  LEFT JOIN LATERAL (SELECT b.balance, b.as_of, b.source FROM active_contract_balances b
+                      WHERE b.contract_id = c.id AND b.source <> 'lender_portal' ORDER BY b.as_of DESC, b.created_at DESC LIMIT 1) sb ON true
   LEFT JOIN LATERAL (SELECT o.id, o.status, o.kind, o.application_id FROM active_contract_opportunities o
                       WHERE o.contract_id = c.id AND o.status IN ('open','contacted','application_started')
                       ORDER BY o.created_at DESC LIMIT 1) op ON true`;
@@ -156,6 +164,24 @@ export function productRuleOf(row: any): Partial<RenewalRule> | null {
 export function reportedOf(row: any): ReportedBalance {
   return row?.reported_balance === null || row?.reported_balance === undefined ? null
     : { balance: row.reported_balance, as_of: row.reported_as_of, source: row.reported_source, payments_made: row.reported_payments_made };
+}
+
+/**
+ * KS_LENDER_SYNC_CONTRACTS - the latest balance a lender reported by API, and the latest one staff entered (by hand,
+ * from a statement or a payoff). The headline balance is the latest of the two by as-of date; on the same date the
+ * one staff entered wins. Both are shown when they differ.
+ */
+export function lenderReportedOf(row: any) {
+  if (row?.lr_balance === null || row?.lr_balance === undefined) return null;
+  return {
+    balance: num(row.lr_balance), as_of: isoDay(toDate(row.lr_as_of)), lender_name: row.lr_lender_name ?? row.lender_name ?? null,
+    payments_made: num(row.lr_payments_made), next_payment_date: isoDay(toDate(row.lr_next_payment_date)),
+    next_payment_amount: num(row.lr_next_payment_amount), lender_status: row.lr_lender_status ?? null,
+  };
+}
+export function staffBalanceOf(row: any) {
+  if (row?.sb_balance === null || row?.sb_balance === undefined) return null;
+  return { balance: num(row.sb_balance), as_of: isoDay(toDate(row.sb_as_of)), source: String(row.sb_source ?? "manual") };
 }
 
 /** Next action shown in the contracts table. */
@@ -173,6 +199,8 @@ function nextAction(row: any, ev: ReturnType<typeof evaluate>): string {
 /** The contract as the portal shows it: raw fields + balance (with source) + rule + renewal evaluation. */
 export function contractView(row: any, now: Date = new Date()) {
   const bal = balanceView(row, reportedOf(row), now);
+  const lr = lenderReportedOf(row);
+  const sb = staffBalanceOf(row);
   const rule = effectiveRule(row, productRuleOf(row));
   const ev = evaluate(row, rule, bal, now);
   const maturity = maturityOf(row);
@@ -184,6 +212,8 @@ export function contractView(row: any, now: Date = new Date()) {
     renewal_eligible_on: isoDay(toDate(row.renewal_eligible_on)),
     status_label: STATUS_LABELS[row.status as ContractStatus] ?? row.status, is_history: HISTORY_STATUSES.has(row.status),
     balance: bal, rule: { ...rule, description: describeRule(rule) }, renewal: ev, next_action: nextAction(row, ev),
+    lender_reported: lr, staff_balance: sb,
+    balances_differ: Boolean(lr && sb && lr.balance !== null && sb.balance !== null && Math.abs(lr.balance - sb.balance) >= 0.01),
   };
 }
 

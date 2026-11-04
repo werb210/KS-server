@@ -180,7 +180,7 @@ router.get("/:id", ...staff, safeHandler(async (req: any, res: any) => {
     ok: true, contract: view, ledger, revenue: revenueSummary(ledger, expected, now), opportunities: await listOpportunities(db, row.id),
     activity: await contractActivity(db, row.id), assets: await listAssets(db, row.id), insurance: await listInsurance(db, row.id),
     documents: await listDocuments(db, row.id), reviews: await listReviews(db, row.silo, row.id), chain,
-    balances: (await db.query(`SELECT id::text AS id, balance, as_of, source, payments_made, arrears, note, created_at FROM active_contract_balances WHERE contract_id = $1::uuid ORDER BY as_of DESC, created_at DESC LIMIT 50`, [row.id])).rows,
+    balances: (await db.query(`SELECT id::text AS id, balance, as_of, source, payments_made, arrears, note, created_at, lender_name, lender_status, next_payment_date, next_payment_amount FROM active_contract_balances WHERE contract_id = $1::uuid ORDER BY as_of DESC, created_at DESC LIMIT 50`, [row.id])).rows,
   });
 }));
 router.patch("/:id", ...staff, safeHandler(async (req: any, res: any) => {

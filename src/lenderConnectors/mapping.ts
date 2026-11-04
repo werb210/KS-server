@@ -6,7 +6,7 @@
 //   "field:<label>" for any field in the lender package (application ID, requested amount, every wizard answer),
 //   "=<text>" for a fixed value (for example "=CAD" or a broker code the lender gave you).
 import type { SheetRowData } from "../modules/submissions/merchantGrowthSheet.js";
-import { LENDER_BUCKETS, type LenderBucket } from "./types.js";
+import { LENDER_BUCKETS, type LenderBucket, type RemoteServicing } from "./types.js";
 
 export type SourceKey = { key: string; label: string; numeric?: boolean };
 
@@ -182,3 +182,33 @@ export function resolveStatus(
  * still working, and "documents requested" goes to staff (a notification) rather than straight to the client.
  */
 export const DEFAULT_STAGE_FOR_BUCKET: Partial<Record<LenderBucket, string>> = { offer: "Offer" };
+
+// KS_LENDER_SYNC_CONTRACTS - a funded deal's balance, payments and next payment, read with the field names / paths the
+// Admin set for this lender ({ balance, as_of, payments_made, next_payment_date, next_payment_amount, status }).
+export const SERVICING_KEYS = ["balance", "as_of", "payments_made", "next_payment_date", "next_payment_amount", "status"] as const;
+
+const servicingNum = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === "" || typeof v === "boolean") return null;
+  const n = typeof v === "number" ? v : Number(String(v).replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(n) ? n : null;
+};
+const servicingDay = (v: unknown): string | null => {
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(String(v ?? "").trim());
+  return m ? m[1]! : null;
+};
+
+/** undefined when no servicing field is set up for this lender (nothing was reported); otherwise what was read. */
+export function readServicing(fields: Record<string, unknown>, read: (path: string) => unknown): RemoteServicing | undefined {
+  const path = (k: string) => (typeof fields[k] === "string" ? String(fields[k]).trim() : "");
+  if (!SERVICING_KEYS.some((k) => path(k))) return undefined;
+  const at = (k: string) => (path(k) ? read(path(k)) : undefined);
+  const status = at("status");
+  return {
+    balance: servicingNum(at("balance")),
+    asOf: servicingDay(at("as_of")),
+    paymentsMade: (() => { const n = servicingNum(at("payments_made")); return n === null ? null : Math.round(n); })(),
+    nextPaymentDate: servicingDay(at("next_payment_date")),
+    nextPaymentAmount: servicingNum(at("next_payment_amount")),
+    status: status === null || status === undefined || status === "" ? null : String(status).slice(0, 120),
+  };
+}

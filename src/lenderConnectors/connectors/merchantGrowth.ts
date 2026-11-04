@@ -182,6 +182,7 @@ export const MERCHANT_GROWTH_REQUESTS: string[] = [
   "How to upload files to an opportunity by API, and the document types they expect.",
   "Whether they will push stage changes to us: a Salesforce Outbound Message on Lead and Opportunity (we need their 18-character organization id) or a Flow HTTP callout signed with a shared secret. Otherwise Keystone polls every 30 minutes.",
   "Whether commission and residual payments (portal.merchantadvance.com) are available by API or as a report export.",
+  "The field API names for a funded deal's current balance, its as-of date, payments made, next payment date and amount, and the paid-off / closed status, so Keystone can show the balance on the Active Contract.", // KS_LENDER_SYNC_CONTRACTS
 ];
 
 const awaiting: SubmitResult = { ok: false, error: AWAITING_DOCS_ERROR, retryable: false };

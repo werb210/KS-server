@@ -138,7 +138,11 @@ export async function reviewVariance(db: Q, contractId: string, expectedId: stri
 }
 
 export const BALANCE_SOURCES = ["lender_statement", "lender_portal", "manual", "payoff"] as const;
-export type BalanceInput = { balance: unknown; as_of?: unknown; source?: string; payments_made?: unknown; arrears?: unknown; note?: string | null; document_id?: string | null };
+export type BalanceInput = {
+  balance: unknown; as_of?: unknown; source?: string; payments_made?: unknown; arrears?: unknown; note?: string | null; document_id?: string | null;
+  // KS_LENDER_SYNC_CONTRACTS - what a lender connector also reports with a balance.
+  lender_name?: string | null; lender_status?: string | null; next_payment_date?: unknown; next_payment_amount?: unknown; submission_id?: string | null;
+};
 
 export async function addBalance(db: Q, contractId: string, input: BalanceInput, actor: string | null): Promise<{ id: string }> {
   const balance = num(input.balance);
@@ -148,11 +152,15 @@ export async function addBalance(db: Q, contractId: string, input: BalanceInput,
   const asOf = toDate(input.as_of) ?? new Date();
   if (asOf.getTime() > Date.now() + 86_400_000) throw new InputError("as_of_in_future", "as_of");
   const pm = num(input.payments_made);
+  const nextAmount = num(input.next_payment_amount);
+  const nextDate = isoDay(toDate(input.next_payment_date));
   const r = await db.query(
-    `INSERT INTO active_contract_balances (contract_id, balance, as_of, source, payments_made, arrears, note, document_id, created_by)
-     VALUES ($1::uuid, $2, $3::date, $4, $5, $6, $7, $8::uuid, $9::uuid) RETURNING id::text AS id`,
-    [contractId, balance, isoDay(asOf), source, pm === null ? null : Math.round(pm), num(input.arrears), input.note?.slice(0, 1000) || null, input.document_id || null, actor]);
-  const label = source === "lender_portal" ? "lender portal" : source === "lender_statement" ? "lender statement" : source;
+    `INSERT INTO active_contract_balances (contract_id, balance, as_of, source, payments_made, arrears, note, document_id, created_by,
+        lender_name, lender_status, next_payment_date, next_payment_amount, submission_id)
+     VALUES ($1::uuid, $2, $3::date, $4, $5, $6, $7, $8::uuid, $9::uuid, $10, $11, $12::date, $13, $14) RETURNING id::text AS id`,
+    [contractId, balance, isoDay(asOf), source, pm === null ? null : Math.round(pm), num(input.arrears), input.note?.slice(0, 1000) || null, input.document_id || null, actor,
+      input.lender_name?.slice(0, 200) || null, input.lender_status?.slice(0, 120) || null, nextDate, nextAmount, input.submission_id || null]);
+  const label = source === "lender_portal" ? (input.lender_name ? `reported by ${input.lender_name}` : "lender portal") : source === "lender_statement" ? "lender statement" : source;
   await writeContractEvent(db, contractId, { title: "Balance updated", detail: `$${balance.toLocaleString("en-CA")} as of ${isoDay(asOf)} (${label})`, actor });
   return { id: r.rows[0].id };
 }
@@ -162,6 +170,7 @@ export async function addBalance(db: Q, contractId: string, input: BalanceInput,
  * Recorded as source 'lender_portal' with its as-of date; it wins over the estimate and shows its source on the card.
  */
 export async function recordLenderReportedBalance(db: Q, contractId: string, balance: number, asOf: string | Date, source = "lender_portal",
-  extra: { payments_made?: number | null; arrears?: number | null; note?: string | null } = {}): Promise<{ id: string }> {
+  extra: { payments_made?: number | null; arrears?: number | null; note?: string | null; lender_name?: string | null; lender_status?: string | null;
+    next_payment_date?: string | null; next_payment_amount?: number | null; submission_id?: string | null } = {}): Promise<{ id: string }> {
   return addBalance(db, contractId, { balance, as_of: asOf, source: source === "lender_statement" ? "lender_statement" : "lender_portal", ...extra }, null);
 }
