@@ -178,6 +178,7 @@ const ALWAYS_ALLOWED: ReadonlyArray<{ methods?: RegExp; path: RegExp }> = [
   { path: /^\/teams\/(me|options)$/ },
   { path: /^\/security\/(status|me)(\/|$)/ },
   { path: /^\/booking-settings\/my-link$/ },
+  { path: /^\/setup(\/|$)/ }, // KS_SETUP_WIZARD - each person's own set-up wizard
   { path: /^\/lead-rotation\/me$/ },
   { path: /^\/task-defaults(\/|$)/ },
   { methods: /^(GET|HEAD)$/, path: /^\/beta\/(flags|features)$/ },
