@@ -18,6 +18,7 @@
 // swallow any future test that happened to match, which is exactly how a suite
 // rots. Adding a file here has to be a decision someone makes on purpose.
 export const INTEGRATION_TEST_FILES: string[] = [
+  "src/__tests__/setupWizard.ks.integration.test.ts", // KS_SETUP_WIZARD - needs Postgres
   "src/tenancy/__tests__/sharedHosting.integration.test.ts", // KS_SHARED_HOSTING_v1 - needs Postgres (creates databases and roles)
   "src/__tests__/aiSummary.v864.integration.test.ts", // BF_SERVER_v864_AI_SUMMARY_FIX - needs Postgres
   "src/__tests__/oooUntil.v864.integration.test.ts", // BF_SERVER_v864_OOO_UNTIL - needs Postgres

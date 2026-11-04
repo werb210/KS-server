@@ -58,3 +58,14 @@ export function isStaffRole(value: unknown): boolean {
   const role = normalizeRole(value);
   return role !== null && STAFF_ROLES.has(role);
 }
+
+// KS_SETUP_WIZARD - what people read: the Staff role is called "Broker" everywhere a user sees it. The stored value
+// (users.role, tokens, permissions) stays "Staff".
+const ROLE_DISPLAY: Readonly<Record<string, string>> = { Staff: "Broker" };
+
+/** The role as people read it ("Broker" for Staff); any other value is returned as it is. */
+export function roleLabel(role: unknown): string {
+  const r = String(role ?? "").trim();
+  const known = normalizeRole(r);
+  return known ? ROLE_DISPLAY[known] ?? known : r;
+}

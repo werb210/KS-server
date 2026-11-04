@@ -17,6 +17,7 @@ import { requireFeature } from "../plans/requireFeature.js";
 import { auditRequest, actorId } from "../lib/auditRequest.js";
 import { CONFIGURABLE_ROLES, clearVisibilityCache, isVisibility, scopeForRequest, teamsInPlan } from "../visibility/scope.js";
 import type { Q } from "../plans/state.js";
+import { roleLabel } from "../auth/roles.js"; // KS_SETUP_WIZARD
 
 const router = Router();
 router.use(requireAuth);
@@ -225,7 +226,7 @@ router.put("/visibility/roles", requireAdmin, gate, safeHandler(async (req: any,
   const changes: Record<string, string> = {};
   for (const role of CONFIGURABLE_ROLES) {
     if (b[role] === undefined) continue;
-    if (!isVisibility(b[role])) return res.status(400).json({ ok: false, error: "invalid_visibility", message: `${role}: choose all, team or own.` });
+    if (!isVisibility(b[role])) return res.status(400).json({ ok: false, error: "invalid_visibility", message: `${roleLabel(role)}: choose all, team or own.` });
     changes[role] = b[role];
   }
   for (const [role, v] of Object.entries(changes)) {

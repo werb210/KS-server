@@ -67,6 +67,7 @@ import staffPushTokenRoutes from "./staffPushToken.js"; // BF_SERVER_v820_WATCH_
 import { callHoursRouter, missedSummaryRouter, nextFollowUpRouter } from "./staffDialer.js"; // BF_SERVER_v821_DIALER
 import supportRoutes from "./support.js";
 import helpCenterRoutes from "./helpCenter.js"; // KS_SERVER_KB_v1
+import setupRoutes from "./setup.js"; // KS_SETUP_WIZARD
 import tasksRoutes from "./tasks.js";
 import usersRoutes from "./users.js";
 import o365TokensRoutes from "./o365Tokens.js";
@@ -362,6 +363,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/staff", router: staffRoutes },
   { path: "/support", router: supportRoutes },
   { path: "/help-center", router: helpCenterRoutes }, // KS_SERVER_KB_v1 - Help Center and Ask Maya (KS-Ops knowledge base)
+  { path: "/setup", router: setupRoutes }, // KS_SETUP_WIZARD - the set-up wizard for each role (signed-in staff)
   { path: "/tasks", router: tasksRoutes },
   { path: "/users/me", router: o365TokensRoutes },
   { path: "/users", router: usersRoutes },
@@ -523,6 +525,9 @@ export const ROUTES: ApiRoute[] = [
   { method: "POST", path: "/api/webauthn/login/options", roles: [] },
   { method: "POST", path: "/api/webauthn/login/verify", roles: [] },
   { method: "GET", path: "/api/auth/me", roles: ALL_ROLES },
+  { method: "GET", path: "/api/setup", roles: [ROLES.ADMIN, ROLES.STAFF, ROLES.OPS, ROLES.MARKETING] }, // KS_SETUP_WIZARD
+  { method: "PUT", path: "/api/setup/steps/:key", roles: [ROLES.ADMIN, ROLES.STAFF, ROLES.OPS, ROLES.MARKETING] }, // KS_SETUP_WIZARD
+  { method: "PUT", path: "/api/setup/dismiss", roles: [ROLES.ADMIN, ROLES.STAFF, ROLES.OPS, ROLES.MARKETING] }, // KS_SETUP_WIZARD
   { method: "POST", path: "/api/auth/logout", roles: ALL_ROLES },
   { method: "POST", path: "/api/auth/logout-all", roles: [ROLES.ADMIN, ROLES.STAFF, ROLES.OPS, ROLES.MARKETING] }, // BF_SERVER_v789_STAFF_USER_STATE
   { method: "POST", path: "/api/auth/url-ticket", roles: [ROLES.ADMIN, ROLES.STAFF, ROLES.OPS, ROLES.MARKETING] }, // BF_SERVER_v789_URL_TICKETS

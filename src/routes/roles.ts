@@ -17,6 +17,7 @@ import { getPlanState, type Q } from "../plans/state.js";
 import { auditRequest, actorId } from "../lib/auditRequest.js";
 import { clearVisibilityCache, isVisibility, type Visibility } from "../visibility/scope.js";
 import { clearStaffUserCache } from "../auth/staffUserState.js";
+import { roleLabel } from "../auth/roles.js"; // KS_SETUP_WIZARD
 import {
   ACTION_LABELS, ACTIONS, AREA_LABELS, AREAS, BASE_ROLES, isBaseRole, permissionList, templateFor, type BaseRole, type PermissionSet,
 } from "../roles/permissions.js";
@@ -34,7 +35,7 @@ const BUILT_IN_DESCRIPTIONS: Record<BaseRole, string> = {
   Admin: "Everything, including settings, billing, users and roles. Sees every record.",
   Ops: "Everything except plan and billing changes. Manages users.",
   Staff: "Contacts, companies, applications, lenders, documents, email, texts and calls.",
-  Marketing: "The same as Staff, plus the Marketing tools (with the Marketing add-on, up to 3 Marketing seats).",
+  Marketing: "The same as Broker, plus the Marketing tools (with the Marketing add-on, up to 3 Marketing seats).",
 };
 
 function isStaffRole(role: unknown): role is BaseRole {
@@ -93,7 +94,7 @@ router.get("/", adminOnly, safeHandler(async (_req: any, res: any) => {
   for (const base of BASE_ROLES) {
     templates.push({
       id: `builtin:${base}`,
-      name: base,
+      name: roleLabel(base), // KS_SETUP_WIZARD - "Broker" for Staff; base_role keeps the stored value
       description: BUILT_IN_DESCRIPTIONS[base],
       base_role: base,
       built_in: true,
@@ -174,7 +175,7 @@ router.patch("/:id", fullAdminOnly, gate, safeHandler(async (req: any, res: any)
   if (!current) return;
   if (req.body?.base_role !== undefined && req.body.base_role !== current.base_role) {
     // The base decides users.role for everyone on the role; changing it would silently change their built-in role.
-    if (!isBaseRole(req.body.base_role)) return res.status(400).json({ ok: false, error: "invalid_role", message: "Start from Admin, Ops, Staff or Marketing." });
+    if (!isBaseRole(req.body.base_role)) return res.status(400).json({ ok: false, error: "invalid_role", message: "Start from Admin, Ops, Broker or Marketing." });
     const people = await pool.query(`SELECT count(*)::int AS n FROM users WHERE custom_role_id = $1`, [current.id]);
     if (Number(people.rows[0]?.n ?? 0) > 0) {
       return res.status(409).json({ ok: false, error: "role_in_use", message: "People are on this role, so it cannot start from a different built-in role. Create a new role instead." });

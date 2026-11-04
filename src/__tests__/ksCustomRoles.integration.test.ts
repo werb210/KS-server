@@ -120,7 +120,9 @@ describe("KS custom roles (real Postgres)", () => {
     const audit = await pool.query(`SELECT event_type, event_action, metadata FROM audit_events WHERE target_id = $1 ORDER BY created_at`, [roleId]);
     expect(audit.rows[0]).toMatchObject({ event_type: "custom_role", event_action: "created" });
     const list = await http().get("/api/roles").set("Authorization", tok(ADMIN, "Admin"));
-    expect(list.body.templates.map((t: any) => t.name)).toEqual(["Admin", "Ops", "Staff", "Marketing"]);
+    // KS_SETUP_WIZARD - the Staff role reads as "Broker"; its stored base role stays "Staff".
+    expect(list.body.templates.map((t: any) => t.name)).toEqual(["Admin", "Ops", "Broker", "Marketing"]);
+    expect(list.body.templates.map((t: any) => t.base_role)).toEqual(["Admin", "Ops", "Staff", "Marketing"]);
     expect(list.body.templates.every((t: any) => t.read_only)).toBe(true);
     expect(list.body.roles.some((r: any) => r.id === roleId)).toBe(true);
   });

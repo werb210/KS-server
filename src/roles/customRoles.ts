@@ -83,7 +83,7 @@ export function cleanRoleInput(body: any, current: CustomRole | null): { ok: tru
     description = d || null;
   }
   const baseRaw = body?.base_role ?? current?.base_role ?? "Staff";
-  if (!isBaseRole(baseRaw)) return { ok: false, error: "Start from Admin, Ops, Staff or Marketing." };
+  if (!isBaseRole(baseRaw)) return { ok: false, error: "Start from Admin, Ops, Broker or Marketing." };
   const base: BaseRole = baseRaw;
   const requested = body?.permissions !== undefined ? normalizePermissions(body.permissions) : current?.permissions ?? templateFor(base);
   const dropped = beyondBase(requested, base);
