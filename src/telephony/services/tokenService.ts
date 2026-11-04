@@ -20,14 +20,16 @@ function requireTokenConfig(value: string | undefined, name: string): string {
 // BF_SERVER_v817_IPAD_VOIP - which native app the token is for. Each app has its own Twilio Push Credential (its own
 // bundle id): "dialer" (iPhone dialer, com.borealfinancial.dialer) reads TWILIO_PUSH_CREDENTIAL_SID; "portal-ios"
 // (staff portal iPad app, com.borealfinancial.portal) reads TWILIO_PUSH_CREDENTIAL_SID_PORTAL. Anything else = dialer.
-// KS_ANDROID_STAFF_v1 - "portal-android" (the Android staff app) reads TWILIO_PUSH_CREDENTIAL_SID_ANDROID, a Twilio
-// Push Credential of type FCM made from the Firebase project's service account (Twilio Console > Voice > Credentials).
-export type VoiceTokenApp = "dialer" | "portal-ios" | "portal-android";
+// KS_ANDROID_STAFF_v1 - "dialer-android" (the Android dialler, KS-Dialer android/) reads TWILIO_PUSH_CREDENTIAL_SID_ANDROID,
+// a Twilio Push Credential of type FCM made from the Firebase project's service account (Twilio Console > Voice >
+// Credentials). The Android staff portal does not take calls itself: it hands them to the Android dialler, so a phone
+// never rings twice.
+export type VoiceTokenApp = "dialer" | "portal-ios" | "dialer-android";
 
 // BF_SERVER_v817_IPAD_VOIP - "portal_ipad" is accepted as an alias of "portal-ios" (earlier spelling).
 export function parseVoiceTokenApp(raw: unknown): VoiceTokenApp {
   const v = String(Array.isArray(raw) ? raw[0] : raw ?? "").trim().toLowerCase();
-  if (v === "portal-android" || v === "android") return "portal-android";
+  if (v === "dialer-android" || v === "android") return "dialer-android";
   return v === "portal-ios" || v === "portal_ipad" ? "portal-ios" : "dialer";
 }
 
@@ -36,7 +38,7 @@ export function pushCredentialGrant(
   app: VoiceTokenApp = "dialer",
 ): { pushCredentialSid?: string } {
   const raw = app === "portal-ios" ? env.TWILIO_PUSH_CREDENTIAL_SID_PORTAL
-    : app === "portal-android" ? env.TWILIO_PUSH_CREDENTIAL_SID_ANDROID
+    : app === "dialer-android" ? env.TWILIO_PUSH_CREDENTIAL_SID_ANDROID
     : env.TWILIO_PUSH_CREDENTIAL_SID;
   const sid = String(raw ?? "").trim();
   return /^CR[0-9a-f]{32}$/i.test(sid) ? { pushCredentialSid: sid } : {};

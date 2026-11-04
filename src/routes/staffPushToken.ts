@@ -2,15 +2,15 @@
 // calls, voicemails, client messages, SMS and Maya handoffs reach the lock screen. Staff JWT only.
 //   POST   /api/staff/push-token { token: hex 64-200, environment: "production" | "sandbox", app?: "dialer-ios" }
 //   DELETE /api/staff/push-token { token }
-// KS_ANDROID_STAFF_v1 - app "portal-android": the Android staff app's Firebase (FCM) token (case-sensitive, kept as
-// sent; KS-server sends its alerts through Firebase).
+// KS_ANDROID_STAFF_v1 - apps "portal-android" (Android staff portal) and "dialer-android" (Android dialler): the app's
+// Firebase (FCM) token (case-sensitive, kept as sent; KS-server sends their alerts through Firebase).
 // A token belongs to whoever registered it last (a shared/reassigned phone moves with the sign-in).
 import { Router } from "express";
 import { pool } from "../db.js";
 import { requireAuth, requireAuthorization } from "../middleware/auth.js";
 import { ROLES } from "../auth/roles.js";
 import { safeHandler } from "../middleware/safeHandler.js";
-import { STAFF_PUSH_APPS, staffPushTokenOf, type StaffPushApp } from "../services/notifications/staffAlerts.js";
+import { STAFF_FCM_APPS, STAFF_PUSH_APPS, staffPushTokenOf, type StaffPushApp } from "../services/notifications/staffAlerts.js";
 
 const router = Router();
 router.use(requireAuth);
@@ -30,9 +30,9 @@ router.post("/", safeHandler(async (req: any, res: any) => {
   if (!userId) return res.status(401).json({ error: { code: "unauthenticated" } });
   const app = req.body?.app === undefined ? "dialer-ios" : req.body.app;
   if (!(STAFF_PUSH_APPS as readonly string[]).includes(app))
-    return res.status(400).json({ error: { code: "invalid_app", message: "app must be dialer-ios, portal-ios or portal-android" } }); // BF_SERVER_v823_PUSH
+    return res.status(400).json({ error: { code: "invalid_app", message: "app must be dialer-ios, portal-ios, portal-android or dialer-android" } }); // BF_SERVER_v823_PUSH
   const token = staffPushTokenOf(req.body?.token, app as StaffPushApp);
-  if (!token) return res.status(400).json({ error: { code: "invalid_token", message: app === "portal-android" ? "token must be a Firebase registration token" : "token must be 64-200 hex characters" } });
+  if (!token) return res.status(400).json({ error: { code: "invalid_token", message: STAFF_FCM_APPS.includes(app as StaffPushApp) ? "token must be a Firebase registration token" : "token must be 64-200 hex characters" } });
   const environment = req.body?.environment === undefined ? "production" : req.body.environment;
   if (environment !== "production" && environment !== "sandbox")
     return res.status(400).json({ error: { code: "invalid_environment", message: "environment must be production or sandbox" } });

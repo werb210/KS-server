@@ -17,12 +17,13 @@ export type StaffAlertType = typeof STAFF_ALERT_TYPES[number];
 
 // BF_SERVER_v823_PUSH - the iPad portal app (com.borealfinancial.portal) registers its ordinary APNs token as
 // "portal-ios" and gets the same alerts as the iPhone dialler; before this only incoming calls (VoIP) reached it.
-// KS_ANDROID_STAFF_v1 - the Android staff app (portal + its "Phone" dialler) registers its Firebase (FCM) token as
-// "portal-android" and gets the same alerts, sent through Firebase (FIREBASE_SERVICE_ACCOUNT_JSON) as data-only
-// messages its KeystoneMessagingService draws.
-export const STAFF_PUSH_APPS = ["dialer-ios", "portal-ios", "portal-android"] as const;
+// KS_ANDROID_STAFF_v1 - the Android apps register their Firebase (FCM) tokens: the Android staff portal as
+// "portal-android" and the Android dialler (KS-Dialer android/) as "dialer-android". Both get the same alerts as
+// their iPad and iPhone twins, sent through Firebase (FIREBASE_SERVICE_ACCOUNT_JSON) as data-only messages the app
+// draws itself.
+export const STAFF_PUSH_APPS = ["dialer-ios", "portal-ios", "portal-android", "dialer-android"] as const;
 export type StaffPushApp = typeof STAFF_PUSH_APPS[number];
-export const STAFF_FCM_APPS: readonly StaffPushApp[] = ["portal-android"];
+export const STAFF_FCM_APPS: readonly StaffPushApp[] = ["portal-android", "dialer-android"];
 
 /** KS_ANDROID_STAFF_v1 - APNs device tokens are hex; FCM registration tokens are case-sensitive base64url with ":". */
 export function staffPushTokenOf(raw: unknown, app: StaffPushApp): string | null {

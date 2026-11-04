@@ -1,6 +1,6 @@
-// KS_ANDROID_STAFF_v1 - the Android staff app: its Firebase token is registered as "portal-android" (kept exactly as
-// sent), alerts reach it through Firebase as data-only messages, and its voice token names the Android (FCM) Twilio
-// push credential.
+// KS_ANDROID_STAFF_v1 - the Android apps: the staff portal's Firebase token is registered as "portal-android" and the
+// dialler's as "dialer-android" (kept exactly as sent), alerts reach both through Firebase as data-only messages, and
+// the dialler's voice token names the Android (FCM) Twilio push credential.
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { answerBySql, callsMatching } from "../../../__tests__/helpers/answerBySql.js";
@@ -36,6 +36,16 @@ describe("POST /api/staff/push-token for the Android app", () => {
     expect((await request(await app()).post("/api/staff/push-token").set(auth).send({ token: APNS, app: "portal-android" })).status).toBe(400);
   });
 
+  it("stores the Android dialler's FCM token under dialer-android", async () => {
+    const res = await request(await app()).post("/api/staff/push-token").set("Authorization", `Bearer ${staffToken("Staff")}`)
+      .send({ token: FCM, app: "dialer-android" });
+    expect(res.status).toBe(200);
+    expect(callsMatching(h.query, /INSERT INTO staff_push_tokens/)[0]![1]).toEqual([STAFF_USER_ID, FCM, "production", "dialer-android"]);
+    const bad = await request(await app()).post("/api/staff/push-token").set("Authorization", `Bearer ${staffToken("Staff")}`)
+      .send({ token: APNS, app: "dialer-android" });
+    expect(bad.status).toBe(400);
+  });
+
   it("removes an Android token on sign-out", async () => {
     const res = await request(await app()).delete("/api/staff/push-token").set("Authorization", `Bearer ${staffToken("Staff")}`).send({ token: FCM });
     expect(res.status).toBe(200);
@@ -44,6 +54,7 @@ describe("POST /api/staff/push-token for the Android app", () => {
 
   it("token rules per app", () => {
     expect(staffPushTokenOf(FCM, "portal-android")).toBe(FCM);
+    expect(staffPushTokenOf(FCM, "dialer-android")).toBe(FCM);
     expect(staffPushTokenOf("short", "portal-android")).toBeNull();
     expect(staffPushTokenOf("A".repeat(64), "dialer-ios")).toBe("a".repeat(64));
   });
@@ -69,9 +80,10 @@ describe("staff alerts to the Android app", () => {
     h.query.mockImplementation(answerBySql([[/FROM staff_push_tokens/, { rows: [
       { id: "t1", token: APNS, environment: "production", app: "dialer-ios" },
       { id: "t2", token: FCM, environment: "production", app: "portal-android" },
+      { id: "t3", token: FCM.replace("dK3", "eL4"), environment: "production", app: "dialer-android" },
     ] }]]));
-    expect(await sendStaffAlert(input)).toBe(1);
-    expect(send).toHaveBeenCalledTimes(1);
+    expect(await sendStaffAlert(input)).toBe(2);
+    expect(send).toHaveBeenCalledTimes(2);
     const [target, payload] = send.mock.calls[0] as unknown as [{ token: string }, { title: string; body: string; data: Record<string, string> }];
     expect(target).toEqual({ token: FCM });
     expect(payload.title).toBe("Missed call from Jane");
@@ -94,13 +106,16 @@ describe("staff alerts to the Android app", () => {
   });
 });
 
-describe("voice token for the Android app", () => {
+describe("voice token for the Android dialler", () => {
   it("names the Android (FCM) Twilio push credential", () => {
     const CR = "CR" + "c".repeat(32);
-    expect(parseVoiceTokenApp("portal-android")).toBe("portal-android");
-    expect(parseVoiceTokenApp(["portal-android"])).toBe("portal-android");
-    expect(pushCredentialGrant({ TWILIO_PUSH_CREDENTIAL_SID_ANDROID: CR } as any, "portal-android")).toEqual({ pushCredentialSid: CR });
-    expect(pushCredentialGrant({ TWILIO_PUSH_CREDENTIAL_SID: CR } as any, "portal-android")).toEqual({});
-    expect(pushCredentialGrant({ TWILIO_PUSH_CREDENTIAL_SID_ANDROID: "nope" } as any, "portal-android")).toEqual({});
+    expect(parseVoiceTokenApp("dialer-android")).toBe("dialer-android");
+    expect(parseVoiceTokenApp(["dialer-android"])).toBe("dialer-android");
+    expect(parseVoiceTokenApp("android")).toBe("dialer-android");
+    // the Android staff portal hands calls to the dialler, so it never gets a calling token of its own
+    expect(parseVoiceTokenApp("portal-android")).toBe("dialer");
+    expect(pushCredentialGrant({ TWILIO_PUSH_CREDENTIAL_SID_ANDROID: CR } as any, "dialer-android")).toEqual({ pushCredentialSid: CR });
+    expect(pushCredentialGrant({ TWILIO_PUSH_CREDENTIAL_SID: CR } as any, "dialer-android")).toEqual({});
+    expect(pushCredentialGrant({ TWILIO_PUSH_CREDENTIAL_SID_ANDROID: "nope" } as any, "dialer-android")).toEqual({});
   });
 });
