@@ -36,7 +36,18 @@ export type Condition = {
   waived_at: string | null;
   client_submitted_at: string | null;
   overdue: boolean;
+  /** KS_LENDER_SYNC_CONTRACTS - who it came from, in words ("Reported by Acme Capital", "Added by staff"). */
+  source_label: string;
+  lender_name: string | null;
 };
+
+/** KS_LENDER_SYNC_CONTRACTS - the checklist's source column in words. */
+export function sourceLabel(source: string, lenderName: string | null | undefined): string {
+  if (source === "lender") return `Reported by ${lenderName || "the lender"}`;
+  if (source === "offer") return "From the offer";
+  if (source === "template") return "From a template";
+  return "Added by staff";
+}
 
 const dateText = (v: unknown): string | null => {
   if (!v) return null;
@@ -67,6 +78,8 @@ export function rowToCondition(r: Record<string, any>, today = new Date()): Cond
     waived_at: r.waived_at ? new Date(r.waived_at).toISOString() : null,
     client_submitted_at: r.client_submitted_at ? new Date(r.client_submitted_at).toISOString() : null,
     overdue: Boolean(due && !DONE.includes(status) && due < today.toISOString().slice(0, 10)),
+    source_label: sourceLabel(String(r.source ?? "manual"), r.lender_name ?? null),
+    lender_name: r.lender_name ?? null,
   };
 }
 
@@ -231,4 +244,73 @@ export function clientView(list: Condition[]) {
     .filter((c) => c.owner === "client" && !DONE.includes(c.status))
     .map((c) => ({ id: c.id, title: c.title, description: c.description, due_date: c.due_date, status: c.status,
       requires_document: c.requires_document, submitted: Boolean(c.client_submitted_at) }));
+}
+
+// ------------------------------------------------------------------------------------- KS_LENDER_SYNC_CONTRACTS
+// Conditions (stipulations) a connected lender reports on its approval go onto the application's funding checklist
+// with source "lender" ("Reported by <lender>"). Each is matched by the lender's condition id, or by its normalised
+// text against a condition already on the file, so a re-sync never adds it twice. A condition the lender reports
+// cleared (or waived) is marked cleared (or waived) here. Nothing staff added is ever deleted, and a condition staff
+// already cleared or waived is never re-opened.
+
+export type LenderCondition = {
+  externalId: string; kind: "condition" | "document_request"; description: string; documentType: string | null;
+  status: "open" | "satisfied" | "waived";
+};
+
+/** Lower case, punctuation and extra spaces removed: "Void cheque." and "void  cheque" are the same condition. */
+export function normaliseConditionText(t: string | null | undefined): string {
+  return String(t ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+export type LenderSyncResult = { added: number; linked: number; cleared: number; waived: number };
+
+export async function syncLenderConditions(q: Q, applicationId: string, lender: { id: string; name: string }, list: LenderCondition[],
+  opts: { addNew: boolean }): Promise<LenderSyncResult> {
+  const out: LenderSyncResult = { added: 0, linked: 0, cleared: 0, waived: 0 };
+  if (!list.length) return out;
+  const existing = (await q.query(
+    `SELECT id::text AS id, title, status, lender_id::text AS lender_id, lender_condition_id FROM funding_conditions WHERE application_id = $1`,
+    [applicationId])).rows as Array<{ id: string; title: string; status: string; lender_id: string | null; lender_condition_id: string | null }>;
+  for (const c of list) {
+    const extId = String(c.externalId ?? "").slice(0, 200);
+    const title = String(c.description ?? "").trim().slice(0, 300) || "Condition from the lender";
+    const norm = normaliseConditionText(title);
+    let row = existing.find((e) => e.lender_id === lender.id && e.lender_condition_id === extId)
+      ?? existing.find((e) => !e.lender_condition_id && normaliseConditionText(e.title) === norm);
+    if (row && !row.lender_condition_id) {
+      // The same condition is already on the file (added by staff, from the offer or a template): link it, keep its source.
+      await q.query(`UPDATE funding_conditions SET lender_id = $2::uuid, lender_condition_id = $3, updated_at = now() WHERE id = $1::uuid AND lender_condition_id IS NULL`,
+        [row.id, lender.id, extId]);
+      row.lender_id = lender.id; row.lender_condition_id = extId;
+      out.linked += 1;
+    }
+    if (!row) {
+      if (!opts.addNew || c.status !== "open") continue;
+      const r = await q.query(
+        `INSERT INTO funding_conditions (application_id, title, description, owner, requires_document, source, lender_id, lender_condition_id, lender_name,
+            position, created_by)
+         VALUES ($1, $2, $3, 'staff', $4, 'lender', $5::uuid, $6, $7,
+            (SELECT COALESCE(max(position), 0) + 1 FROM funding_conditions WHERE application_id = $1), NULL)
+         ON CONFLICT DO NOTHING
+         RETURNING id::text AS id, status`,
+        [applicationId, title, c.kind === "document_request" && c.documentType ? `Document: ${c.documentType}` : null, c.kind === "document_request",
+          lender.id, extId, lender.name.slice(0, 200)]);
+      if (r.rows[0]) {
+        out.added += 1;
+        existing.push({ id: String(r.rows[0].id), title, status: "open", lender_id: lender.id, lender_condition_id: extId });
+      }
+      continue;
+    }
+    if (DONE.includes(row.status as ConditionStatus)) continue; // staff already cleared or waived it: leave it
+    if (c.status === "satisfied") {
+      await q.query(`UPDATE funding_conditions SET status = 'cleared', cleared_at = now(), cleared_by = NULL, updated_at = now() WHERE id = $1::uuid AND status IN ('open','received')`, [row.id]);
+      row.status = "cleared"; out.cleared += 1;
+    } else if (c.status === "waived") {
+      await q.query(`UPDATE funding_conditions SET status = 'waived', waived_at = now(), waived_by = NULL, waived_reason = $2, updated_at = now() WHERE id = $1::uuid AND status IN ('open','received')`,
+        [row.id, `Waived by ${lender.name}`.slice(0, 300)]);
+      row.status = "waived"; out.waived += 1;
+    }
+  }
+  return out;
 }

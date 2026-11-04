@@ -16,7 +16,7 @@
 // the lender's documentation. Nothing about a particular lender is assumed here.
 import { createSign } from "node:crypto";
 import type { ConnectorContext, FetchResult, LenderConnector, PackageAttachment, RemoteCondition, RemoteOffer, RemoteUpdate, SubmitResult, UploadResult } from "../types.js";
-import { buildMappedBody, getPath } from "../mapping.js";
+import { buildMappedBody, getPath, readServicing } from "../mapping.js";
 import { excerpt, parseJson, retryableStatus } from "../http.js";
 import { checkUrlShape } from "../../outboundWebhooks/ssrf.js";
 
@@ -161,6 +161,11 @@ export function readSalesforceRecord(record: unknown, st: Obj, externalId: strin
   if (commission) update.commissionAmount = num(getPath(source, commission));
   const note = followed ? str(obj(st.follow).note_field) : str(st.note_field);
   if (note) update.note = text(getPath(source, note));
+  // KS_LENDER_SYNC_CONTRACTS - a funded deal's balance and next payment, from the fields the Admin names
+  // (status.servicing_fields or follow.servicing_fields: { balance, as_of, payments_made, next_payment_date,
+  // next_payment_amount, status }, each a field API name on the record).
+  const servicing = readServicing(obj(followed ? obj(st.follow).servicing_fields : st.servicing_fields), (f) => getPath(source, f));
+  if (servicing) update.servicing = servicing;
   return update;
 }
 
@@ -299,6 +304,9 @@ export const salesforceConnector: LenderConnector = {
     for (const k of [...Object.keys(map), ...Object.keys(obj(submit.static_fields))]) if (!SF_NAME.test(k)) problems.push(`"${k}" is not a Salesforce field name.`);
     const st = obj(config.status);
     if (str(st.object) && !SF_NAME.test(str(st.object))) problems.push("The status object is not a Salesforce object name.");
+    for (const f of [...Object.values(obj(st.servicing_fields)), ...Object.values(obj(obj(st.follow).servicing_fields))]) { // KS_LENDER_SYNC_CONTRACTS
+      if (str(f) && !str(f).split(".").every((part) => SF_NAME.test(part))) problems.push(`"${str(f)}" is not a Salesforce field name.`);
+    }
     for (const k of ["offers_soql", "conditions_soql"]) if (str(st[k]) && (!/^select\s/i.test(str(st[k])) || /;/.test(str(st[k])))) problems.push("Offer and condition queries must be a single SELECT.");
     const wh = obj(config.webhook);
     if (wh.mode !== undefined && !["outbound_message", "json", "none"].includes(str(wh.mode))) problems.push("Pushes must be Outbound Messages, JSON or none.");

@@ -73,7 +73,22 @@ export type SubmissionRow = {
   bucket: string | null;
 };
 
-export type ApplyResult = { statusChanged: boolean; bucket: LenderBucket | null; newOffers: number; newConditions: number; stageMoved: string | null };
+export type ApplyResult = {
+  statusChanged: boolean; bucket: LenderBucket | null; newOffers: number; newConditions: number; stageMoved: string | null;
+  /** KS_LENDER_SYNC_CONTRACTS - conditions added to / cleared on the funding checklist, and a balance recorded. */
+  checklist?: { added: number; linked: number; cleared: number; waived: number };
+  balanceRecorded?: boolean;
+};
+
+/** KS_LENDER_SYNC_CONTRACTS - whether this lender is the one the file is going with: the application names it, or the
+ *  client accepted its offer. Only then do its conditions belong on the funding checklist. */
+async function chosenLender(db: Q, applicationId: string, lenderId: string): Promise<{ chosen: boolean; funded: boolean }> {
+  const r = await db.query(
+    `SELECT (a.lender_id::text = $2 OR EXISTS (SELECT 1 FROM offers o WHERE o.application_id::text = $1 AND o.lender_id::text = $2 AND o.status = 'accepted')) AS chosen,
+            lower(COALESCE(a.pipeline_state, '')) = 'funded' AS funded
+       FROM applications a WHERE a.id::text = $1 LIMIT 1`, [applicationId, lenderId]);
+  return { chosen: r.rows[0]?.chosen === true, funded: r.rows[0]?.funded === true };
+}
 
 /** Moves the application's pipeline stage when the move is a legal one; otherwise records why it did not. */
 async function moveStage(db: Q, sub: SubmissionRow, stage: string, lenderName: string, source: EventSource): Promise<string | null> {
@@ -112,7 +127,17 @@ export async function applyRemoteUpdate(db: Q, args: {
   const result: ApplyResult = { statusChanged: false, bucket: (sub.bucket as LenderBucket | null) ?? null, newOffers: 0, newConditions: 0, stageMoved: null };
 
   // ── status ──
-  if (update.status && update.status !== sub.lender_status) {
+  if (update.status && update.status !== sub.lender_status && sub.bucket === "funded"
+      && resolveStatus(update.status, args.adminStatusMap, args.connectorDefaults).bucket !== "funded") {
+    // KS_LENDER_SYNC_CONTRACTS - after funding the lender's status describes the contract ("Active", "Paid off"): it is
+    // recorded, but the deal stays funded and the pipeline stage is never moved by it.
+    result.statusChanged = true;
+    await logEvent(db, {
+      submissionId: sub.id, applicationId: sub.application_id, lenderId: sub.lender_id, kind: "status_changed", source,
+      status: update.status, detail: `${lenderName}: ${update.statusLabel || update.status} (after funding)`,
+      data: { from: sub.lender_status, to: update.status, bucket: "funded", after_funding: true },
+    });
+  } else if (update.status && update.status !== sub.lender_status) {
     const resolved = resolveStatus(update.status, args.adminStatusMap, args.connectorDefaults);
     result.statusChanged = true;
     result.bucket = resolved.bucket;
@@ -189,26 +214,72 @@ export async function applyRemoteUpdate(db: Q, args: {
     });
   }
 
+  // ── KS_LENDER_SYNC_CONTRACTS: the lender's conditions onto the funding checklist ──
+  // Every condition this lender has reported on the deal (stored above), so ones reported before the client accepted
+  // the offer arrive too. New ones are not added once the file is funded; clearing still applies.
+  try {
+    const stored = await db.query(
+      `SELECT external_id, kind, description, document_type, status FROM lender_api_conditions WHERE submission_id = $1 ORDER BY first_seen_at`, [sub.id]);
+    if (stored.rows.length) {
+      const who = await chosenLender(db, sub.application_id, sub.lender_id);
+      if (who.chosen) {
+        const { syncLenderConditions } = await import("../brokerTools/conditions.js");
+        result.checklist = await syncLenderConditions(db, sub.application_id, { id: sub.lender_id, name: lenderName },
+          stored.rows.map((r: any) => ({ externalId: String(r.external_id), kind: r.kind === "document_request" ? "document_request" : "condition",
+            description: String(r.description ?? ""), documentType: r.document_type ?? null, status: r.status === "satisfied" || r.status === "waived" ? r.status : "open" })),
+          { addNew: !who.funded });
+        if (result.checklist.added || result.checklist.cleared || result.checklist.waived) {
+          await auditSystem("funding_conditions_lender_sync", sub.application_id, { lender_id: sub.lender_id, ...result.checklist, source });
+        }
+      }
+    }
+  } catch (err) {
+    logWarnSwallowed(err, "lenderConnectors/sync.ts:fundingChecklist");
+  }
+
   // ── funding and commission ──
-  // TODO(active-contracts): Active Contracts (branch active-contracts, PR #52) is not on main yet. Once it merges,
-  // when a lender reports a funded / outstanding balance here, find the Active Contract whose application_id is
-  // sub.application_id and call
-  // recordLenderReportedBalance(db, contractId, balance, asOf, "lender_portal") from src/activeContracts/money.ts.
-  // Funded is a terminal bucket today, so polling stops at funding; keep polling funded deals if balances are wanted.
   if (update.fundedAmount !== undefined && update.fundedAmount !== null && result.bucket === "funded") {
     await logEvent(db, { submissionId: sub.id, applicationId: sub.application_id, lenderId: sub.lender_id, kind: "funded", source, detail: `${lenderName} reports $${update.fundedAmount.toLocaleString("en-CA")} funded.`, data: { funded_amount: update.fundedAmount, commission_amount: update.commissionAmount ?? null } });
   }
 
+  // ── KS_LENDER_SYNC_CONTRACTS: balance, payments and next payment onto the Active Contract ──
+  let lenderClosed = false;
+  if (update.servicing) {
+    try {
+      const { applyLenderServicing } = await import("../activeContracts/lenderReported.js");
+      const s = await applyLenderServicing(db, { applicationId: sub.application_id, lenderId: sub.lender_id, lenderName, submissionId: sub.id, servicing: update.servicing });
+      result.balanceRecorded = s.recorded;
+      lenderClosed = s.lenderClosed;
+    } catch (err) {
+      logWarnSwallowed(err, "lenderConnectors/sync.ts:servicing");
+    }
+  }
+
   const bucket = result.bucket;
-  const terminal = isTerminalBucket(bucket);
+  // KS_LENDER_SYNC_CONTRACTS - a funded deal keeps being read daily while its Active Contract is open.
+  let terminal = isTerminalBucket(bucket);
+  let interval = Math.max(5, args.pollIntervalMinutes);
+  if (bucket === "funded") {
+    try {
+      const { keepPollingFunded, FUNDED_POLL_MINUTES } = await import("../activeContracts/lenderReported.js");
+      const seen = await db.query(`SELECT funded_seen_at FROM lender_api_submissions WHERE id = $1`, [sub.id]);
+      if (await keepPollingFunded(db, { applicationId: sub.application_id, lenderId: sub.lender_id, lenderClosed, fundedSeenAt: seen.rows[0]?.funded_seen_at ?? null })) {
+        terminal = false;
+        interval = FUNDED_POLL_MINUTES;
+      }
+    } catch (err) {
+      logWarnSwallowed(err, "lenderConnectors/sync.ts:fundedPolling");
+    }
+  }
   await db.query(
     `UPDATE lender_api_submissions
         SET lender_status = COALESCE($2, lender_status), lender_status_label = COALESCE($3, lender_status_label), bucket = COALESCE($4, bucket),
             funded_amount = COALESCE($5, funded_amount), commission_amount = COALESCE($6, commission_amount),
             linked_record_id = COALESCE($7, linked_record_id), last_synced_at = now(),
-            next_poll_at = CASE WHEN $8 THEN NULL ELSE now() + ($9 || ' minutes')::interval END, updated_at = now()
+            next_poll_at = CASE WHEN $8 THEN NULL ELSE now() + ($9 || ' minutes')::interval END,
+            funded_seen_at = CASE WHEN $4 = 'funded' THEN COALESCE(funded_seen_at, now()) ELSE funded_seen_at END, updated_at = now()
       WHERE id = $1`,
-    [sub.id, update.status ?? null, update.statusLabel ?? null, bucket, update.fundedAmount ?? null, update.commissionAmount ?? null, update.linkedRecordId ?? null, terminal, String(Math.max(5, args.pollIntervalMinutes))],
+    [sub.id, update.status ?? null, update.statusLabel ?? null, bucket, update.fundedAmount ?? null, update.commissionAmount ?? null, update.linkedRecordId ?? null, terminal, String(interval)],
   );
   return result;
 }

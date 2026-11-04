@@ -82,6 +82,24 @@ export type RemoteCondition = {
   status: "open" | "satisfied" | "waived";
 };
 
+/** KS_LENDER_SYNC_CONTRACTS - after funding: where the lender says the deal (now an Active Contract) stands.
+ *  Every field is optional; null means the lender's API did not give it. */
+export type RemoteServicing = {
+  balance: number | null;
+  /** The date the balance is as of (YYYY-MM-DD). Today when the lender does not say. */
+  asOf: string | null;
+  paymentsMade: number | null;
+  nextPaymentDate: string | null;
+  nextPaymentAmount: number | null;
+  /** The lender's own word for the contract ("Active", "Paid off", "Closed", ...). */
+  status: string | null;
+};
+
+/** A lender contract status that means the contract is finished: daily balance polling stops. */
+export function isClosedServicingStatus(s: string | null | undefined): boolean {
+  return /paid[\s_-]*(off|out|in[\s_-]*full)|\bclosed\b|\bsettled\b|\bmatured\b|written[\s_-]*off|charged[\s_-]*off/i.test(String(s ?? ""));
+}
+
 /** What the lender says about one deal, from a poll or a webhook. Fields left undefined were not reported. */
 export type RemoteUpdate = {
   externalId: string;
@@ -92,6 +110,8 @@ export type RemoteUpdate = {
   fundedAmount?: number | null;
   commissionAmount?: number | null;
   note?: string | null;
+  /** KS_LENDER_SYNC_CONTRACTS - balance, payments, next payment and status of a funded deal. */
+  servicing?: RemoteServicing;
   /** The lender record that now carries the status when it is not the one we created (a converted Salesforce lead's
    *  opportunity). Pushes about that record are matched to this deal. */
   linkedRecordId?: string | null;

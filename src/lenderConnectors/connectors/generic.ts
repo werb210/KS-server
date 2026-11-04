@@ -8,13 +8,15 @@
 //   submit   { method, path, field_map: { "lender.json.path": "<source key>" }, static_fields, documents:
 //              "inline_base64" | "upload_each" | "none", documents_field, external_id_path, status_path }
 //   status   { path ("/deals/{{external_id}}"), status_path, status_label_path, offers_path, offer_fields,
-//              conditions_path, condition_fields, funded_amount_path, commission_path }
+//              conditions_path, condition_fields, funded_amount_path, commission_path,
+//              servicing_paths: { balance, as_of, payments_made, next_payment_date, next_payment_amount, status } }
+//              (servicing_paths: where a funded deal's balance and next payment are; read daily after funding)
 //   upload   { path, mode: "multipart" | "json_base64", file_field, category_field }
 //   webhook  { signature: "hmac_sha256_hex" | "hmac_sha256_base64" | "none", signature_header, signature_prefix,
 //              timestamp_header, external_id_path, events_path, and the same paths as status }
 // Every path in a response is a dotted path ("data.deal.id", "items[0].id").
 import type { ConnectorContext, FetchResult, LenderConnector, LenderPackage, PackageAttachment, RemoteCondition, RemoteOffer, RemoteUpdate, SubmitResult, UploadResult } from "../types.js";
-import { buildMappedBody, fillPath, getPath, joinUrl, parsePath, setPath } from "../mapping.js";
+import { buildMappedBody, fillPath, getPath, joinUrl, parsePath, readServicing, setPath } from "../mapping.js";
 import { excerpt, multipartBody, parseJson, retryableStatus } from "../http.js";
 import { checkUrlShape } from "../../outboundWebhooks/ssrf.js";
 
@@ -121,6 +123,8 @@ export function readUpdate(body: unknown, section: Obj, externalId: string): Rem
   if (conditions) update.conditions = conditions;
   if (str(section.funded_amount_path)) update.fundedAmount = num(getPath(body, str(section.funded_amount_path)));
   if (str(section.commission_path)) update.commissionAmount = num(getPath(body, str(section.commission_path)));
+  const servicing = readServicing(obj(section.servicing_paths), (p) => getPath(body, p)); // KS_LENDER_SYNC_CONTRACTS
+  if (servicing) update.servicing = servicing;
   return update;
 }
 
@@ -175,6 +179,9 @@ export const genericRestConnector: LenderConnector = {
     if (!str(submit.path)) problems.push("Enter the path deals are submitted to (for example /applications).");
     for (const k of Object.keys(obj(submit.field_map))) if (!parsePath(k)) problems.push(`"${k}" is not a valid field path.`);
     for (const k of Object.keys(obj(submit.static_fields))) if (!parsePath(k)) problems.push(`"${k}" is not a valid field path.`);
+    for (const section of [obj(config.status), obj(config.webhook)]) { // KS_LENDER_SYNC_CONTRACTS
+      for (const p of Object.values(obj(section.servicing_paths))) if (str(p) && !parsePath(str(p))) problems.push(`"${str(p)}" is not a valid balance field path.`);
+    }
     if (!Object.keys(obj(submit.field_map)).length) problems.push("Map at least one field the lender needs.");
     if (submit.documents !== undefined && !["inline_base64", "upload_each", "none"].includes(str(submit.documents))) problems.push("Documents must be sent inline, uploaded one by one, or not at all.");
     if (str(submit.documents) === "upload_each" && !str(obj(config.upload).path)) problems.push("Uploading documents one by one needs the document upload path.");
