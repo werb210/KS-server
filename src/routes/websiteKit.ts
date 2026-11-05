@@ -38,7 +38,7 @@ import { logWarnSwallowed } from "../lib/logWarnSwallowed.js";
 const db = (): Q => pool as unknown as Q;
 const staff = [auth, requireAuthorization({ roles: [ROLES.ADMIN, ROLES.MARKETING] })];
 
-async function formLimit(now = new Date()): Promise<{ limit: number | null; extras: boolean }> {
+export async function formLimit(now = new Date()): Promise<{ limit: number | null; extras: boolean }> {
   const state = await getPlanState(db(), now.getTime());
   return { limit: marketingLimitsFor(state, now).lead_forms, extras: marketingAddonActive(state, now) };
 }

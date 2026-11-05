@@ -33,7 +33,7 @@ import { randomUUID } from "node:crypto";
 import { BlobServiceClient } from "@azure/storage-blob";
 import { renderBrandedEmail, type BrandedEmailFields } from "../services/emailTemplateRender.js";
 import { resolveScheduledAt, SendScheduleError } from "../services/sendSchedule.js"; // BF_SERVER_SEND_LATER_v35
-import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { brandName, brandSettings } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
 // KS_SERVER_MARKETING_ADDON - the plan's marketing limits, the campaign email allowance and the add-on's tools.
 import {
@@ -42,6 +42,8 @@ import {
 import { parseCampaignOptions, type CampaignOptions } from "../marketing/campaignRunner.js";
 import campaignReportRoutes from "../marketing/campaignReport.js";
 import { campaignType, listTypes, saveType, SubscriptionTypeError } from "../marketing/subscriptionTypes.js"; // KS_EMAIL_SUBSCRIPTION_TYPES_v1
+import { accentColour, deletePage, getPage, listPages, normalizeBlocks, PageError, renderPage, savePage } from "../landingPages/pages.js"; // KS_LANDING_PAGES_v1
+import { PAGE_CSP, pageUrl } from "./landingPagesPublic.js";
 
 
 const router = Router();
@@ -125,6 +127,50 @@ router.put("/subscription-types/:id", safeHandler(async (req: any, res: any) => 
     if (err instanceof SubscriptionTypeError) { res.status(err.status).json({ error: { code: err.code, message: err.message } }); return; }
     throw err;
   }
+}));
+
+// KS_LANDING_PAGES_v1 - the landing-page builder (Marketing > Landing pages).
+function pageErr(res: any, err: unknown): boolean {
+  if (err instanceof PageError) { res.status(err.status).json({ error: { code: err.code, message: err.message } }); return true; }
+  return false;
+}
+router.get("/landing-pages", safeHandler(async (req: any, res: any) => {
+  const pages = await listPages(pool as any, resolveSiloFromRequest(req));
+  respondOk(res, { pages: pages.map((p) => ({ ...p, url: pageUrl(p.slug) })) });
+}));
+router.get("/landing-pages/:id", safeHandler(async (req: any, res: any) => {
+  const page = await getPage(pool as any, resolveSiloFromRequest(req), String(req.params.id));
+  if (!page) { res.status(404).json({ error: { code: "not_found", message: "Page not found." } }); return; }
+  respondOk(res, { page: { ...page, url: pageUrl(page.slug) } });
+}));
+router.post("/landing-pages", safeHandler(async (req: any, res: any) => {
+  try {
+    const page = await savePage(pool as any, resolveSiloFromRequest(req), req.body ?? {}, req.user?.userId ?? null);
+    respondOk(res, { page: { ...page, url: pageUrl(page.slug) } });
+  } catch (err) { if (!pageErr(res, err)) throw err; }
+}));
+router.put("/landing-pages/:id", safeHandler(async (req: any, res: any) => {
+  try {
+    const page = await savePage(pool as any, resolveSiloFromRequest(req), req.body ?? {}, req.user?.userId ?? null, String(req.params.id));
+    respondOk(res, { page: { ...page, url: pageUrl(page.slug) } });
+  } catch (err) { if (!pageErr(res, err)) throw err; }
+}));
+router.delete("/landing-pages/:id", safeHandler(async (req: any, res: any) => {
+  const ok = await deletePage(pool as any, resolveSiloFromRequest(req), String(req.params.id));
+  if (!ok) { res.status(404).json({ error: { code: "not_found", message: "Page not found." } }); return; }
+  respondOk(res, { deleted: true });
+}));
+/** The page as it would look, from unsaved blocks (shown in a sandboxed frame in the builder). */
+router.post("/landing-pages/preview", safeHandler(async (req: any, res: any) => {
+  const b = req.body ?? {};
+  const { listForms } = await import("../marketing/websiteKit.js");
+  const forms = new Map((await listForms(pool as any)).filter((f) => f.active).map((f) => [f.id, f]));
+  const brand = brandSettings() as any;
+  const html = renderPage({ title: String(b.title ?? "Preview"), description: null, blocks: normalizeBlocks(b.blocks) }, {
+    brand: brandName(), colour: accentColour(brand.primary_color), logoUrl: /^https:\/\//i.test(String(brand.logo_url ?? "")) ? String(brand.logo_url) : "",
+    forms, preview: true, formAction: () => "#",
+  });
+  res.status(200).set("Content-Type", "text/html; charset=utf-8").set("Content-Security-Policy", PAGE_CSP).send(html);
 }));
 
 router.use(adSpendAnalysisRoutes);
