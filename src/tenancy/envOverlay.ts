@@ -20,10 +20,19 @@ export const PER_BROKERAGE_KEYS: ReadonlySet<string> = new Set([
   "GOOGLE_TOKEN_ENCRYPTION_KEY", "WATCH_PUSH_ENCRYPTION_KEY",
 ]);
 
-export const PER_BROKERAGE_PREFIXES: readonly string[] = ["QBO_", "TWILIO_", "KS_M365_", "KS_GOOGLE_", "SIGNNOW_"];
+export const PER_BROKERAGE_PREFIXES: readonly string[] = ["QBO_", "TWILIO_", "KS_M365_", "KS_GOOGLE_", "SIGNNOW_", "ONFIDO_"];
+
+// KS_SERVER_VENDOR_KEYS - a brokerage's own verification-service keys (Settings > Your services), stored in its own
+// database. Registered by src/integrations/vendorKeys.ts so this file has no database dependency.
+const VENDOR_KEYS_ALSO: ReadonlySet<string> = new Set(["IPINFO_TOKEN", "CORPORATIONS_CANADA_API_KEY"]);
+let vendorLookup: ((name: string) => string | undefined) | null = null;
+export function setVendorKeyLookup(fn: ((name: string) => string | undefined) | null): void {
+  vendorLookup = fn;
+}
+const isVendorKey = (k: string) => k.startsWith("ONFIDO_") || VENDOR_KEYS_ALSO.has(k);
 
 export function isPerBrokerageKey(key: string): boolean {
-  return PER_BROKERAGE_KEYS.has(key) || PER_BROKERAGE_PREFIXES.some((p) => key.startsWith(p));
+  return PER_BROKERAGE_KEYS.has(key) || PER_BROKERAGE_PREFIXES.some((p) => key.startsWith(p)) || VENDOR_KEYS_ALSO.has(key);
 }
 
 let installed = false;
@@ -40,6 +49,7 @@ export function createEnvOverlay(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
       if (typeof key === "string") {
         const env = tenantEnv();
         if (env) {
+          if (isVendorKey(key) && vendorLookup) { const v = vendorLookup(key); if (v !== undefined) return v; } // KS_SERVER_VENDOR_KEYS
           if (Object.prototype.hasOwnProperty.call(env, key)) return env[key];
           if (isPerBrokerageKey(key)) return undefined;
         }
@@ -50,6 +60,7 @@ export function createEnvOverlay(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
       if (typeof key === "string") {
         const env = tenantEnv();
         if (env) {
+          if (isVendorKey(key) && vendorLookup && vendorLookup(key) !== undefined) return true; // KS_SERVER_VENDOR_KEYS
           if (Object.prototype.hasOwnProperty.call(env, key)) return true;
           if (isPerBrokerageKey(key)) return false;
         }
