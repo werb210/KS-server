@@ -7,7 +7,7 @@ export type PlanMail = { to: string[]; subject: string; html: string; text: stri
 export type PlanMailer = (mail: PlanMail) => Promise<{ ok: boolean; error?: string }>;
 
 // The vendor's sales inbox, where upgrade requests go - not text shown as the licensee's brand.
-const DEFAULT_SALES_EMAIL = "keystone@boreal.financial";
+const DEFAULT_SALES_EMAIL = "sales@keystonecrm.online";
 
 export function salesEmail(env: NodeJS.ProcessEnv = process.env): string {
   return String(env.KS_SALES_EMAIL ?? "").trim() || DEFAULT_SALES_EMAIL;
