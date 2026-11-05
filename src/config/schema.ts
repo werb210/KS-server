@@ -236,6 +236,9 @@ export const EnvSchema = z
     KS_M365_CLIENT_SECRET: z.string().optional(), // credential (secret); read in modules/o365/m365App.ts
     KS_GOOGLE_OAUTH_CLIENT_ID: z.string().optional(), // identifier, Keystone's Google OAuth client; read in services/workspace/googleConfig.ts
     KS_GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(), // credential (secret); read in services/workspace/googleConfig.ts
+    KS_INTUIT_CLIENT_ID: z.string().optional(), // KS_BROKERAGE_QBO - Keystone's Intuit app, used by every brokerage's QuickBooks connection; read in services/quickbooks/qboConfig.ts
+    KS_INTUIT_CLIENT_SECRET: z.string().optional(), // KS_BROKERAGE_QBO - secret for KS_INTUIT_CLIENT_ID
+    KS_INTUIT_ENVIRONMENT: z.string().optional(), // KS_BROKERAGE_QBO - production | sandbox (default sandbox)
     KS_OAUTH_BROKER_URL: z.string().optional(), // URL, Keystone's redirect broker on KS-Ops (…/api/oauth/callback); read in licensee/oauthBroker.ts
     O365_CONSENT_REDIRECT_URI: z.string().optional(), // URL (default the broker, else {KS_SERVER_URL}/api/o365-oauth/admin-consent/callback); read in routes/o365OAuth.ts
     O365_CONSENT_RETURN_URL: z.string().optional(), // URL (default {KS_PORTAL_URL}/settings/connections); read in routes/o365OAuth.ts

@@ -199,7 +199,7 @@ describe("fee maths", () => {
 describe("feature off when QBO_* is unset", () => {
   it("reports why, queues nothing and the worker does nothing", async () => {
     delete process.env.QBO_CLIENT_ID;
-    expect(qboConfigProblem()).toMatch(/QBO_CLIENT_ID/);
+    expect(qboConfigProblem()).toMatch(/KS_INTUIT_CLIENT_ID/);
     expect(qboConfig()).toBeNull();
     const r = await request(app).get("/api/quickbooks/status");
     expect(r.body).toMatchObject({ configured: false, connected: false });
