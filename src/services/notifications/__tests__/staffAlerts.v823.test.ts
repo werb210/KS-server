@@ -31,7 +31,7 @@ describe("v823 iPad portal alerts", () => {
     expect(portal.send).toHaveBeenCalledTimes(1);
     expect((dialer.send.mock.calls[0] as any[])[1].url).toBeUndefined();
     expect((portal.send.mock.calls[0] as any[])[1].url).toBe("/communications");
-    expect((query.mock.calls[0] as any[])[1]).toEqual([USER, ["dialer-ios", "portal-ios", "portal-android", "dialer-android"]]);
+    expect((query.mock.calls.find((c: any[]) => String(c[0]).includes("staff_push_tokens")) as any[])[1]).toEqual([USER, ["dialer-ios", "portal-ios", "portal-android", "dialer-android"]]);
   });
 
   it("only passes an in-portal path", () => {

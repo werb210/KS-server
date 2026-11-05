@@ -44,7 +44,7 @@ describe("v803 @mentions typed in Team chat", () => {
     expect(insert?.[1]).toEqual(["u-andrew", "Todd Werboweski mentioned you in #deals", "m-9", "@Andrew can you call TFG?", "/communications?tab=team&channel=ch-1"]);
     expect(String(insert?.[0])).toContain("'mention'");
     expect(String(insert?.[0])).toContain("'team_messages'");
-    expect(h.push).toHaveBeenCalledWith("u-andrew", "Todd Werboweski mentioned you in #deals", "@Andrew can you call TFG?", "/communications?tab=team&channel=ch-1");
+    expect(h.push).toHaveBeenCalledWith("u-andrew", "Todd Werboweski mentioned you in #deals", "@Andrew can you call TFG?", "/communications?tab=team&channel=ch-1", "mentions");
   });
 
   it("does nothing without mentions, and a failure is logged, not thrown", async () => {
