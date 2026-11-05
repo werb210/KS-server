@@ -34,7 +34,7 @@ export function metaConfig(e: NodeJS.ProcessEnv = process.env): MetaConfig | nul
   return {
     appId, appSecret,
     redirectUri: redirectUriFor("meta", serverUrl().replace(/\/+$/, "") + "/api/integrations/meta/callback", e),
-    returnUrl: portalUrl().replace(/\/+$/, "") + "/settings?tab=integrations",
+    returnUrl: portalUrl().replace(/\/+$/, "") + "/settings?tab=connections",
   };
 }
 
