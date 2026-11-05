@@ -729,8 +729,10 @@ async function persistInboundSms(req: any): Promise<void> {
   const mediaUrl = numMedia > 0 ? (String(req.body?.MediaUrl0 ?? "").trim() || null) : null;
   if (!From || (!Body && !mediaUrl)) return;
 
-  const fromNum = String(From);
-  const toNum = typeof To === "string" ? To : null;
+  // KS_WHATSAPP_v1 - a WhatsApp message (From "whatsapp:+1...") is filed as WhatsApp on the same conversation.
+  const viaWhatsApp = String(From).toLowerCase().startsWith("whatsapp:");
+  const fromNum = viaWhatsApp ? String(From).slice(9) : String(From);
+  const toNum = typeof To === "string" ? (To.toLowerCase().startsWith("whatsapp:") ? To.slice(9) : To) : null;
   const body = Body ? String(Body) : "[media]";
   const sid = typeof MessageSid === "string" ? MessageSid : null;
   // KS_SETTINGS_PACK_v1_BLOCKED_NUMBERS - a text from a blocked number is ignored (and logged).
@@ -849,9 +851,9 @@ async function persistInboundSms(req: any): Promise<void> {
   await pool.query(
     `INSERT INTO communications_messages
        (id, type, direction, status, contact_id, body, media_url, from_number, to_number, phone_number, twilio_sid, silo, created_at)
-     VALUES (gen_random_uuid(), 'sms', 'inbound', 'received', $1, $2, $3, $4, $5, $4, $6, $7, now())
+     VALUES (gen_random_uuid(), $8, 'inbound', 'received', $1, $2, $3, $4, $5, $4, $6, $7, now())
      ON CONFLICT (twilio_sid) WHERE twilio_sid IS NOT NULL DO NOTHING`,
-    [inboundContactId, body, mediaUrl, fromNum, toNum, sid, resolvedSilo] // BF_SERVER_v817_DIALER_MESSAGING
+    [inboundContactId, body, mediaUrl, fromNum, toNum, sid, resolvedSilo, viaWhatsApp ? "whatsapp" : "sms"] // BF_SERVER_v817_DIALER_MESSAGING
   ).catch((err) => {
     // Surface the failure in logs instead of swallowing it silently.
     console.error({ event: "sms_inbound_persist_failed", err: String(err) });

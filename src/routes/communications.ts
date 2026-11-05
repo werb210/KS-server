@@ -429,7 +429,7 @@ router.get("/sms", safeHandler(async (req: any, res: any) => {
        FROM communications_messages m
        LEFT JOIN contacts c ON c.id = m.contact_id
        WHERE m.silo = $1
-         AND m.type = 'sms'
+         AND m.type IN ('sms', 'whatsapp') -- KS_WHATSAPP_v1 - WhatsApp shares the conversation
          ${SYSTEM_SMS_EXCLUDE_SQL}
          ${search.sql}
      ),
@@ -610,6 +610,52 @@ router.get("/sms/consent", safeHandler(async (req: any, res: any) => {
   res.json({ smsUpdatesConsent: consent === true, recorded: consent !== null });
 }));
 
+// KS_WHATSAPP_v1 - WhatsApp on the client conversation.
+router.get("/whatsapp/status", safeHandler(async (req: any, res: any) => {
+  const { lastInbound, toE164, whatsappFrom, windowState } = await import("../whatsapp/whatsapp.js");
+  const configured = Boolean(whatsappFrom());
+  const phone = toE164(req.query.phone);
+  if (!configured || !phone) return res.json({ configured, open: false, closesAt: null, lastInboundAt: null });
+  res.json({ configured, ...windowState(await lastInbound(pool as any, phone)) });
+}));
+
+router.get("/whatsapp/templates", safeHandler(async (_req: any, res: any) => {
+  const { approvedTemplates, whatsappFrom, WhatsAppError } = await import("../whatsapp/whatsapp.js");
+  if (!whatsappFrom()) return res.json({ configured: false, templates: [] });
+  try {
+    res.json({ configured: true, templates: await approvedTemplates(String(process.env.TWILIO_ACCOUNT_SID ?? ""), String(process.env.TWILIO_AUTH_TOKEN ?? "")) });
+  } catch (err) {
+    if (err instanceof WhatsAppError) return res.status(err.status).json({ error: { code: err.code, message: err.message } });
+    throw err;
+  }
+}));
+
+router.post("/whatsapp", replayKey("whatsapp"), safeHandler(async (req: any, res: any) => {
+  const { sendWhatsApp, WhatsAppError } = await import("../whatsapp/whatsapp.js");
+  const b = req.body ?? {};
+  const accountSid = process.env.TWILIO_ACCOUNT_SID, authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!accountSid || !authToken) return res.status(503).json({ error: { code: "service_unavailable", message: "Twilio is not set up." } });
+  const contactId = typeof b.contactId === "string" && /^[0-9a-f-]{36}$/i.test(b.contactId) ? b.contactId : null;
+  let to = typeof b.to === "string" ? b.to : "";
+  if (!to && contactId) {
+    const c = await pool.query<{ phone: string | null }>(`SELECT phone FROM contacts WHERE id = $1::uuid`, [contactId]);
+    to = c.rows[0]?.phone ?? "";
+  }
+  try {
+    const silo = (await import("../middleware/silo.js")).resolveSiloFromRequest(req);
+    const sent = await sendWhatsApp(pool as any, sharedTwilio(accountSid, authToken) as any, {
+      to, contactId, body: b.body, contentSid: b.contentSid, contentVariables: b.contentVariables,
+      staffName: req.user?.name ?? req.user?.email ?? null, silo,
+    }, { statusCallback: `${(process.env.PUBLIC_BASE_URL || serverUrl()).replace(/\/+$/, "")}/api/r/status` });
+    await countOutboundText({ sid: sent.sid } as any).catch((err: unknown) => console.warn("[whatsapp] usage count failed", String(err)));
+    res.json({ ok: true, ...sent });
+  } catch (err: any) {
+    if (err instanceof WhatsAppError) return res.status(err.status).json({ error: { code: err.code, message: err.message } });
+    console.error("communications.whatsapp.twilio_failed", { code: err?.code, status: err?.status, message: err?.message });
+    return res.status(502).json({ error: { code: err?.code ? `twilio_${err.code}` : "whatsapp_send_failed", message: err?.message || "WhatsApp message failed." } });
+  }
+}));
+
 router.get("/sms/thread", safeHandler(async (req: any, res: any) => {
   const { getSilo } = await import("../middleware/silo.js");
   const silo = String(getSilo(res) ?? req.user?.silo ?? "BF").toUpperCase();
@@ -675,13 +721,13 @@ router.get("/sms/thread", safeHandler(async (req: any, res: any) => {
   try {
     const { rows } = await pool.query(
       `SELECT id, contact_id, from_number, to_number, direction, body,
-              media_url, created_at, read_at,
+              media_url, created_at, read_at, type, -- KS_WHATSAPP_v1 - 'sms' or 'whatsapp'
               -- BF_SERVER_BLOCK_v499 - Twilio's delivery result for outbound texts
               (SELECT d.status FROM sms_deliveries d WHERE d.message_sid = communications_messages.twilio_sid LIMIT 1) AS delivery_status,
               (SELECT d.error_code FROM sms_deliveries d WHERE d.message_sid = communications_messages.twilio_sid LIMIT 1) AS delivery_error
        FROM communications_messages
        WHERE ${where}
-         AND type = 'sms'
+         AND type IN ('sms', 'whatsapp')
        ORDER BY created_at ASC
        LIMIT 500`,
       params,
