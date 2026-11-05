@@ -223,7 +223,14 @@ export async function getQboClient(pool: Pool, cfg: QboConfig | null = qboConfig
     let res = await send(await accessToken(pool, cfg, c));
     if (res.status === 401) res = await send(await accessToken(pool, cfg, (await loadConnection(pool)) ?? c, true));
     const text = await res.text();
-    if (!res.ok) throw qboErrorFrom(res.status, text);
+    if (!res.ok) {
+      // KS_SERVER_INTUIT_TID - Intuit's transaction id, so Intuit support can find the failed call.
+      const tid = intuitTid(res);
+      console.warn("[quickbooks] api error", { method, path, status: res.status, intuit_tid: tid });
+      const err = qboErrorFrom(res.status, text);
+      if (tid) err.message += ` (intuit_tid ${tid})`;
+      throw err;
+    }
     return (text ? JSON.parse(text) : {}) as T;
   };
   return {
@@ -251,4 +258,11 @@ export async function fetchCompanyName(cfg: QboConfig, realmId: string, accessTo
     console.warn("[quickbooks] company info failed", { message: err instanceof Error ? err.message : String(err) });
     return null;
   }
+}
+
+/** KS_SERVER_INTUIT_TID - the intuit_tid response header (Intuit support's id for a call), or null. */
+export function intuitTid(res: unknown): string | null {
+  const h = (res as { headers?: { get?: (n: string) => string | null } } | null)?.headers;
+  const v = typeof h?.get === "function" ? h.get("intuit_tid") : null;
+  return v ? String(v).slice(0, 100) : null;
 }
