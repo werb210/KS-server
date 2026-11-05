@@ -51,7 +51,8 @@ describe("call scripts", () => {
 
   it("starter intake scripts are valid as they come", async () => {
     const starters = starterScripts();
-    expect(starters.map((s) => s.name)).toEqual(["Intake - term loan", "Intake - line of credit", "Intake - equipment"]);
+    expect(starters.map((s) => s.name)).toEqual(["Intake call", "Intake - term loan", "Intake - line of credit", "Intake - equipment"]);
+    expect(starters.every((s) => s.dialer_default === false)).toBe(true);
     for (const s of starters) expect((await validateScript(db() as any, s)).ok).toBe(true);
     expect(JSON.stringify(starters)).not.toMatch(/587.?888.?1837/);
   });

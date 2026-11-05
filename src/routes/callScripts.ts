@@ -49,12 +49,16 @@ async function save(req: any, res: any, id: string | null) {
   if (!v.ok) return res.status(400).json({ ok: false, error: "validation_error", message: Object.values(v.errors)[0], errors: v.errors });
   const s = v.value;
   try {
+    // KS_ONE_CALL_SCRIPT - one dialler script: choosing this one clears the old choice.
+    if (s.dialer_default) {
+      await db().query(`UPDATE call_scripts SET dialer_default = false, updated_at = now() WHERE dialer_default AND ($1::uuid IS NULL OR id <> $1::uuid)`, [id]);
+    }
     const r = id
-      ? await db().query(`UPDATE call_scripts SET name = $2, description = $3, use_for = $4, sections = $5::jsonb, updated_by = $6::uuid, updated_at = now() WHERE id = $1::uuid RETURNING *`,
-        [id, s.name, s.description, s.use_for, JSON.stringify(s.sections), actorId(req)])
-      : await db().query(`INSERT INTO call_scripts (name, description, use_for, sections, position, created_by, updated_by)
-          VALUES ($1, $2, $3, $4::jsonb, (SELECT COALESCE(max(position), 0) + 1 FROM call_scripts), $5::uuid, $5::uuid) RETURNING *`,
-        [s.name, s.description, s.use_for, JSON.stringify(s.sections), actorId(req)]);
+      ? await db().query(`UPDATE call_scripts SET name = $2, description = $3, use_for = $4, sections = $5::jsonb, dialer_default = $7, updated_by = $6::uuid, updated_at = now() WHERE id = $1::uuid RETURNING *`,
+        [id, s.name, s.description, s.use_for, JSON.stringify(s.sections), actorId(req), s.dialer_default])
+      : await db().query(`INSERT INTO call_scripts (name, description, use_for, sections, position, created_by, updated_by, dialer_default)
+          VALUES ($1, $2, $3, $4::jsonb, (SELECT COALESCE(max(position), 0) + 1 FROM call_scripts), $5::uuid, $5::uuid, $6) RETURNING *`,
+        [s.name, s.description, s.use_for, JSON.stringify(s.sections), actorId(req), s.dialer_default]);
     const script = rowToScript(r.rows[0]);
     await auditFor(req, id ? "call_script.updated" : "call_script.created", { name: script.name, sections: script.sections.length }, { type: "call_script", id: script.id });
     return res.status(id ? 200 : 201).json({ ok: true, script });
@@ -96,7 +100,8 @@ router.post("/:id/:action(archive|unarchive|duplicate)", ...admin, safeHandler(a
         VALUES ($1, $2, $3, $4::jsonb, (SELECT COALESCE(max(position), 0) + 1 FROM call_scripts), $5::uuid, $5::uuid) RETURNING *`,
         [`${row.name} (copy)`.slice(0, 120), row.description, row.use_for, JSON.stringify(row.sections), actorId(req)])).rows[0];
     } else {
-      out = (await db().query(`UPDATE call_scripts SET archived_at = ${action === "archive" ? "now()" : "NULL"}, updated_by = $2::uuid, updated_at = now() WHERE id = $1::uuid RETURNING *`, [row.id, actorId(req)])).rows[0];
+      // KS_ONE_CALL_SCRIPT: an archived script stops being the dialler script, so restoring never clashes.
+      out = (await db().query(`UPDATE call_scripts SET archived_at = ${action === "archive" ? "now(), dialer_default = false" : "NULL"}, updated_by = $2::uuid, updated_at = now() WHERE id = $1::uuid RETURNING *`, [row.id, actorId(req)])).rows[0];
     }
   } catch (err: any) {
     if (err?.code === "23505") return res.status(409).json({ ok: false, error: "duplicate_name", message: "An active script already has that name. Rename one first." });
