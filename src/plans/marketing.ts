@@ -65,6 +65,7 @@ export const MARKETING_TOOLS = [
   "ab_test",              // subject-line A/B test
   "send_time",            // send at each person's best time
   "funded_report",        // the campaign report with applications and funded deals
+  "landing_pages",        // KS_LANDING_PAGES_v1 - the landing-page builder (Marketing add-on only, Todd Nov 5)
 ] as const;
 export type MarketingTool = (typeof MARKETING_TOOLS)[number];
 
@@ -81,6 +82,7 @@ export const MARKETING_TOOL_LABELS: Record<MarketingTool, string> = {
   ab_test: "Subject-line A/B test",
   send_time: "Send at each person's best time",
   funded_report: "Campaign report with applications and funded deals",
+  landing_pages: "Landing pages",
 };
 
 /** Is the Marketing add-on in force: bought (pushed by Keystone operations), or a trial is running. */
@@ -178,6 +180,7 @@ export function addonSummary(): string[] {
     "Unlimited website lead forms, plus an AI chat widget and tracking script for your own website",
     "Full visitor history and session replay",
     "Full Google Ads tools: attribution, ad-waste report, Customer Match, Monday ads email and AI ads suggestions",
+    "Landing pages with a lead form, built in the portal", // KS_LANDING_PAGES_v1
     "Lead scoring",
     "Subject-line A/B test and send-time choice",
     "Campaign report with applications and funded deals by campaign",

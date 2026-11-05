@@ -4,10 +4,11 @@ import express from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { answerBySql, callsMatching } from "./helpers/answerBySql.js";
 
-const h = vi.hoisted(() => ({ query: vi.fn(), lead: vi.fn() }));
+const h = vi.hoisted(() => ({ query: vi.fn(), lead: vi.fn(), addon: true }));
 vi.mock("../db.js", async () => ({ ...(await vi.importActual<any>("../db.js")), pool: { query: h.query }, dbQuery: h.query, runQuery: h.query }));
 vi.mock("../marketing/kitLead.js", () => ({ submitKitLead: h.lead }));
 vi.mock("../routes/websiteKit.js", () => ({ formLimit: async () => ({ limit: null, extras: true }) }));
+vi.mock("../plans/marketing.js", async () => ({ ...(await vi.importActual<any>("../plans/marketing.js")), marketingAddonActive: () => h.addon }));
 
 import { accentColour, normalizeBlocks, renderPage, safeLink, savePage } from "../landingPages/pages.js";
 import publicRoutes, { PAGE_CSP } from "../routes/landingPagesPublic.js";
@@ -27,7 +28,7 @@ function app() {
 }
 
 beforeEach(() => {
-  h.query.mockReset(); h.lead.mockReset(); h.lead.mockResolvedValue({ contactId: "c1", created: true });
+  h.query.mockReset(); h.lead.mockReset(); h.addon = true; h.lead.mockResolvedValue({ contactId: "c1", created: true });
   h.query.mockImplementation(answerBySql([
     [/FROM landing_pages WHERE slug/, (_s: string, p?: unknown[]) => ({ rows: p![0] === "equipment-loans" ? [pageRow] : [] })],
     [/FROM website_kit_forms/, { rows: [kitForm] }],
@@ -82,6 +83,12 @@ describe("public page", () => {
     expect(res.text).toContain("Finance your next truck");
     expect(res.text).toContain(`action="/api/public/pages/equipment-loans/forms/${FORM}#form"`);
     expect(callsMatching(h.query, /SET views = views \+ 1/)).toHaveLength(1);
+  });
+  it("pauses published pages when the brokerage does not have the Marketing add-on", async () => {
+    h.addon = false;
+    expect((await request(app()).get("/api/public/pages/equipment-loans")).status).toBe(404);
+    expect((await request(app()).post(`/api/public/pages/equipment-loans/forms/${FORM}`).type("form").send({ full_name: "Pat", email: "pat@example.com" })).status).toBe(404);
+    expect(h.lead).not.toHaveBeenCalled();
   });
   it("404s an unknown or draft page", async () => {
     expect((await request(app()).get("/api/public/pages/nope")).status).toBe(404);

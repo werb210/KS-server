@@ -39,9 +39,19 @@ function send(res: any, html: string, status = 200) {
 const NOT_FOUND = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found</title></head>
 <body style="font:17px/1.6 Arial,sans-serif;color:#111827;background:#fff;max-width:560px;margin:48px auto;padding:0 20px"><h1>Page not found</h1><p>This page is not available.</p></body></html>`;
 
+/** KS_LANDING_PAGES_v1 - pages are a Marketing add-on tool: without the add-on, published pages are paused. */
+export async function pagesLive(): Promise<boolean> {
+  const { getPlanState } = await import("../plans/state.js");
+  const { marketingAddonActive } = await import("../plans/marketing.js");
+  try { return marketingAddonActive(await getPlanState(pool as any, Date.now())); } catch (err) {
+    logWarnSwallowed(err, "routes/landingPagesPublic.ts:plan");
+    return true; // a plan lookup failure must not take a brokerage's pages down
+  }
+}
+
 async function show(req: any, res: any, notice: { formId: string; ok: boolean; message: string } | null = null, status = 200) {
   const page = await publishedBySlug(pool as any, String(req.params.slug ?? ""));
-  if (!page) return send(res, NOT_FOUND, 404);
+  if (!page || !(await pagesLive())) return send(res, NOT_FOUND, 404);
   const brand = brandSettings() as any;
   const html = renderPage(page, {
     brand: brandName(), colour: accentColour(brand.primary_color), logoUrl: /^https:\/\//i.test(String(brand.logo_url ?? "")) ? String(brand.logo_url) : "",
@@ -59,7 +69,7 @@ router.get("/:slug", safeHandler(async (req: any, res: any) => show(req, res)));
 
 router.post("/:slug/forms/:formId", submitLimiter, safeHandler(async (req: any, res: any) => {
   const page = await publishedBySlug(pool as any, String(req.params.slug ?? ""));
-  if (!page) return send(res, NOT_FOUND, 404);
+  if (!page || !(await pagesLive())) return send(res, NOT_FOUND, 404);
   const formId = String(req.params.formId ?? "");
   const body = req.body ?? {};
   const thanks = (f?: KitForm) => ({ formId, ok: true, message: f?.thank_you || "Thanks. We will be in touch soon." });
