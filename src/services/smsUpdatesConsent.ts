@@ -46,12 +46,14 @@ export async function recordSmsUpdatesConsent(
   consent: boolean,
   source: SmsUpdatesSource,
   query?: Query,
+  lang: "en" | "fr" | "es" | null = null, // KS_CLIENT_LANGUAGES_v1 - the wording is stored in the language the client saw
 ): Promise<boolean> {
   const p10 = phone10(phone);
   if (!p10) return false;
   try {
     const q = query ?? (await defaultQuery());
-    await q(UPSERT_SMS_UPDATES_CONSENT_SQL, [p10, consent, consent ? SMS_UPDATES_CONSENT_TEXT : null, source]);
+    const { smsUpdatesConsentTextIn } = await import("../clientLanguage/language.js");
+    await q(UPSERT_SMS_UPDATES_CONSENT_SQL, [p10, consent, consent ? smsUpdatesConsentTextIn(lang, SMS_UPDATES_CONSENT_TEXT) : null, source]);
     console.info("[sms-updates-consent] recorded", { phone10: p10.slice(0, 3) + "*******", consent, source });
     return true;
   } catch (err) {

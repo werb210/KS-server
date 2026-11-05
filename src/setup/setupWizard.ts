@@ -42,6 +42,7 @@ export type Facts = {
   sender: boolean; // the company's mailing address and reply email (the marketing email footer)
   websiteKit: boolean; // a lead form, or the website addresses for the kit
   campaign: boolean; // a campaign this person sent
+  clientLanguages: boolean; // KS_CLIENT_LANGUAGES_v1 - the client app offers French or Spanish as well as English
 };
 
 export type StepDef = {
@@ -73,6 +74,12 @@ export function adminSteps(ctx: Ctx): StepDef[] {
       key: "brand", title: "Brand your portal and client app", link: "/settings/company", help: "brand-your-portal",
       why: "Your logo and colours appear in the portal, the client app and your emails.",
       detect: (f) => f.brand,
+    },
+    // KS_CLIENT_LANGUAGES_v1 - English is always on; French and Spanish are the brokerage's choice.
+    {
+      key: "client_languages", title: "Choose your clients' languages", link: "/settings/company", help: "brand-your-portal",
+      why: "Your client app can be in English, French and Spanish. Clients pick from the languages you offer.",
+      detect: (f) => f.clientLanguages, manual: true, optional: true, // English only is a fine answer: mark it done
     },
     {
       key: "team", title: "Add your team and roles", link: "/settings/users", help: "add-users-and-roles",
@@ -203,7 +210,7 @@ export function stepsFor(role: WizardRole, ctx: Ctx): StepDef[] {
 
 const NO_FACTS: Facts = {
   profile: false, signature: false, bookingLink: false, ownMicrosoft: false, ownGoogle: false, companyMicrosoft: false,
-  brand: false, team: false, phoneNumber: false, lender: false, imported: false, myContacts: 0, stripe: false,
+  brand: false, clientLanguages: false, team: false, phoneNumber: false, lender: false, imported: false, myContacts: 0, stripe: false,
   quickbooks: false, application: false, myApplication: false, dialler: false, sender: false, websiteKit: false, campaign: false,
 };
 
@@ -220,7 +227,7 @@ const yes = (rows: any[]) => rows.length > 0 && rows[0]?.ok === true;
 
 /** Which facts a role's list needs, so a Broker does not read company-wide tables it never shows. */
 const FACTS_FOR: Record<WizardRole, ReadonlyArray<keyof Facts>> = {
-  admin: ["profile", "brand", "team", "phoneNumber", "ownMicrosoft", "ownGoogle", "companyMicrosoft", "lender", "imported", "stripe", "quickbooks", "application"],
+  admin: ["profile", "brand", "clientLanguages", "team", "phoneNumber", "ownMicrosoft", "ownGoogle", "companyMicrosoft", "lender", "imported", "stripe", "quickbooks", "application"],
   broker: ["profile", "signature", "bookingLink", "ownMicrosoft", "ownGoogle", "dialler", "myContacts", "myApplication"],
   marketing: ["profile", "ownMicrosoft", "ownGoogle", "sender", "websiteKit", "imported", "myContacts", "campaign"],
 };
@@ -244,6 +251,8 @@ export async function detectFacts(db: Q, userId: string, role: WizardRole): Prom
     companyMicrosoft: () => fact(db, "companyMicrosoft",
       `SELECT (COALESCE(btrim(office365_tenant_id), '') <> '' OR COALESCE(m365_consent->>'tenant_id', '') <> '') AS ok
          FROM licensee_settings WHERE id = 1`, [], yes, false),
+    clientLanguages: () => fact(db, "clientLanguages",
+      `SELECT (COALESCE(client_languages, '') LIKE '%,%') AS ok FROM licensee_settings WHERE id = 1`, [], yes, false),
     brand: () => fact(db, "brand",
       `SELECT (COALESCE(btrim(logo_url), '') <> '' OR COALESCE(btrim(ops_branding->>'logo_url'), '') <> '') AS ok
          FROM licensee_settings WHERE id = 1`, [], yes, false),
