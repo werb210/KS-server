@@ -7,6 +7,7 @@
 // script as it was, so editing a script later never changes what an old run says.
 import { randomUUID } from "node:crypto";
 import { listDefinitions, writeRecordValues } from "../customFields/service.js";
+import { intakeCallScript } from "./intakeCall.js";
 import type { ObjectType } from "../customFields/definitions.js";
 
 export type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount?: number | null }> };
@@ -27,7 +28,11 @@ export type Question = {
   maps_to: { object: "contact" | "application"; field: string } | null;
 };
 export type Section = { id: string; title: string; body: string; questions: Question[] };
-export type Script = { id: string; name: string; description: string | null; use_for: UseFor; sections: Section[]; position: number; archived_at: string | null };
+export type Script = {
+  id: string; name: string; description: string | null; use_for: UseFor; sections: Section[]; position: number; archived_at: string | null;
+  /** KS_ONE_CALL_SCRIPT - the script the dialler opens first (at most one active). */
+  dialer_default: boolean;
+};
 
 const str = (v: unknown) => String(v ?? "").trim();
 const idOf = (v: unknown) => (/^[A-Za-z0-9_-]{1,40}$/.test(str(v)) ? str(v) : randomUUID().slice(0, 8));
@@ -75,7 +80,7 @@ export async function validateScript(db: Q, raw: any): Promise<{ ok: true; value
     return { id: idOf(s?.id), title, body: str(s?.body).slice(0, LIMITS.text), questions };
   });
   if (Object.keys(errors).length) return { ok: false, errors };
-  return { ok: true, value: { name, description, use_for, sections } };
+  return { ok: true, value: { name, description, use_for, dialer_default: raw?.dialer_default === true, sections } };
 }
 
 /** Starter scripts an Admin can add with one click and then edit (generic intake scripts by product). */
@@ -99,17 +104,18 @@ export function starterScripts(): Array<Omit<Script, "id" | "position" | "archiv
     q("Notes", "long_text"),
   ] };
   return [
-    { name: "Intake - term loan", description: "First call with a term loan or working capital lead.", use_for: "any", sections: [opening, business,
+    { ...intakeCallScript(), dialer_default: false }, // KS_ONE_CALL_SCRIPT
+    { name: "Intake - term loan", description: "First call with a term loan or working capital lead.", use_for: "any", dialer_default: false, sections: [opening, business,
       { id: "need", title: "The need", body: "Find out how much, what for and how soon.", questions: [
         q("Amount requested", "money", [], true), q("Use of funds", "single_select", ["Working capital", "Expansion", "Inventory", "Refinance debt", "Other"], true),
         q("How soon do they need the money?", "single_select", ["This week", "Within a month", "1-3 months", "Just exploring"]),
       ] }, close] },
-    { name: "Intake - line of credit", description: "First call with a line of credit lead.", use_for: "any", sections: [opening, business,
+    { name: "Intake - line of credit", description: "First call with a line of credit lead.", use_for: "any", dialer_default: false, sections: [opening, business,
       { id: "need", title: "The need", body: "A line is for ongoing needs; confirm it fits better than a term loan.", questions: [
         q("Limit requested", "money", [], true), q("How will they draw on it?", "long_text"),
         q("Do they have receivables lenders could look at?", "yes_no"),
       ] }, close] },
-    { name: "Intake - equipment", description: "First call with an equipment financing lead.", use_for: "any", sections: [opening, business,
+    { name: "Intake - equipment", description: "First call with an equipment financing lead.", use_for: "any", dialer_default: false, sections: [opening, business,
       { id: "equipment", title: "The equipment", body: "Lenders price on the asset: get the details.", questions: [
         q("What is the equipment?", "text", [], true), q("New or used", "single_select", ["New", "Used"], true),
         q("Purchase price", "money", [], true), q("Do they have a quote or invoice from the vendor?", "yes_no"),
@@ -177,5 +183,5 @@ export async function applyMappings(db: Q, sections: Section[], answers: Answers
 }
 
 export function rowToScript(r: any): Script {
-  return { id: String(r.id), name: r.name, description: r.description ?? null, use_for: r.use_for, sections: Array.isArray(r.sections) ? r.sections : [], position: Number(r.position ?? 0), archived_at: r.archived_at ? new Date(r.archived_at).toISOString() : null };
+  return { id: String(r.id), name: r.name, description: r.description ?? null, use_for: r.use_for, sections: Array.isArray(r.sections) ? r.sections : [], position: Number(r.position ?? 0), archived_at: r.archived_at ? new Date(r.archived_at).toISOString() : null, dialer_default: r.dialer_default === true };
 }
