@@ -183,7 +183,7 @@ describe("POST /api/plan/upgrade-request", () => {
     expect(r.status).toBe(200);
     expect(r.body).toEqual({ ok: true });
     const mail = sendMock.mock.calls[0][0];
-    expect(mail.to).toEqual(["keystone@boreal.financial"]);
+    expect(mail.to).toEqual(["sales@keystonecrm.online"]);
     expect(mail.subject).toContain("+ 1 x 50 GB");
     expect(mail.text).toContain("Current plan: starter");
     expect(mail.text).toContain("Extra storage blocks requested: 1");
