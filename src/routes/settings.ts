@@ -26,6 +26,8 @@ router.use(requireAuth);
 router.use(requireCapability([CAPABILITIES.SETTINGS_READ]));
 
 const requireAdminWrite = requireAuthorization({ roles: [ROLES.ADMIN] });
+// KS_SETTINGS_YOU - AI Knowledge is under YOU in Settings for every Broker (Staff), Marketing and Admin user.
+const requireKnowledgeWrite = requireAuthorization({ roles: [ROLES.ADMIN, ROLES.STAFF, ROLES.MARKETING] });
 
 router.get("/", safeHandler((_req: any, res: any) => {
   respondOk(res, { status: "ok" });
@@ -71,7 +73,7 @@ router.get("/me", safeHandler(async (req: any, res: any) => {
 
 router.post(
   "/ai-knowledge",
-  requireAdminWrite,
+  requireKnowledgeWrite,
   knowledgeUpload.single("file"),
   safeHandler(async (req: any, res: any) => {
     try {
@@ -108,7 +110,7 @@ router.get("/ai-knowledge", safeHandler(async (_req: any, res: any) => {
   respondOk(res, { documents: rows });
 }));
 
-router.post("/ai-knowledge/text", requireAdminWrite, safeHandler(async (req: any, res: any) => {
+router.post("/ai-knowledge/text", requireKnowledgeWrite, safeHandler(async (req: any, res: any) => {
   const content = typeof req.body?.content === "string" ? req.body.content.trim() : "";
   const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
   if (!content) {
@@ -137,7 +139,7 @@ router.post("/ai-knowledge/text", requireAdminWrite, safeHandler(async (req: any
   }
 }));
 
-router.delete("/ai-knowledge/:id", requireAdminWrite, safeHandler(async (req: any, res: any) => {
+router.delete("/ai-knowledge/:id", requireKnowledgeWrite, safeHandler(async (req: any, res: any) => {
   const id = String(req.params.id ?? "").trim();
   if (!id) {
     return res.status(400).json({ error: { code: "validation_error", message: "id required" } });
@@ -207,7 +209,7 @@ function htmlToText(html: string): string {
     .trim();
 }
 
-router.post("/ai-knowledge/url", requireAdminWrite, safeHandler(async (req: any, res: any) => {
+router.post("/ai-knowledge/url", requireKnowledgeWrite, safeHandler(async (req: any, res: any) => {
   const url = typeof req.body?.url === "string" ? req.body.url.trim() : "";
   if (!/^https?:\/\//i.test(url)) {
     return res.status(400).json({ error: { code: "validation_error", message: "valid http(s) url required" } });
