@@ -195,6 +195,7 @@ import clientBrokerRoutes from "./clientBroker.js"; // KS_BROKER_TOOLS
 import dealDeskRoutes from "./dealDesk.js"; // KS_BROKER_TOOLS_2
 import vendorPortalRoutes from "./vendorPortal.js"; // KS_BROKER_TOOLS_VENDORS
 import clientCreditRoutes from "./clientCredit.js"; // KS_BROKER_TOOLS_CREDIT_BUREAU
+import lenderUpdatesRoutes from "./lenderUpdates.js"; // BF_SERVER_v890_MAYA_LENDER_UPDATES (KS port)
 import { safeHandler } from "../middleware/safeHandler.js"; // BF_SERVER_v789_SAFE_HANDLERS
 import emailPreferencesRoutes from "./emailPreferences.js"; // KS_EMAIL_SUBSCRIPTION_TYPES_v1
 import { metaIntegrationRoutes, metaWebhookRoutes } from "./metaLeads.js"; // KS_META_LEAD_ADS_v1
@@ -352,6 +353,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/client/documents-needed", router: clientDocumentsNeededRoutes },
   // KS_BROKER_TOOLS - deal tools (each route gates its own plan feature) and the client app's side of them.
   { path: "/broker-tools", router: brokerToolsRoutes },
+  { path: "/lender-updates", router: lenderUpdatesRoutes }, // BF_SERVER_v890_MAYA_LENDER_UPDATES - Maya-proposed lender changes
   { path: "/client-broker", router: clientBrokerRoutes },
   // KS_BROKER_TOOLS_2 - invoices, credit lines, rate cards and structuring, scorecards, contracts, vendors, bureau.
   { path: "/deal-desk", router: dealDeskRoutes },
