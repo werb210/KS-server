@@ -26,6 +26,7 @@ import { safeHandler } from "../../middleware/safeHandler.js";
 import { dbQuery } from "../../db.js";
 import { principalFromRequest } from "../../auth/principal.js"; // BF_SERVER_v812_CLIENT_MSG_CONTACT_LINK
 import { AppError } from "../../middleware/errors.js";
+import clientLanguageRouter from "../../clientLanguage/routes.js"; // KS_CLIENT_LANGUAGES_v1
 import {
   clientApplicationOwnershipGuard,
   normalizeApplicationIdCandidate,
@@ -41,6 +42,7 @@ router.use(fraudSignalsRouter); // KS_SERVER_v9_FRAUD - device and behaviour bea
 router.use(uploadFailureRouter); // BF_SERVER_UPLOAD_DIAG_v751 - upload-failure beacon, same reason
 router.use(deviceSignInRouter); // BF_SERVER_CLIENT_FACE_ID_v296 - public sign-in must not need an app id
 router.use(passkeysRouter); // BF_SERVER_BLOCK_v599 - passkey sign-in, before the app-id checks
+router.use(clientLanguageRouter); // KS_CLIENT_LANGUAGES_v1 - PUT /language (sign-in token, no app id)
 // BF_SERVER_CLIENT_APP_VERSION_v744 - phone apps built before this date are missing features the server now
 // relies on (fee agreement signing, to-do buttons). The app compares its own build time and asks the client to
 // update instead of showing buttons that do nothing. Raise CLIENT_APP_MIN_BUILD when a change needs a new app.
@@ -562,7 +564,8 @@ router.post(
     if (!phone) { res.status(401).json({ error: "unauthorized" }); return; }
     if (typeof req.body?.smsUpdates !== "boolean") { res.status(400).json({ error: "smsUpdates_boolean_required" }); return; }
     const { recordSmsUpdatesConsent } = await import("../../services/smsUpdatesConsent.js");
-    const ok = await recordSmsUpdatesConsent(phone, req.body.smsUpdates, "client_portal");
+    const { asLang: langOf } = await import("../../clientLanguage/language.js"); // KS_CLIENT_LANGUAGES_v1
+    const ok = await recordSmsUpdatesConsent(phone, req.body.smsUpdates, "client_portal", undefined, langOf(req.headers["x-client-language"]));
     if (!ok) { res.status(503).json({ error: "not_saved" }); return; }
     res.status(200).json({ ok: true, smsUpdates: req.body.smsUpdates });
   })

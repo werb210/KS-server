@@ -1385,8 +1385,14 @@ router.post(
           appBlob.marketing_sms_consent ??
           (req.body as any)?.marketing_sms_consent ??
           null;
+        // KS_CLIENT_LANGUAGES_v1 - the language the client used (X-Client-Language): saved on both people, and the
+        // opt-in is recorded in the words they saw.
+        const { asLang, marketingSmsOptinTextIn } = await import("../../clientLanguage/language.js");
+        const { brandName: brandNow } = await import("../../licensee/brand.js");
+        const clientLang = asLang(req.headers["x-client-language"]);
         for (const c of [applicant, partner]) {
           if (!c) continue;
+          if (clientLang) await tx.query(`UPDATE contacts SET preferred_language = $2 WHERE id = $1`, [c.id, clientLang]);
           if (marketingOptIn === true && c === applicant) {
             await tx.query(
               `UPDATE contacts
@@ -1397,7 +1403,7 @@ router.post(
                       consent_text   = $2,
                       updated_at     = now()
                 WHERE id = $1`,
-              [c.id, marketingSmsOptinText()],
+              [c.id, clientLang && clientLang !== "en" ? marketingSmsOptinTextIn(clientLang, brandNow()) : marketingSmsOptinText()],
             );
           } else {
             const { RECORD_INQUIRY_CONSENT_SQL } = await import("../../services/smsConsent.js");

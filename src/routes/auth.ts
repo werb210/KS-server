@@ -196,11 +196,18 @@ router.post("/otp/start", otpStartLimiter, async (req, res) => {
     }
 
     const client = getTwilioClient();
+    // KS_CLIENT_LANGUAGES_v1 - the code's text in the client's language (the app sends it; else the saved one).
+    const { asLang, languageForPhone, verifyLocale } = await import("../clientLanguage/language.js");
+    const { pool: langPool } = await import("../db.js");
+    const otpLang = asLang((req.body as any)?.lang ?? req.headers["x-client-language"])
+      ?? await languageForPhone(langPool as any, phone).catch((err: unknown) => { console.warn("[auth.otpStart] language lookup failed", String(err)); return null; });
+    const locale = verifyLocale(otpLang);
     const verification = await client.verify.v2
       .services(serviceSid)
       .verifications.create({
         to: phone,
         channel: "sms",
+        ...(locale ? { locale } : {}),
       });
 
     return res.status(200).json({
@@ -316,7 +323,17 @@ router.post("/otp/verify", otpVerifyLimiter, async (req, res) => {
     // who said yes before keeps it, and can switch it off in the client portal or by replying STOP).
     if (String((req.body ?? {}).userType ?? "") === "client" && (req.body ?? {}).sms_updates_consent === true) {
       const { recordSmsUpdatesConsent } = await import("../services/smsUpdatesConsent.js");
-      await recordSmsUpdatesConsent(phone, true, "sign_in");
+      const { asLang: langOf } = await import("../clientLanguage/language.js"); // KS_CLIENT_LANGUAGES_v1
+      await recordSmsUpdatesConsent(phone, true, "sign_in", undefined, langOf(req.headers["x-client-language"]));
+    }
+    // KS_CLIENT_LANGUAGES_v1 - a client signing in with French or Spanish chosen: keep it on their contact.
+    if (String((req.body ?? {}).userType ?? "") === "client") {
+      const { asLang, setLanguageForPhone } = await import("../clientLanguage/language.js");
+      const chosen = asLang(req.headers["x-client-language"]);
+      if (chosen) {
+        const { pool: langPool } = await import("../db.js");
+        await setLanguageForPhone(langPool as any, phone, chosen).catch((err: unknown) => console.warn("[auth.otpVerify] language save failed", String(err)));
+      }
     }
 
     // BF_SERVER_BLOCK_v146_OTP_CLIENT_FALLTHROUGH_PORTED_v1 - port the v145

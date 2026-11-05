@@ -59,6 +59,7 @@ function rules(): SqlRule[] {
     [/FROM google_workspace_accounts/, () => ok("ownGoogle")],
     [/office365_tenant_id/, () => ok("companyMicrosoft")],
     [/logo_url/, () => ok("brand")],
+    [/client_languages/, () => ok("clientLanguages")], // KS_CLIENT_LANGUAGES_v1
     [/count\(\*\) > 1\) AS ok FROM users/, () => ok("team")],
     [/FROM phone_numbers/, () => ok("phoneNumber")],
     [/FROM lenders/, () => ok("lender")],
@@ -96,19 +97,19 @@ beforeEach(() => {
 });
 
 describe("each role's list", () => {
-  it("Admin: the nine brokerage set-up steps in order, each linking to an existing page with a help article", async () => {
+  it("Admin: the ten brokerage set-up steps in order, each linking to an existing page with a help article", async () => {
     const r = await get(ADMIN);
     expect(r.status).toBe(200);
     expect(r.body.role).toBe("admin");
-    expect(keys(r.body)).toEqual(["profile", "brand", "team", "phone", "email", "lenders", "import", "payments", "test_link"]);
+    expect(keys(r.body)).toEqual(["profile", "brand", "client_languages", "team", "phone", "email", "lenders", "import", "payments", "test_link"]);
     expect(r.body.steps.map((s: any) => s.link)).toEqual([
-      "/settings/profile", "/settings/company", "/settings/users", "/settings/phone", "/settings/connections", "/lenders",
+      "/settings/profile", "/settings/company", "/settings/company", "/settings/users", "/settings/phone", "/settings/connections", "/lenders",
       "/settings/import", "/settings/payments", "/crm/contacts",
     ]);
     expect(step(r.body, "brand").help_slug).toBe("brand-your-portal");
     expect(step(r.body, "payments")).toMatchObject({ title: "Payments and QuickBooks", optional: true });
     expect(step(r.body, "test_link").external_url).toMatch(/^https:\/\//);
-    expect(r.body).toMatchObject({ done: 0, total: 9, complete: false, dismissed: false });
+    expect(r.body).toMatchObject({ done: 0, total: 10, complete: false, dismissed: false });
     for (const s of r.body.steps) {
       expect(s.status).toBe("todo");
       expect(s.title).not.toMatch(/[A-Z_]{4,}|_/);
@@ -149,10 +150,10 @@ describe("each role's list", () => {
 
 describe("detection from existing data", () => {
   it("Admin steps tick themselves off from the brokerage's data", async () => {
-    world.ok = { profile: true, brand: true, team: true, phoneNumber: true, ownMicrosoft: true, companyMicrosoft: true, lender: true, imported: true, quickbooks: true, application: true };
+    world.ok = { profile: true, brand: true, clientLanguages: true, team: true, phoneNumber: true, ownMicrosoft: true, companyMicrosoft: true, lender: true, imported: true, quickbooks: true, application: true };
     const r = await get(ADMIN);
-    expect(r.body.steps.map((s: any) => s.status)).toEqual(Array(9).fill("done"));
-    expect(r.body).toMatchObject({ done: 9, total: 9, complete: true });
+    expect(r.body.steps.map((s: any) => s.status)).toEqual(Array(10).fill("done"));
+    expect(r.body).toMatchObject({ done: 10, total: 10, complete: true });
   });
 
   it("Microsoft needs the company approval as well as your own sign-in; Google is enough on its own", async () => {
@@ -215,7 +216,7 @@ describe("status changes", () => {
   });
 
   it("skipping every remaining step completes the wizard; a detected step overrides a skip", async () => {
-    world.progress = ["profile", "brand", "team", "phone", "email", "lenders", "import", "payments", "test_link"].map((k) => ({ user_id: ADMIN, step_key: k, status: "skipped" }));
+    world.progress = ["profile", "brand", "client_languages", "team", "phone", "email", "lenders", "import", "payments", "test_link"].map((k) => ({ user_id: ADMIN, step_key: k, status: "skipped" }));
     world.ok = { lender: true };
     const r = await get(ADMIN);
     expect(r.body.complete).toBe(true);

@@ -4,6 +4,7 @@
 // colours come from the licensee_settings row (edited by the licensee's admin through PUT /api/licensee), falling back
 // to the KS_* App Service settings, then to neutral defaults. Nothing here is Boreal's.
 import { clientUrl, portalUrl, serverUrl, websiteUrl } from "./urls.js";
+import { normaliseLanguages } from "../clientLanguage/language.js"; // KS_CLIENT_LANGUAGES_v1
 import { tenantLocal } from "../tenancy/context.js"; // KS_SHARED_HOSTING_v1
 
 type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[] }> };
@@ -14,6 +15,7 @@ export const LICENSEE_FIELDS = [
   "mailing_address", // KS_SERVER_v5_MAILING_ADDRESS
   "workspace_provider", // KS_SERVER_v12_GOOGLE_WORKSPACE - m365 | google | both: which Connect buttons staff see
   "background_color", "font_family", // KS_SERVER_v14_BRAND_FONT - "" = the app's own default
+  "client_languages", // KS_CLIENT_LANGUAGES_v1 - "en,fr,es": the languages the client app offers
 ] as const;
 export type LicenseeField = (typeof LICENSEE_FIELDS)[number];
 
@@ -82,6 +84,7 @@ const ENV_NAMES: Record<LicenseeField, string> = {
   mailing_address: "KS_MAILING_ADDRESS",
   workspace_provider: "KS_WORKSPACE_PROVIDER",
   background_color: "KS_BACKGROUND_COLOR", font_family: "KS_FONT_FAMILY",
+  client_languages: "KS_CLIENT_LANGUAGES",
 };
 
 /** KS_SERVER_v8_USAGE - the time zone a licensee gets when it sets none. */
@@ -93,6 +96,7 @@ const NEUTRAL: LicenseeSettings = {
   time_zone: DEFAULT_LICENSEE_TIME_ZONE, country: "CA", mailing_address: "",
   workspace_provider: "m365", // today's behaviour: Microsoft 365 only
   background_color: "", font_family: "", // KS_SERVER_v14_BRAND_FONT - unset: each app keeps its own background and font
+  client_languages: "en", // KS_CLIENT_LANGUAGES_v1 - English only until the brokerage adds French or Spanish
 };
 
 export function envDefaults(env: NodeJS.ProcessEnv = process.env): LicenseeSettings {
@@ -128,6 +132,8 @@ export function checkField(field: LicenseeField, raw: unknown): { ok: true; valu
     try { if (valid) new Intl.DateTimeFormat("en-CA", { timeZone: value }); } catch { valid = false; }
     if (!valid) return { ok: false, error: "time_zone must be an IANA time zone like America/Edmonton or America/Toronto" };
   }
+  // KS_CLIENT_LANGUAGES_v1 - en, fr and es only; English always first.
+  if (field === "client_languages") return { ok: true, value: normaliseLanguages(value) };
   if (field === "workspace_provider") {
     const v = value.toLowerCase();
     if (v !== "m365" && v !== "google" && v !== "both") return { ok: false, error: "workspace_provider must be m365, google or both" };
