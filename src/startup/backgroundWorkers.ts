@@ -9,6 +9,9 @@ export async function startBackgroundWorkers(
   workerStagger: () => Promise<void>,
   workerStops: Array<() => void>,
 ): Promise<void> {
+  // KS_SERVER_VENDOR_KEYS - the brokerage's own verification-service keys, loaded before any worker reads them.
+  try { const { startVendorKeyRefresher } = await import("../integrations/vendorKeys.js"); const w = startVendorKeyRefresher(pool as any); workerStops.push(w.stop); }
+  catch (err) { console.error("[startup] vendor key refresher failed to start:", err); }
   const { startOcrWorker } = await import("../modules/ocr/ocr.worker.js");
   const { startBankingAutoWorker } = await import("../workers/bankingAutoWorker.js");
   // KS_SERVER_TEXTING_REGISTRATION - texting registration state in memory on every instance (the SMS senders read it).
