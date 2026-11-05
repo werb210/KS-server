@@ -8,6 +8,8 @@ import { pool } from "../../db.js";
 import { AppleWatchApnsProvider } from "../../watch/apnsProvider.js";
 import type { WatchPushProvider } from "../../watch/notifications.js";
 import { getFcmProvider } from "../fcmProvider.js";
+import { wants } from "../../notificationPrefs/prefs.js"; // KS_NOTIFICATION_TOPICS_v1
+import { STAFF_ALERT_TOPIC } from "../../notificationPrefs/topics.js";
 
 // BF_SERVER_v823_PUSH - TASK / task_due: task reminders and the "due today" digest reach the phone and iPad too.
 export const STAFF_ALERT_CATEGORIES = ["MISSED_CALL", "VOICEMAIL", "CLIENT_MESSAGE", "SMS", "HANDOFF", "TASK"] as const;
@@ -198,6 +200,9 @@ export async function sendStaffAlert(input: StaffAlertInput, dependencies: { que
   if (!provider && !portalProvider && !fcm) return 0;
   if (!STAFF_ALERT_CATEGORIES.includes(input.category)) return 0;
   const query = dependencies.query ?? pool.query.bind(pool);
+  // KS_NOTIFICATION_TOPICS_v1 - nothing for a person who turned push off for this topic.
+  const topic = STAFF_ALERT_TOPIC[input.category];
+  if (topic && !(await wants(input.userId, topic, "push", { query } as any))) return 0;
   const dialerPayload = buildStaffAlertPayload(input);
   // BF_SERVER_v823_PUSH - the iPad portal routes a tap by url (a portal path).
   const portalUrl = portalAlertUrl(input.data?.url);

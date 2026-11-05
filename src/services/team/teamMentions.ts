@@ -74,7 +74,7 @@ export async function notifyTeamMentions(input: { channelId: string; messageId: 
       );
       if (r.rows[0]) {
         inserted += 1;
-        void pushToUser(userId, title, snippet, url);
+        void pushToUser(userId, title, snippet, url, "mentions"); // KS_NOTIFICATION_TOPICS_v1
       }
     }
     return inserted;

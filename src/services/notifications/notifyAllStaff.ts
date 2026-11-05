@@ -4,6 +4,8 @@ import { safeErr } from "../../lib/safeErr.js";
 import { sendSMS } from "../smsService.js";
 import { sendWatchNotification, type WatchEventType, type WatchNotificationCategory } from "../../watch/notifications.js";
 import { logWarnSwallowed } from "../../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
+import { usersWhoMuted } from "../../notificationPrefs/prefs.js"; // KS_NOTIFICATION_TOPICS_v1
+import { topicForType, type Channel } from "../../notificationPrefs/topics.js";
 // BF_SERVER_v820_WATCH_CALLS - lock-screen alerts on the staff iPhone dialler, next to browser push and the Watch.
 import { sendStaffAlert, type StaffAlertCategory, type StaffAlertData, type StaffAlertType } from "./staffAlerts.js";
 
@@ -125,10 +127,20 @@ export async function notifyAllStaff(ctx: NotifyAllStaffCtx, dependencies: {
   let smsSent = 0;
   let notifsCreated = 0;
 
+  // KS_NOTIFICATION_TOPICS_v1 - who turned this topic off, per channel (one query each for the whole fan-out).
+  const topic = topicForType(ctx.notificationType);
+  const ids = recipients.rows.map((u) => u.id);
+  const muted: Record<Channel, Set<string>> = { bell: new Set(), push: new Set(), text: new Set() };
+  for (const channel of ["bell", "push", "text"] as const) {
+    try { muted[channel] = await usersWhoMuted(ids, topic, channel, ctx.pool as any); } catch (err) {
+      console.warn(JSON.stringify({ event: "notification_prefs_lookup_failed", topic, channel, error: safeErr(err).slice(0, 200) }));
+    }
+  }
+
   await Promise.all(
     recipients.rows.map(async (user) => {
       // SMS via Twilio.
-      if (!ctx.skipSms && user.phone_number && user.phone_number.trim().length > 0) {
+      if (!ctx.skipSms && !muted.text.has(user.id) && user.phone_number && user.phone_number.trim().length > 0) {
         try {
           const r = await sendText(user.phone_number, ctx.body);
           if (r && (r as { success?: boolean }).success) smsSent += 1;
@@ -138,8 +150,8 @@ export async function notifyAllStaff(ctx: NotifyAllStaffCtx, dependencies: {
         }
       }
 
-      // In-app notification record.
-      try {
+      // In-app notification record. KS_NOTIFICATION_TOPICS_v1 - skipped for a person who turned the bell off for this topic.
+      if (!muted.bell.has(user.id)) try {
         await ctx.pool.query(
           `INSERT INTO notifications
              (id, user_id, type, title, ref_table, ref_id, body, context_url, is_read, created_at)
@@ -157,12 +169,12 @@ export async function notifyAllStaff(ctx: NotifyAllStaffCtx, dependencies: {
           ],
         );
         notifsCreated += 1;
-        void pushBrowser(user.id, ctx.title ?? humanizeType(ctx.notificationType), ctx.body ?? "", ctx.contextUrl ?? "/"); // BF_SERVER_BLOCK_v_NOTIF_PUSH_v1
       } catch (err) {
         console.warn(`[notifyAllStaff] notification insert failed for user=${user.id}`, safeErr(err));
       }
+      if (!muted.push.has(user.id)) void pushBrowser(user.id, ctx.title ?? humanizeType(ctx.notificationType), ctx.body ?? "", ctx.contextUrl ?? "/"); // BF_SERVER_BLOCK_v_NOTIF_PUSH_v1
 
-      if (ctx.watch) {
+      if (ctx.watch && !muted.push.has(user.id)) {
         try {
           await sendWatch({
             staffUserId: user.id,
@@ -180,7 +192,7 @@ export async function notifyAllStaff(ctx: NotifyAllStaffCtx, dependencies: {
         }
       }
 
-      if (ctx.staffAlert) {
+      if (ctx.staffAlert && !muted.push.has(user.id)) {
         // BF_SERVER_v820_WATCH_CALLS - best-effort; sendStaffAlert logs its own per-device failures.
         try {
           await sendAlert({

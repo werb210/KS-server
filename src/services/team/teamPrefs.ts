@@ -104,7 +104,7 @@ export async function pushTeamMessage(channelId: string, message: { sender_id: s
     const snippet = String(message.body ?? "").replace(/\s+/g, " ").trim().slice(0, 140) || "Sent an attachment";
     for (const r of who) {
       const title = r.mentioned ? sender + " mentioned you" + (where !== sender ? " in " + where : "") : where;
-      void pushToUser(r.userId, title, (where !== sender ? sender + ": " : "") + snippet, "/communications?tab=team&channel=" + channelId);
+      void pushToUser(r.userId, title, (where !== sender ? sender + ": " : "") + snippet, "/communications?tab=team&channel=" + channelId, "mentions"); // KS_NOTIFICATION_TOPICS_v1
     }
     return who.length;
   } catch (err: any) {

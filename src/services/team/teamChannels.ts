@@ -98,7 +98,7 @@ export async function pushThreadReply(channelId: string, rootId: string, message
     const sender = meta.rows[0]?.sender ?? "Team";
     const where = meta.rows[0]?.kind === "channel" && meta.rows[0]?.name ? " in #" + meta.rows[0].name : "";
     const snippet = String(message.body ?? "").replace(/\s+/g, " ").trim().slice(0, 140) || "Sent an attachment";
-    for (const r of who) void pushToUser(r.userId, sender + " replied in a thread" + where, snippet, "/communications?tab=team&channel=" + channelId + "&thread=" + rootId);
+    for (const r of who) void pushToUser(r.userId, sender + " replied in a thread" + where, snippet, "/communications?tab=team&channel=" + channelId + "&thread=" + rootId, "mentions");
     return who.length;
   } catch (err: any) { logError("team_thread_push_failed", { channelId, rootId, message: err?.message }); return 0; }
 }
