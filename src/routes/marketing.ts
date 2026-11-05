@@ -134,34 +134,34 @@ function pageErr(res: any, err: unknown): boolean {
   if (err instanceof PageError) { res.status(err.status).json({ error: { code: err.code, message: err.message } }); return true; }
   return false;
 }
-router.get("/landing-pages", safeHandler(async (req: any, res: any) => {
+router.get("/landing-pages", requireMarketingTool("landing_pages"), safeHandler(async (req: any, res: any) => {
   const pages = await listPages(pool as any, resolveSiloFromRequest(req));
   respondOk(res, { pages: pages.map((p) => ({ ...p, url: pageUrl(p.slug) })) });
 }));
-router.get("/landing-pages/:id", safeHandler(async (req: any, res: any) => {
+router.get("/landing-pages/:id", requireMarketingTool("landing_pages"), safeHandler(async (req: any, res: any) => {
   const page = await getPage(pool as any, resolveSiloFromRequest(req), String(req.params.id));
   if (!page) { res.status(404).json({ error: { code: "not_found", message: "Page not found." } }); return; }
   respondOk(res, { page: { ...page, url: pageUrl(page.slug) } });
 }));
-router.post("/landing-pages", safeHandler(async (req: any, res: any) => {
+router.post("/landing-pages", requireMarketingTool("landing_pages"), safeHandler(async (req: any, res: any) => {
   try {
     const page = await savePage(pool as any, resolveSiloFromRequest(req), req.body ?? {}, req.user?.userId ?? null);
     respondOk(res, { page: { ...page, url: pageUrl(page.slug) } });
   } catch (err) { if (!pageErr(res, err)) throw err; }
 }));
-router.put("/landing-pages/:id", safeHandler(async (req: any, res: any) => {
+router.put("/landing-pages/:id", requireMarketingTool("landing_pages"), safeHandler(async (req: any, res: any) => {
   try {
     const page = await savePage(pool as any, resolveSiloFromRequest(req), req.body ?? {}, req.user?.userId ?? null, String(req.params.id));
     respondOk(res, { page: { ...page, url: pageUrl(page.slug) } });
   } catch (err) { if (!pageErr(res, err)) throw err; }
 }));
-router.delete("/landing-pages/:id", safeHandler(async (req: any, res: any) => {
+router.delete("/landing-pages/:id", requireMarketingTool("landing_pages"), safeHandler(async (req: any, res: any) => {
   const ok = await deletePage(pool as any, resolveSiloFromRequest(req), String(req.params.id));
   if (!ok) { res.status(404).json({ error: { code: "not_found", message: "Page not found." } }); return; }
   respondOk(res, { deleted: true });
 }));
 /** The page as it would look, from unsaved blocks (shown in a sandboxed frame in the builder). */
-router.post("/landing-pages/preview", safeHandler(async (req: any, res: any) => {
+router.post("/landing-pages/preview", requireMarketingTool("landing_pages"), safeHandler(async (req: any, res: any) => {
   const b = req.body ?? {};
   const { listForms } = await import("../marketing/websiteKit.js");
   const forms = new Map((await listForms(pool as any)).filter((f) => f.active).map((f) => [f.id, f]));

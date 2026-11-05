@@ -127,7 +127,7 @@ describe("Plan page block", () => {
   it("shows the add-on, how it is in force and which tools come from the plan or the add-on", () => {
     const b = marketingBlock(st({ plan: "growth" }), NOW);
     expect(b.addon).toMatchObject({ key: "marketing", price: 49, active: false, purchased: false, via: null, marketing_seats: 3 });
-    expect(b.addon.adds).toHaveLength(10);
+    expect(b.addon.adds).toHaveLength(11); // KS_LANDING_PAGES_v1 - landing pages joined the add-on
     expect(b.tools).toMatchObject({ session_replay: "plan", google_ads_full: null, lead_scoring: null });
     const t = marketingBlock(st({ plan: "starter", service_status: "trial" }), NOW);
     expect(t.addon).toMatchObject({ active: true, purchased: false, via: "trial" });
