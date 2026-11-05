@@ -9,7 +9,7 @@ import { rateLimitKeyFromRequest } from "../../middleware/clientIp.js";
 import type { Q } from "../../plans/state.js";
 import { parseSignals, recordSignals } from "../../fraud/deviceSignals.js";
 import { allowedChecks } from "../../fraud/store.js";
-import { ipinfoProvider } from "../../fraud/providers/lookups.js";
+import { fraudProviders } from "../../fraud/providers/index.js";
 
 const router = Router();
 
@@ -29,7 +29,7 @@ router.post("/fraud-signals", limiter, (req, res) => {
   void (async () => {
     try {
       const db = pool as unknown as Q;
-      await recordSignals(db, parsed, { ip: req.ip ?? null, allowed: await allowedChecks(db), ipIntel: ipinfoProvider() });
+      await recordSignals(db, parsed, { ip: req.ip ?? null, allowed: await allowedChecks(db), ipIntel: fraudProviders().ipIntel }); // KS_SERVER_FREE_IP_CHECK
     } catch (err) {
       console.warn("[fraud] device signals not stored", { message: (err as Error)?.message ?? String(err) });
     }
