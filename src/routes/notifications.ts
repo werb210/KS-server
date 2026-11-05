@@ -5,6 +5,8 @@ import { AppError } from "../middleware/errors.js";
 import { safeHandler } from "../middleware/safeHandler.js";
 import { deleteAllForUser, deleteForUser, listForUser, markAllRead, markRead, unreadCount } from "../services/notifications/notifications.service.js";
 import { categoryManifest } from '../services/push/pushCategories.js'; // v126-push-categories
+import { saveSettings, settingsFor } from "../notificationPrefs/prefs.js"; // KS_NOTIFICATION_TOPICS_v1
+import { CHANNELS, TOPICS } from "../notificationPrefs/topics.js";
 
 const router = Router();
 
@@ -25,6 +27,31 @@ router.get(
     const items = await listForUser(userId, { unreadOnly, limit: Number.isFinite(limit) ? limit : 50 });
     const unread = await unreadCount(userId);
     res.status(200).json({ ok: true, items, unread_count: unread });
+  })
+);
+
+// KS_NOTIFICATION_TOPICS_v1 - the signed-in person's notification settings per topic.
+router.get(
+  "/settings",
+  requireAuth,
+  safeHandler(async (req: any, res: any) => {
+    const userId = userIdOf(req);
+    res.status(200).json({
+      ok: true,
+      channels: CHANNELS,
+      topics: TOPICS.map((t) => ({ key: t.key, label: t.label, description: t.description, locked: t.locked ?? [] })),
+      settings: await settingsFor(userId),
+    });
+  })
+);
+
+router.put(
+  "/settings",
+  requireAuth,
+  safeHandler(async (req: any, res: any) => {
+    const userId = userIdOf(req);
+    const settings = await saveSettings(userId, req.body?.settings);
+    res.status(200).json({ ok: true, settings });
   })
 );
 

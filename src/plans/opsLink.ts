@@ -29,7 +29,8 @@ export async function postToOps(
     | "staff-directory"
     | "beta/enrolment" | "beta/feedback" // KS_SERVER_BETA_v1
     | `tickets/${string}/messages` // KS_SERVER_v17_TICKET_FOLLOW_UPS
-    | "kb/search" | "kb/article" | "kb/categories" | "kb/ask", // KS_SERVER_KB_v1 - the Help Center (helpCenter/helpCenter.ts)
+    | "kb/search" | "kb/article" | "kb/categories" | "kb/ask" // KS_SERVER_KB_v1 - the Help Center (helpCenter/helpCenter.ts)
+    | "meta-pages", // KS_META_LEAD_ADS_v1 - which Facebook Pages are this brokerage's (KS-Ops relays their lead webhooks here)
   body: unknown,
   opts: { env?: NodeJS.ProcessEnv; fetchImpl?: OpsFetch } = {},
 ): Promise<OpsResult> {

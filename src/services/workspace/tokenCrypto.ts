@@ -7,13 +7,15 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 // KS_SERVER_v13_QUICKBOOKS - the key's env name is a parameter so QuickBooks tokens use QBO_TOKEN_ENCRYPTION_KEY.
 // KS_HUBSPOT_GAPS_1_MEETING_NOTES - Zoom tokens use ZOOM_TOKEN_ENCRYPTION_KEY.
 // KS_SERVER_LENDER_API - lender connection credentials (broker API keys, portal passwords) use LENDER_CREDENTIALS_ENCRYPTION_KEY.
-export type TokenKeyName = "GOOGLE_TOKEN_ENCRYPTION_KEY" | "QBO_TOKEN_ENCRYPTION_KEY" | "ZOOM_TOKEN_ENCRYPTION_KEY" | "LENDER_CREDENTIALS_ENCRYPTION_KEY";
+// KS_META_LEAD_ADS_v1 - Facebook Page tokens use META_TOKEN_ENCRYPTION_KEY.
+export type TokenKeyName = "GOOGLE_TOKEN_ENCRYPTION_KEY" | "QBO_TOKEN_ENCRYPTION_KEY" | "ZOOM_TOKEN_ENCRYPTION_KEY" | "LENDER_CREDENTIALS_ENCRYPTION_KEY" | "META_TOKEN_ENCRYPTION_KEY";
 
 const MISSING_KEY_ERROR: Record<TokenKeyName, string> = {
   GOOGLE_TOKEN_ENCRYPTION_KEY: "google_token_key_missing",
   QBO_TOKEN_ENCRYPTION_KEY: "qbo_token_key_missing",
   ZOOM_TOKEN_ENCRYPTION_KEY: "zoom_token_key_missing",
   LENDER_CREDENTIALS_ENCRYPTION_KEY: "lender_credentials_key_missing",
+  META_TOKEN_ENCRYPTION_KEY: "meta_token_key_missing",
 };
 
 function keyBytes(e: NodeJS.ProcessEnv = process.env, keyName: TokenKeyName = "GOOGLE_TOKEN_ENCRYPTION_KEY"): Buffer {

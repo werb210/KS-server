@@ -278,12 +278,12 @@ describe("7. ?q= search on the thread lists", () => {
   it("GET /sms binds q after the silo; without q the query is unchanged", async () => {
     const app = await commsApp();
     await request(app).get("/api/communications/sms?q=dana").set("Authorization", `Bearer ${staffJwt()}`);
-    const [withQ] = callsMatching(h.query, /m\.type = 'sms'/);
+    const [withQ] = callsMatching(h.query, /m\.type IN \('sms', 'whatsapp'\)/);
     expect(withQ[1]).toEqual(["BF", "%dana%"]);
     expect(withQ[0]).toMatch(/c\.name ILIKE \$2/);
     h.query.mockClear();
     await request(app).get("/api/communications/sms").set("Authorization", `Bearer ${staffJwt()}`);
-    const [noQ] = callsMatching(h.query, /m\.type = 'sms'/);
+    const [noQ] = callsMatching(h.query, /m\.type IN \('sms', 'whatsapp'\)/);
     expect(noQ[1]).toEqual(["BF"]);
     expect(noQ[0]).not.toMatch(/ILIKE/);
     // 6. inbound verification-code / short-code texts are kept out of the thread list

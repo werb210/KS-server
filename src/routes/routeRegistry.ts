@@ -193,6 +193,9 @@ import dealDeskRoutes from "./dealDesk.js"; // KS_BROKER_TOOLS_2
 import vendorPortalRoutes from "./vendorPortal.js"; // KS_BROKER_TOOLS_VENDORS
 import clientCreditRoutes from "./clientCredit.js"; // KS_BROKER_TOOLS_CREDIT_BUREAU
 import { safeHandler } from "../middleware/safeHandler.js"; // BF_SERVER_v789_SAFE_HANDLERS
+import emailPreferencesRoutes from "./emailPreferences.js"; // KS_EMAIL_SUBSCRIPTION_TYPES_v1
+import { metaIntegrationRoutes, metaWebhookRoutes } from "./metaLeads.js"; // KS_META_LEAD_ADS_v1
+import landingPagesPublicRoutes from "./landingPagesPublic.js"; // KS_LANDING_PAGES_v1
 
 export type ApiRoute = {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -400,6 +403,10 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/shared", router: libraryPublicRoutes }, // BF_SERVER_v810_LIBRARY_PLUS - share links and upload links (public)
   { path: "/ocr/admin", router: ocrAdminRoutes },
   { path: "/_diag", router: diagnosticsRoutes },
+  { path: "/public/email-preferences", router: emailPreferencesRoutes },
+  { path: "/integrations/meta", router: metaIntegrationRoutes }, // KS_META_LEAD_ADS_v1 - Admin connect + callback
+  { path: "/webhooks/meta", router: metaWebhookRoutes }, // KS_META_LEAD_ADS_v1 - lead webhooks (signature checked)
+  { path: "/public/pages", router: landingPagesPublicRoutes }, // KS_LANDING_PAGES_v1 - published landing pages // KS_EMAIL_SUBSCRIPTION_TYPES_v1 - public, signed link
   { path: "/public", router: publicApplicationRoutes },
   // BF_SERVER_VISITOR_JOURNEY_MOUNT_FIX_v1 - mounted at "/track/journey", NOT "/track":
   // emailPixelRoutes already owns "/track" and _canonicalMount drops duplicate mount paths
@@ -651,6 +658,13 @@ export const ROUTES: ApiRoute[] = [
   { method: "POST", path: "/api/track/journey", roles: [] }, // BF_SERVER_VISITOR_JOURNEY_v1
   { method: "POST", path: "/api/analytics", roles: [] }, // BF_SERVER_v789_ANALYTICS_COLLECTOR
   { method: "POST", path: "/api/public/readiness", roles: [] },
+  { method: "GET", path: "/api/public/email-preferences/:token", roles: [] }, // KS_EMAIL_SUBSCRIPTION_TYPES_v1
+  { method: "POST", path: "/api/public/email-preferences/:token", roles: [] },
+  { method: "GET", path: "/api/public/pages/:slug", roles: [] }, // KS_LANDING_PAGES_v1
+  { method: "GET", path: "/api/integrations/meta/callback", roles: [] }, // KS_META_LEAD_ADS_v1
+  { method: "GET", path: "/api/webhooks/meta/leadgen", roles: [] },
+  { method: "POST", path: "/api/webhooks/meta/leadgen", roles: [] },
+  { method: "POST", path: "/api/public/pages/:slug/forms/:formId", roles: [] },
   { method: "POST", path: "/api/crm/readiness", roles: [] },
   { method: "GET", path: "/api/client/application-stage", roles: [] },
   { method: "POST", path: "/api/client/application-status/watch", roles: [] }, // BF_SERVER_v823_LIVE_ACTIVITY

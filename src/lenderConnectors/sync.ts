@@ -53,7 +53,7 @@ export async function notifyStaff(db: Q, applicationId: string, n: { type: strin
       );
       try {
         const { pushToUser } = await import("../services/notifications/pushToUser.js");
-        void pushToUser(userId, n.title, n.body, contextUrl);
+        void pushToUser(userId, n.title, n.body, contextUrl, "lenders"); // KS_NOTIFICATION_TOPICS_v1
       } catch (err) {
         logWarnSwallowed(err, "lenderConnectors/sync.ts:push");
       }

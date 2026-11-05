@@ -16,6 +16,7 @@ import { pool, runQuery } from "../../db.js";
 // outbound calls with ...099 (see voiceCalls.ts) - they must exist, but they must
 // never be a notification target.
 import { logInfo } from "../../observability/logger.js";
+import { topicForType } from "../../notificationPrefs/topics.js"; // KS_NOTIFICATION_TOPICS_v1
 
 // BF_SERVER_RESTORE_ADMIN_NOTIFY_v91
 // Emptied, not deleted: isNonPersonUser is imported by mailSubscriptions.ts
@@ -88,7 +89,7 @@ export async function createNotification(params: {
   );
   const record = result.rows[0];
   // BF_SERVER_BLOCK_v_NOTIF_PUSH_v1 - fire an OS system notification for this event
-  if (record?.user_id) void pushToUser(record.user_id, record.title ?? "", record.body ?? "");
+  if (record?.user_id) void pushToUser(record.user_id, record.title ?? "", record.body ?? "", "/", topicForType(record.type)); // KS_NOTIFICATION_TOPICS_v1
   if (!record) {
     throw new Error("Failed to create notification.");
   }

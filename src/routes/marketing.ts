@@ -33,7 +33,7 @@ import { randomUUID } from "node:crypto";
 import { BlobServiceClient } from "@azure/storage-blob";
 import { renderBrandedEmail, type BrandedEmailFields } from "../services/emailTemplateRender.js";
 import { resolveScheduledAt, SendScheduleError } from "../services/sendSchedule.js"; // BF_SERVER_SEND_LATER_v35
-import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { brandName, brandSettings } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
 // KS_SERVER_MARKETING_ADDON - the plan's marketing limits, the campaign email allowance and the add-on's tools.
 import {
@@ -41,6 +41,9 @@ import {
 } from "../plans/marketingGate.js";
 import { parseCampaignOptions, type CampaignOptions } from "../marketing/campaignRunner.js";
 import campaignReportRoutes from "../marketing/campaignReport.js";
+import { campaignType, listTypes, saveType, SubscriptionTypeError } from "../marketing/subscriptionTypes.js"; // KS_EMAIL_SUBSCRIPTION_TYPES_v1
+import { accentColour, deletePage, getPage, listPages, normalizeBlocks, PageError, renderPage, savePage } from "../landingPages/pages.js"; // KS_LANDING_PAGES_v1
+import { pageUrl } from "./landingPagesPublic.js";
 
 
 const router = Router();
@@ -71,6 +74,16 @@ router.use(campaignReportRoutes);
  * person's best time) need the Marketing add-on, and without the add-on the campaign must fit in what is left of the
  * month's campaign emails. Sends the refusal and returns null, or returns the options.
  */
+// KS_EMAIL_SUBSCRIPTION_TYPES_v1 - the campaign's email type (null = none); undefined after a 400 was sent.
+async function campaignTypeOr400(req: any, res: any, silo: string, raw: unknown = req.body?.subscriptionTypeId): Promise<string | null | undefined> {
+  try {
+    return await campaignType(pool as any, silo, raw);
+  } catch (err) {
+    if (err instanceof SubscriptionTypeError) { res.status(err.status).json({ error: { code: err.code, message: err.message } }); return undefined; }
+    throw err;
+  }
+}
+
 async function campaignPreflight(req: any, res: any, subject: string, total: number): Promise<CampaignOptions | null> {
   const parsed = parseCampaignOptions(req.body ?? {}, subject);
   if (!parsed.ok) { res.status(400).json({ error: { code: parsed.error, message: parsed.message } }); return null; }
@@ -89,6 +102,77 @@ async function campaignPreflight(req: any, res: any, subject: string, total: num
   }
   return parsed.value;
 }
+// KS_EMAIL_SUBSCRIPTION_TYPES_v1 - the brokerage's email types (Marketing settings).
+router.get("/subscription-types", safeHandler(async (req: any, res: any) => {
+  const silo = resolveSiloFromRequest(req);
+  const types = await listTypes(pool as any, silo, true);
+  const counts = await pool.query<{ type_id: string; n: number }>(
+    `SELECT o.type_id::text AS type_id, count(*)::int AS n FROM contact_subscription_optouts o
+       JOIN email_subscription_types t ON t.id = o.type_id WHERE t.silo = $1 GROUP BY o.type_id`, [silo]);
+  const byType = new Map(counts.rows.map((r) => [r.type_id, r.n]));
+  respondOk(res, { types: types.map((t) => ({ ...t, opted_out: byType.get(t.id) ?? 0 })) });
+}));
+router.post("/subscription-types", safeHandler(async (req: any, res: any) => {
+  try {
+    respondOk(res, { type: await saveType(pool as any, resolveSiloFromRequest(req), req.body ?? {}) });
+  } catch (err) {
+    if (err instanceof SubscriptionTypeError) { res.status(err.status).json({ error: { code: err.code, message: err.message } }); return; }
+    throw err;
+  }
+}));
+router.put("/subscription-types/:id", safeHandler(async (req: any, res: any) => {
+  try {
+    respondOk(res, { type: await saveType(pool as any, resolveSiloFromRequest(req), { ...(req.body ?? {}), id: req.params.id }) });
+  } catch (err) {
+    if (err instanceof SubscriptionTypeError) { res.status(err.status).json({ error: { code: err.code, message: err.message } }); return; }
+    throw err;
+  }
+}));
+
+// KS_LANDING_PAGES_v1 - the landing-page builder (Marketing > Landing pages).
+function pageErr(res: any, err: unknown): boolean {
+  if (err instanceof PageError) { res.status(err.status).json({ error: { code: err.code, message: err.message } }); return true; }
+  return false;
+}
+router.get("/landing-pages", safeHandler(async (req: any, res: any) => {
+  const pages = await listPages(pool as any, resolveSiloFromRequest(req));
+  respondOk(res, { pages: pages.map((p) => ({ ...p, url: pageUrl(p.slug) })) });
+}));
+router.get("/landing-pages/:id", safeHandler(async (req: any, res: any) => {
+  const page = await getPage(pool as any, resolveSiloFromRequest(req), String(req.params.id));
+  if (!page) { res.status(404).json({ error: { code: "not_found", message: "Page not found." } }); return; }
+  respondOk(res, { page: { ...page, url: pageUrl(page.slug) } });
+}));
+router.post("/landing-pages", safeHandler(async (req: any, res: any) => {
+  try {
+    const page = await savePage(pool as any, resolveSiloFromRequest(req), req.body ?? {}, req.user?.userId ?? null);
+    respondOk(res, { page: { ...page, url: pageUrl(page.slug) } });
+  } catch (err) { if (!pageErr(res, err)) throw err; }
+}));
+router.put("/landing-pages/:id", safeHandler(async (req: any, res: any) => {
+  try {
+    const page = await savePage(pool as any, resolveSiloFromRequest(req), req.body ?? {}, req.user?.userId ?? null, String(req.params.id));
+    respondOk(res, { page: { ...page, url: pageUrl(page.slug) } });
+  } catch (err) { if (!pageErr(res, err)) throw err; }
+}));
+router.delete("/landing-pages/:id", safeHandler(async (req: any, res: any) => {
+  const ok = await deletePage(pool as any, resolveSiloFromRequest(req), String(req.params.id));
+  if (!ok) { res.status(404).json({ error: { code: "not_found", message: "Page not found." } }); return; }
+  respondOk(res, { deleted: true });
+}));
+/** The page as it would look, from unsaved blocks (shown in a sandboxed frame in the builder). */
+router.post("/landing-pages/preview", safeHandler(async (req: any, res: any) => {
+  const b = req.body ?? {};
+  const { listForms } = await import("../marketing/websiteKit.js");
+  const forms = new Map((await listForms(pool as any)).filter((f) => f.active).map((f) => [f.id, f]));
+  const brand = brandSettings() as any;
+  const html = renderPage({ title: String(b.title ?? "Preview"), description: null, blocks: normalizeBlocks(b.blocks) }, {
+    brand: brandName(), colour: accentColour(brand.primary_color), logoUrl: /^https:\/\//i.test(String(brand.logo_url ?? "")) ? String(brand.logo_url) : "",
+    forms, preview: true, formAction: () => "#",
+  });
+  respondOk(res, { html }); // shown in a sandboxed frame (no scripts run there)
+}));
+
 router.use(adSpendAnalysisRoutes);
 router.use(adsStoryRoutes); // BF_SERVER_ADS_STORY_v707
 router.use(customerMatchRoutes); // BF_SERVER_CUSTOMER_MATCH_LISTS_v711
@@ -869,7 +953,10 @@ router.post("/email/send", safeHandler(async (req: any, res: any) => {
   } catch (e) { console.error("landing_page_failed", { error: e instanceof Error ? e.message : String(e) }); }
   // BF_SERVER_SEND_QUEUE_v1 - small blasts send inline (unchanged response);
   // large ones go to the durable background queue (no cap, no request blocking).
-  const total = await countEmailRecipients(pool, silo, tag, includeTags, excludeTags);
+  // KS_EMAIL_SUBSCRIPTION_TYPES_v1 - an optional email type; people who opted out of it are skipped.
+  const subscriptionTypeId = await campaignTypeOr400(req, res, silo);
+  if (subscriptionTypeId === undefined) return;
+  const total = await countEmailRecipients(pool, silo, tag, includeTags, excludeTags, subscriptionTypeId);
   if (total === 0) { respondOk(res, { configured: true, recipients: 0, sent: 0, failed: 0, capped: false }); return; }
   // BF_SERVER_ALWAYS_QUEUE_v1 - always use the durable queue; inline sends cannot resume.
   // BF_SERVER_v791_DEAD_INLINE_SEND - countEmailRecipients returns count(*)::int (a
@@ -893,7 +980,7 @@ router.post("/email/send", safeHandler(async (req: any, res: any) => {
      VALUES ('email', $1, $2, $3, $4, $5, $6::timestamptz) RETURNING id, not_before`,
     // BF_SERVER_EMAIL_TWO_COLUMN_ONLY_v15 - `resend` rides along in the payload
     // so the worker that picks this job up honours it too.
-    [silo, tag, JSON.stringify({ subject, html: htmlOut, tags: includeTags, excludeTags, templateId, resend: b.resend === true, ...options }), total, req.user?.userId ?? null, schedule.at.toISOString()],
+    [silo, tag, JSON.stringify({ subject, html: htmlOut, tags: includeTags, excludeTags, templateId, resend: b.resend === true, subscriptionTypeId, ...options }), total, req.user?.userId ?? null, schedule.at.toISOString()],
   );
   respondOk(res, { configured: true, queued: true, jobId: job.rows[0].id, total, notBefore: job.rows[0].not_before, holdMinutes: SEND_HOLD_MINUTES, scheduled: schedule.scheduled });
 }));
@@ -1183,7 +1270,9 @@ router.get("/email/audience-count", safeHandler(async (req: any, res: any) => {
   const silo = resolveSiloFromRequest(req);
   const include = tagArr(req.query.include);
   const exclude = tagArr(req.query.exclude);
-  const n = await countEmailRecipients(pool, silo, null, include, exclude);
+  const subscriptionTypeId = await campaignTypeOr400(req, res, silo, req.query.subscriptionTypeId); // KS_EMAIL_SUBSCRIPTION_TYPES_v1
+  if (subscriptionTypeId === undefined) return;
+  const n = await countEmailRecipients(pool, silo, null, include, exclude, subscriptionTypeId);
   const budget = await campaignEmailBudget(pool as any); // KS_SERVER_MARKETING_ADDON
   respondOk(res, { n, campaignEmails: { used: budget.used, allowance: budget.allowance, remaining: budget.remaining, addon: budget.addon } });
 }));
@@ -1214,7 +1303,9 @@ router.post("/email/send-template", safeHandler(async (req: any, res: any) => {
     const { url: __viewUrl } = await createLandingPageFromHtml(html, silo, subject, req.user?.userId ?? null);
     htmlOut = withViewInBrowser(html, __viewUrl);
   } catch (e) { console.error("landing_page_failed", { error: e instanceof Error ? e.message : String(e) }); }
-  const total = await countEmailRecipients(pool, silo, tag, includeTags, excludeTags);
+  const subscriptionTypeId = await campaignTypeOr400(req, res, silo); // KS_EMAIL_SUBSCRIPTION_TYPES_v1
+  if (subscriptionTypeId === undefined) return;
+  const total = await countEmailRecipients(pool, silo, tag, includeTags, excludeTags, subscriptionTypeId);
   if (total === 0) { respondOk(res, { configured: true, recipients: 0, sent: 0, failed: 0 }); return; }
   // BF_SERVER_ALWAYS_QUEUE_v1 - always use the durable queue; inline sends cannot resume.
   // BF_SERVER_v791_DEAD_INLINE_SEND - countEmailRecipients returns count(*)::int (a
@@ -1237,7 +1328,7 @@ router.post("/email/send-template", safeHandler(async (req: any, res: any) => {
     `INSERT INTO marketing_send_jobs (channel, silo, tag, payload, total, created_by, not_before) VALUES ('email', $1, $2, $3, $4, $5, $6::timestamptz) RETURNING id, not_before`,
     // BF_SERVER_EMAIL_TWO_COLUMN_ONLY_v15 - `resend` rides along in the payload
     // so the worker that picks this job up honours it too.
-    [silo, tag, JSON.stringify({ subject, html: htmlOut, tags: includeTags, excludeTags, templateId, resend: b.resend === true, ...options }), total, req.user?.userId ?? null, schedule.at.toISOString()],
+    [silo, tag, JSON.stringify({ subject, html: htmlOut, tags: includeTags, excludeTags, templateId, resend: b.resend === true, subscriptionTypeId, ...options }), total, req.user?.userId ?? null, schedule.at.toISOString()],
   );
   respondOk(res, { configured: true, queued: true, jobId: job.rows[0].id, total, notBefore: job.rows[0].not_before, holdMinutes: SEND_HOLD_MINUTES, scheduled: schedule.scheduled });
 }));

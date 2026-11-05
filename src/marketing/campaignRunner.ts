@@ -187,6 +187,7 @@ export function jobOf(row: CampaignJobRow): EmailJob {
     silo: row.silo, tag: row.tag, subject: String(p.subject || ""), html: String(p.html || ""),
     tags: (p.tags as string[] | undefined) ?? null, excludeTags: (p.excludeTags as string[] | undefined) ?? null,
     templateId: (p.templateId as string | undefined) ?? null, resend: p.resend === true, jobId: row.id,
+    subscriptionTypeId: typeof p.subscriptionTypeId === "string" ? p.subscriptionTypeId : null, // KS_EMAIL_SUBSCRIPTION_TYPES_v1
   };
 }
 

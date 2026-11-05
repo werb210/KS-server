@@ -36,7 +36,7 @@ beforeEach(() => {
   process.env.TWILIO_FROM_NUMBER = "+15875550100";
   process.env.PUBLIC_BASE_URL = "https://api.example.test/";
   queryMock.mockImplementation(answerBySql([
-    [/FROM communications_messages[\s\S]*type = 'sms'/, {
+    [/FROM communications_messages[\s\S]*type IN \('sms', 'whatsapp'\)/, {
       rows: [{ id: "m1", direction: "outbound", body: "hi", delivery_status: "undelivered", delivery_error: "30007" }],
     }],
   ]));
@@ -70,7 +70,7 @@ describe("v499 staff SMS delivery status", () => {
     const res = await request(await app()).get(`/api/communications/sms/thread?contactId=${CONTACT}`).set("Authorization", `Bearer ${token()}`);
     expect(res.status).toBe(200);
     expect(res.body.messages[0]).toMatchObject({ delivery_status: "undelivered", delivery_error: "30007" });
-    const [q] = callsMatching(queryMock, /type = 'sms'/);
+    const [q] = callsMatching(queryMock, /type IN \('sms', 'whatsapp'\)/);
     expect(q![0]).toMatch(/FROM sms_deliveries d WHERE d\.message_sid = communications_messages\.twilio_sid[\s\S]*AS delivery_status/);
     expect(q![0]).toMatch(/d\.error_code[\s\S]*AS delivery_error/);
   });

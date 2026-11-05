@@ -10,13 +10,14 @@ import { renderMarketingSms, sendMarketingSms, trackedLink, lookupLineType } fro
 import { isCanadianMobile, SMS_ELIGIBLE_SQL, CAMPAIGN_ELIGIBLE_SQL, CONSENT_SQL } from "./smsConsent.js"; // BF_SERVER_SMS_CONSENT_v1 // BF_SERVER_SEND_QUEUE_SMS_v1 BF_SERVER_BLOCK_v784_LINE_TYPE_IMPORT BF_SERVER_SMS_CASCADE_COMPLETE_v12
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
 import { recordMeter } from "../plans/meters.js"; // KS_SERVER_MARKETING_ADDON
+import { notOptedOutSql, withPreferencesLink } from "../marketing/subscriptionTypes.js"; // KS_EMAIL_SUBSCRIPTION_TYPES_v1
 
 // BF_SERVER_EMAIL_AUDIENCE_INCL_EXCL_v1 - include/exclude tag arrays. Include
 // empty/null = all contacts; otherwise a contact must carry AT LEAST ONE include
 // tag. A contact carrying ANY exclude tag is removed; exclude wins over include.
 // Single `tag` kept for back-compat (raw email panel, SMS, Maya tools, old jobs).
 // BF_SERVER_EMAIL_TWO_COLUMN_ONLY_v15 - `resend` bypasses the 24h dedupe.
-export type EmailJob = { silo: string; tag: string | null; subject: string; html: string; resend?: boolean; tags?: string[] | null; excludeTags?: string[] | null; templateId?: string | null; /** KS_SERVER_MARKETING_ADDON - the queued job, for the campaign ledger */ jobId?: string | null }; // BF_SERVER_TEMPLATE_ANALYTICS_v1
+export type EmailJob = { silo: string; tag: string | null; subject: string; html: string; resend?: boolean; tags?: string[] | null; excludeTags?: string[] | null; templateId?: string | null; /** KS_SERVER_MARKETING_ADDON - the queued job, for the campaign ledger */ jobId?: string | null; /** KS_EMAIL_SUBSCRIPTION_TYPES_v1 - skip people who opted out of this type */ subscriptionTypeId?: string | null }; // BF_SERVER_TEMPLATE_ANALYTICS_v1
 export type SendProgress = (sent: number, failed: number) => Promise<void>;
 // BF_SERVER_SEND_KILL_SWITCH_v1 - worker callback checked between recipient batches.
 export type ShouldAbort = () => Promise<boolean>;
@@ -30,15 +31,16 @@ export const EMAIL_BLAST_ELIGIBLE_SQL = `
       COALESCE(c.email,'') <> '' AND COALESCE(c.marketing_opt_out,false) = false
   AND ${CONSENT_SQL}`;
 
-export async function countEmailRecipients(pool: Pool, silo: string, tag: string | null, tags: string[] | null = null, excludeTags: string[] | null = null): Promise<number> {
+export async function countEmailRecipients(pool: Pool, silo: string, tag: string | null, tags: string[] | null = null, excludeTags: string[] | null = null, subscriptionTypeId: string | null = null): Promise<number> {
   const r = await pool.query<{ n: number }>(
     `SELECT count(*)::int AS n
        FROM contacts c
       WHERE c.silo = $1 AND ${EMAIL_BLAST_ELIGIBLE_SQL}
         AND ($2::text IS NULL OR $2 = ANY(c.tags))
         AND ($3::text[] IS NULL OR COALESCE(c.tags,'{}') && $3)
-        AND ($4::text[] IS NULL OR NOT (COALESCE(c.tags,'{}') && $4))`,
-    [silo, tag, tags, excludeTags],
+        AND ($4::text[] IS NULL OR NOT (COALESCE(c.tags,'{}') && $4))
+        ${notOptedOutSql(5)}`,
+    [silo, tag, tags, excludeTags, subscriptionTypeId],
   );
   return r.rows[0]?.n ?? 0;
 }
@@ -53,8 +55,9 @@ export async function emailRecipients(pool: Pool, job: EmailJob): Promise<EmailR
       WHERE c.silo = $1 AND ${EMAIL_BLAST_ELIGIBLE_SQL}
         AND ($2::text IS NULL OR $2 = ANY(c.tags))
         AND ($3::text[] IS NULL OR COALESCE(c.tags,'{}') && $3)
-        AND ($4::text[] IS NULL OR NOT (COALESCE(c.tags,'{}') && $4))`,
-    [job.silo, job.tag, job.tags ?? null, job.excludeTags ?? null],
+        AND ($4::text[] IS NULL OR NOT (COALESCE(c.tags,'{}') && $4))
+        ${notOptedOutSql(5)}`,
+    [job.silo, job.tag, job.tags ?? null, job.excludeTags ?? null, job.subscriptionTypeId ?? null],
   );
   return recips.rows;
 }
@@ -131,7 +134,7 @@ export async function sendCampaignEmailTo(
     if (csId) await pool.query(`UPDATE campaign_sends SET status = 'failed' WHERE id = $1`, [csId]).catch((swallowedErr: unknown) => { logWarnSwallowed(swallowedErr, "services/marketingSendRunner.ts:campaign_sends_failed");});
   };
   try {
-    const r = await sendOne({ to: c.email, subject: mergeFields(opts.subject, vars), html: mergeFields(job.html, vars), contactId: c.id, customArgs: Object.keys(customArgs).length ? customArgs : undefined });
+    const r = await sendOne({ to: c.email, subject: mergeFields(opts.subject, vars), html: withPreferencesLink(mergeFields(job.html, vars), c.id), contactId: c.id, customArgs: Object.keys(customArgs).length ? customArgs : undefined });
     if (r.ok) {
       opts.budget.spent += 1;
       await recordMeter(pool as any, "campaign_email", csId ? `cs:${csId}` : null); // KS_SERVER_MARKETING_ADDON

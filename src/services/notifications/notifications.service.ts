@@ -3,6 +3,22 @@ import { runQuery } from "../../lib/db.js";
 import { pushToUser } from "./pushToUser.js"; // BF_SERVER_BLOCK_v_NOTIF_PUSH_v1
 import { portalUrl } from "../../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { mutedTopics, wants } from "../../notificationPrefs/prefs.js"; // KS_NOTIFICATION_TOPICS_v1
+import { typeMatchers } from "../../notificationPrefs/topics.js";
+
+/** KS_NOTIFICATION_TOPICS_v1 - SQL that hides the topics this person turned off for the bell. */
+async function bellFilter(userId: string, firstParam: number): Promise<{ sql: string; params: unknown[] }> {
+  let muted: string[] = [];
+  try { muted = await mutedTopics(userId, "bell"); } catch (err) {
+    console.warn("[notifications] settings lookup failed", { userId, message: err instanceof Error ? err.message : String(err) });
+  }
+  if (!muted.length) return { sql: "", params: [] };
+  const m = typeMatchers(muted);
+  return {
+    sql: `AND NOT (type = ANY($${firstParam}::text[]) OR type LIKE ANY($${firstParam + 1}::text[]))`,
+    params: [m.exact, m.like],
+  };
+}
 
 export interface NotifyMentionsParams {
   newMentions: string[];          // resolved user ids
@@ -42,7 +58,7 @@ export async function notifyMentions(p: NotifyMentionsParams): Promise<{ inserte
         [userId, p.refTable, p.refId, snippet, p.contextUrl ?? null]
       );
       if (r.rows[0]) inserted += 1;
-      if (r.rows[0]) void pushToUser(userId, "New mention", snippet, p.contextUrl ?? "/"); // BF_SERVER_BLOCK_v_NOTIF_PUSH_v1
+      if (r.rows[0]) void pushToUser(userId, "New mention", snippet, p.contextUrl ?? "/", "mentions"); // BF_SERVER_BLOCK_v_NOTIF_PUSH_v1
     } catch (err) {
       // BF_SERVER_v803_TEAM_MENTIONS - advisory, but logged: a failed insert used to vanish silently.
       console.warn("[notifications] mention insert failed", { userId, message: err instanceof Error ? err.message : String(err) });
@@ -52,10 +68,13 @@ export async function notifyMentions(p: NotifyMentionsParams): Promise<{ inserte
   // BF_SERVER_BLOCK_v638_MULTIFIX_v1 — fire Twilio SMS to mentioned users so a
   // stale notification-bell isn\'t the only signal. Best-effort, never throws.
   try {
-    const { rows: phones } = await runQuery<{ phone: string | null; first_name: string | null }>(
+    // KS_NOTIFICATION_TOPICS_v1 - only people who keep text messages on for mentions.
+    const textTargets: string[] = [];
+    for (const t of targets) if (await wants(t, "mentions", "text")) textTargets.push(t);
+    const { rows: phones } = textTargets.length ? await runQuery<{ phone: string | null; first_name: string | null }>(
       `SELECT phone, first_name FROM users WHERE id = ANY($1::uuid[]) AND phone IS NOT NULL AND phone <> ''`,
-      [targets],
-    );
+      [textTargets],
+    ) : { rows: [] as Array<{ phone: string | null; first_name: string | null }> };
     if (phones.length > 0) {
       const { sendSms } = await import("../../modules/notifications/sms.service.js");
       const preview = snippet.length > 120 ? snippet.slice(0, 117) + "…" : snippet;
@@ -91,13 +110,14 @@ export interface Notification {
 export async function listForUser(userId: string, opts: { unreadOnly?: boolean; limit?: number } = {}): Promise<Notification[]> {
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
   const where = opts.unreadOnly ? "AND is_read = false" : "";
+  const muted = await bellFilter(userId, 3);
   const r = await runQuery<Notification>(
     `SELECT id, user_id, type, title, ref_table, ref_id, body, context_url, is_read, created_at, read_at
        FROM notifications
-      WHERE user_id = $1 ${where}
+      WHERE user_id = $1 ${where} ${muted.sql}
       ORDER BY created_at DESC
       LIMIT $2`,
-    [userId, limit]
+    [userId, limit, ...muted.params]
   );
   return r.rows;
 }
@@ -131,9 +151,10 @@ export async function markAllRead(userId: string): Promise<number> {
 }
 
 export async function unreadCount(userId: string): Promise<number> {
+  const muted = await bellFilter(userId, 2);
   const r = await runQuery<{ c: string }>(
-    `SELECT COUNT(*)::text AS c FROM notifications WHERE user_id = $1 AND is_read = false`,
-    [userId]
+    `SELECT COUNT(*)::text AS c FROM notifications WHERE user_id = $1 AND is_read = false ${muted.sql}`,
+    [userId, ...muted.params]
   );
   return Number(r.rows[0]?.c ?? 0);
 }
