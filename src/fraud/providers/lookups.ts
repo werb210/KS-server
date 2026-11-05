@@ -98,6 +98,50 @@ export function ipinfoProvider(env: NodeJS.ProcessEnv = process.env, fetchImpl?:
   };
 }
 
+/** KS_SERVER_FREE_IP_CHECK - an IP's registered network from public RDAP (no key): country and the owning
+ *  organisation. A data-centre / cloud owner marks it as hosting (almost always a VPN or proxy for a person). VPN, proxy
+ *  and Tor flags stay unknown (null) - those need ipinfo's privacy data. */
+export function parseRdapIp(body: any): Extract<IpIntel, { ok: true }> {
+  const names: string[] = [];
+  if (body?.name) names.push(String(body.name));
+  const walk = (ents: any[]) => {
+    for (const e of Array.isArray(ents) ? ents : []) {
+      const v = Array.isArray(e?.vcardArray?.[1]) ? e.vcardArray[1] : [];
+      for (const f of v) if (Array.isArray(f) && (f[0] === "fn" || f[0] === "org") && f[3]) names.push(String(f[3]));
+      if (e?.entities) walk(e.entities);
+    }
+  };
+  walk(body?.entities);
+  const org = names.find((n) => n && !/^[A-Z0-9-]+$/.test(n)) ?? names[0] ?? null;
+  const all = names.join(" ");
+  return {
+    ok: true,
+    country: body?.country ? String(body.country).toUpperCase() : null,
+    region: null,
+    asn: null,
+    asnOrg: org,
+    vpn: null,
+    proxy: null,
+    tor: null,
+    hosting: all && HOSTING_ORGS.test(all) ? true : null,
+  };
+}
+
+/** KS_SERVER_FREE_IP_CHECK - used when IPINFO_TOKEN is not set. FRAUD_RDAP=off turns it off. */
+export function rdapIpProvider(env: NodeJS.ProcessEnv = process.env, fetchImpl?: FetchLike): IpIntelProvider {
+  const f = fetchImpl ?? defaultFetch();
+  const off = String(env.FRAUD_RDAP ?? "").trim().toLowerCase() === "off";
+  return {
+    name: "rdap",
+    configured: () => !off && networkAllowed(fetchImpl, env),
+    async lookup(ip: string): Promise<IpIntel> {
+      const r = await requestJson(f, `https://rdap.org/ip/${encodeURIComponent(ip)}`, { headers: { Accept: "application/rdap+json, application/json" } });
+      if (!r.ok) return { ok: false, error: r.error };
+      return parseRdapIp(r.body);
+    },
+  };
+}
+
 // ---------------------------------------------------------------- ID verification vendor (pluggable)
 export type IdvResult = { ok: true; verdict: "pass" | "fail" | "review"; reasons: string[] } | { ok: false; error: string };
 
@@ -152,8 +196,84 @@ export function classifyAddressByList(address: string): AddressType {
   return { kind: "unknown", matched: null, source: "list" };
 }
 
-/** A paid address-verification service (Canada Post AddressComplete, Smarty) plugs in here; none is wired in yet. */
-export function addressProvider(env: NodeJS.ProcessEnv = process.env): AddressProvider {
-  const chosen = String(env.FRAUD_ADDRESS_PROVIDER ?? "").trim();
-  return { name: chosen || "none", configured: () => false, async classify() { return null; } };
+/** KS_SERVER_ADDRESS_VALIDATION - Google Address Validation's answer, mapped to the same kinds as the list.
+ *  The built-in list still wins for virtual offices and mail drops (Google cannot tell those from a street address). */
+export function parseGoogleAddressValidation(body: any, address: string): AddressType | null {
+  const result = body?.result;
+  if (!result || typeof result !== "object") return null;
+  const listed = classifyAddressByList(address);
+  if (listed.kind !== "unknown") return { ...listed, source: "list+google" };
+  const meta = result.metadata ?? {};
+  const verdict = result.verdict ?? {};
+  if (meta.poBox === true) return { kind: "po_box", matched: "PO box (Google)", source: "google" };
+  const granularity = String(verdict.validationGranularity ?? "").toUpperCase();
+  const premise = granularity === "PREMISE" || granularity === "SUB_PREMISE";
+  if (premise && verdict.addressComplete === true && verdict.hasUnconfirmedComponents !== true) {
+    return { kind: "street", matched: String(result.address?.formattedAddress ?? "") || null, source: "google" };
+  }
+  return { kind: "unknown", matched: granularity ? `not confirmed (${granularity.toLowerCase()})` : "not confirmed", source: "google" };
+}
+
+/** KS_SERVER_ADDRESS_VALIDATION - Google Address Validation, using GOOGLE_ADDRESS_VALIDATION_KEY or the server's
+ *  existing GOOGLE_PLACES_API_KEY (the Address Validation API must be enabled on that key's Google Cloud project).
+ *  FRAUD_ADDRESS_PROVIDER=list turns it off. Any error returns null, so the check falls back to the built-in list. */
+export function addressProvider(env: NodeJS.ProcessEnv = process.env, fetchImpl?: FetchLike): AddressProvider {
+  const chosen = String(env.FRAUD_ADDRESS_PROVIDER ?? "").trim().toLowerCase();
+  const key = String(env.GOOGLE_ADDRESS_VALIDATION_KEY ?? env.GOOGLE_PLACES_API_KEY ?? "").trim();
+  const f = fetchImpl ?? defaultFetch();
+  // KS_SERVER_FREE_ADDRESS_CHECK - no Google key: OpenStreetMap's free geocoder instead.
+  if (!key && chosen !== "list" && chosen !== "off" && chosen !== "google") return nominatimAddressProvider(env, fetchImpl);
+  const on = Boolean(key) && chosen !== "list" && chosen !== "off";
+  return {
+    name: on ? "google" : "none",
+    configured: () => on && networkAllowed(fetchImpl, env),
+    async classify(address: string) {
+      if (!on || !networkAllowed(fetchImpl, env) || !address.trim()) return null;
+      const r = await requestJson(f, `https://addressvalidation.googleapis.com/v1:validateAddress?key=${encodeURIComponent(key)}`, {
+        body: { address: { addressLines: [address.trim()] } },
+      });
+      if (!r.ok) {
+        console.warn("[fraud] google address validation failed; using the built-in list", { error: r.error });
+        return null;
+      }
+      return parseGoogleAddressValidation(r.body, address);
+    },
+  };
+}
+
+/** KS_SERVER_FREE_ADDRESS_CHECK - OpenStreetMap Nominatim's answer mapped to an address kind. A match down to the
+ *  building ("house", "building", or a house number in the result) confirms a street address; anything coarser is
+ *  "unknown". The built-in mail-drop list still wins. */
+export function parseNominatim(body: any, address: string): AddressType | null {
+  const listed = classifyAddressByList(address);
+  if (listed.kind !== "unknown") return { ...listed, source: "list+osm" };
+  const hit = Array.isArray(body) ? body[0] : null;
+  if (!hit) return { kind: "unknown", matched: "not found", source: "osm" };
+  const t = String(hit.addresstype ?? hit.type ?? "").toLowerCase();
+  const building = Boolean(hit.address?.house_number) || ["house", "building", "residential", "commercial", "office"].includes(t);
+  return building
+    ? { kind: "street", matched: String(hit.display_name ?? "").slice(0, 200) || null, source: "osm" }
+    : { kind: "unknown", matched: `not confirmed (${t || "area"})`, source: "osm" };
+}
+
+/** OpenStreetMap Nominatim: free, no key; its usage policy asks for an identifying User-Agent and low volume (one
+ *  address per application is well within it). Any error returns null, so the check falls back to the list. */
+export function nominatimAddressProvider(env: NodeJS.ProcessEnv = process.env, fetchImpl?: FetchLike): AddressProvider {
+  const f = fetchImpl ?? defaultFetch();
+  return {
+    name: "openstreetmap",
+    configured: () => networkAllowed(fetchImpl, env),
+    async classify(address: string) {
+      if (!networkAllowed(fetchImpl, env) || !address.trim()) return null;
+      const q = new URLSearchParams({ q: address.trim(), format: "jsonv2", addressdetails: "1", limit: "1", countrycodes: "ca,us" });
+      const r = await requestJson(f, `https://nominatim.openstreetmap.org/search?${q.toString()}`, {
+        headers: { "User-Agent": "KeystoneCRM-FraudCheck/1.0 (https://www.keystonecrm.online)" },
+      });
+      if (!r.ok) {
+        console.warn("[fraud] openstreetmap address lookup failed; using the built-in list", { error: r.error });
+        return null;
+      }
+      return parseNominatim(r.body, address);
+    },
+  };
 }
