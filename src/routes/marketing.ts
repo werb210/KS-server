@@ -43,7 +43,7 @@ import { parseCampaignOptions, type CampaignOptions } from "../marketing/campaig
 import campaignReportRoutes from "../marketing/campaignReport.js";
 import { campaignType, listTypes, saveType, SubscriptionTypeError } from "../marketing/subscriptionTypes.js"; // KS_EMAIL_SUBSCRIPTION_TYPES_v1
 import { accentColour, deletePage, getPage, listPages, normalizeBlocks, PageError, renderPage, savePage } from "../landingPages/pages.js"; // KS_LANDING_PAGES_v1
-import { PAGE_CSP, pageUrl } from "./landingPagesPublic.js";
+import { pageUrl } from "./landingPagesPublic.js";
 
 
 const router = Router();
@@ -170,7 +170,7 @@ router.post("/landing-pages/preview", safeHandler(async (req: any, res: any) => 
     brand: brandName(), colour: accentColour(brand.primary_color), logoUrl: /^https:\/\//i.test(String(brand.logo_url ?? "")) ? String(brand.logo_url) : "",
     forms, preview: true, formAction: () => "#",
   });
-  res.status(200).set("Content-Type", "text/html; charset=utf-8").set("Content-Security-Policy", PAGE_CSP).send(html);
+  respondOk(res, { html }); // shown in a sandboxed frame (no scripts run there)
 }));
 
 router.use(adSpendAnalysisRoutes);
