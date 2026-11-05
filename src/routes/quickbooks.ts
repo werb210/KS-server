@@ -9,6 +9,7 @@
 //   POST /api/quickbooks/applications/:id/invoice/retry  (Staff)  queue the invoice work again and run it now
 // The state is a random single-use nonce (hashed in quickbooks_oauth_states, 10 minutes) bound to the admin who
 // started the connect, also held in an HttpOnly cookie scoped to the callback (checked when the browser sends it).
+import { unwrapState, wrapState } from "../licensee/oauthBroker.js"; // KS_BROKERAGE_QBO
 import { timingSafeEqual } from "node:crypto";
 import { Router } from "express";
 import { auth, requireAuthorization } from "../middleware/auth.js";
@@ -74,12 +75,13 @@ router.post("/connect", ...adminOnly, safeHandler(async (req: any, res: any) => 
   await pool.query(`DELETE FROM quickbooks_oauth_states WHERE expires_at < now() - interval '1 day'`)
     .catch((err: unknown) => logWarnSwallowed(err, "quickbooks_oauth_states.prune"));
   res.cookie(STATE_COOKIE, nonce, { ...stateCookieOptions, maxAge: STATE_TTL_MS });
-  res.json({ url: buildAuthUrl(cfg, nonce) });
+  res.json({ url: buildAuthUrl(cfg, wrapState("qbo", nonce, STATE_TTL_MS)) }); // KS_BROKERAGE_QBO - via Keystone's redirect broker when set up
 }));
 
 router.get("/oauth/callback", safeHandler(async (req: any, res: any) => {
   const code = typeof req.query.code === "string" ? req.query.code : "";
-  const state = typeof req.query.state === "string" ? req.query.state : "";
+  const rawState = typeof req.query.state === "string" ? req.query.state : "";
+  const state = rawState ? (unwrapState("qbo", rawState) ?? "") : ""; // KS_BROKERAGE_QBO - a broker state that is not ours is refused
   const realmId = typeof req.query.realmId === "string" ? req.query.realmId.trim() : "";
   const cookieNonce = cookieValue(req, STATE_COOKIE);
   res.clearCookie(STATE_COOKIE, stateCookieOptions);
