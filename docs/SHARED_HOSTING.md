@@ -134,6 +134,7 @@ list of brokerages whose web builds are published.
 
 - The demo server (`DEMO_MODE=true`) stays a single-brokerage server; `DEMO_MODE` is ignored in multi-brokerage mode.
 - The startup admin bootstrap (`BOOTSTRAP_ADMIN_PHONE`) does not run: KS-Ops creates each brokerage's first admin
-  through `POST /api/provision/admin` (sent with `X-KS-Tenant`).
+  through `POST /api/provision/admin` (sent with `X-KS-Tenant`), and the rest of the sign-up team through
+  `POST /api/provision/users` (KS_SERVER_PROVISION_TEAM_USERS_v1).
 - Files in Azure Blob Storage share the Keystone-wide storage account (`AZURE_STORAGE_CONNECTION_STRING`), as the
   contract lists it; blob names are unique ids, and access always goes through the brokerage's own database rows.
