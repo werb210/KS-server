@@ -17,8 +17,8 @@
 // server's own and the state is not wrapped. Boreal's own server and the development copy run that way.
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-export type BrokerProvider = "microsoft" | "google" | "meta" | "intuit"; // KS_META_LEAD_ADS_v1 - Facebook Login for lead ads; KS_BROKERAGE_QBO - QuickBooks
-export type BrokerFlow = "o365" | "consent" | "sso-ms" | "google" | "sso-google" | "meta" | "qbo";
+export type BrokerProvider = "microsoft" | "google" | "meta" | "intuit" | "zoom"; // KS_ZOOM_MEETINGS_v1 - Keystone's Zoom app // KS_META_LEAD_ADS_v1 - Facebook Login for lead ads; KS_BROKERAGE_QBO - QuickBooks
+export type BrokerFlow = "o365" | "consent" | "sso-ms" | "google" | "sso-google" | "meta" | "qbo" | "zoom";
 
 export const FLOW_PROVIDER: Record<BrokerFlow, BrokerProvider> = {
   o365: "microsoft",
@@ -28,6 +28,7 @@ export const FLOW_PROVIDER: Record<BrokerFlow, BrokerProvider> = {
   "sso-google": "google",
   meta: "meta",
   qbo: "intuit",
+  zoom: "zoom",
 };
 
 const env = (name: string, e: NodeJS.ProcessEnv): string => String(e[name] ?? "").trim();
