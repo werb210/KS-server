@@ -16,6 +16,7 @@ import { brandName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 import { getGoogleForUser } from "../services/workspace/googleAuth.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
 import { sendGmail } from "../services/workspace/google.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
 import { scheduleGoogleMeeting, googleContactFolder, googleContactFolderFiles } from "../services/workspace/googleFeatures.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
+import { APP_LABEL, defaultMeetingApp, pickMeetingApp, scheduleZoomMeeting, zoomClientFor, zoomConnected } from "../services/meetings/meetingApps.js"; // KS_ZOOM_MEETINGS_v1
 
 // BF_SERVER_BLOCK_v513_LARGE_EMAIL_ATTACHMENTS - Graph sendMail takes at most ~3 MB
 // of inline attachments per request. Bigger files go on a draft: small ones by
@@ -91,16 +92,37 @@ router.use(requireAuth);
 // granted per-organizer. We persist the Graph event id + the onlineMeeting id
 // against contact_id + silo so the transcript/recording poller knows whose
 // timeline to write to when the artifacts land.
+// KS_ZOOM_MEETINGS_v1 - the meeting apps this person can use, and the one a new meeting starts on.
+router.get("/meetings/apps", safeHandler(async (req: any, res: any) => {
+  const userId = req.user?.id ?? req.user?.userId;
+  if (!userId) return res.status(401).json({ error: "unauthenticated" });
+  const connected = {
+    teams: Boolean(await getGraphForUser(pool, userId)),
+    google_meet: Boolean(await getGoogleForUser(pool, userId)),
+    zoom: await zoomConnected(String(userId)),
+  };
+  res.json({ success: true, data: { connected, default: defaultMeetingApp(connected), labels: APP_LABEL } });
+}));
+
 router.post("/meetings/schedule", safeHandler(async (req: any, res: any) => {
   const userId = req.user?.id ?? req.user?.userId;
   if (!userId) return res.status(401).json({ error: "unauthenticated" });
   const graph = await getGraphForUser(pool, userId);
-  if (!graph) {
-    // KS_SERVER_v12_GOOGLE_WORKSPACE - Google Calendar event with a Google Meet link instead of Teams.
-    const google = await getGoogleForUser(pool, userId);
-    if (google) return scheduleGoogleMeeting(req, res, google, String(userId));
-    return res.status(412).json({ error: "o365_not_connected" });
+  // KS_ZOOM_MEETINGS_v1 - body.provider picks Teams, Google Meet or Zoom; left out, the default for what is connected.
+  const requested = (req.body ?? {}).provider;
+  const google = !graph || requested === "google_meet" ? await getGoogleForUser(pool, userId) : null;
+  const zoom = requested === "zoom" || (!graph && !google) ? await zoomClientFor(String(userId)) : null;
+  const app = pickMeetingApp({ teams: Boolean(graph), google_meet: Boolean(google), zoom: Boolean(zoom) }, requested);
+  if (!app) {
+    const error = requested === "zoom" ? "zoom_not_connected" : requested === "google_meet" ? "google_not_connected" : "o365_not_connected";
+    return res.status(412).json({ error });
   }
+  if (app === "zoom") return scheduleZoomMeeting(req, res, zoom!, { graph, google: google ?? (graph ? null : await getGoogleForUser(pool, userId)) }, String(userId));
+  if (app === "google_meet") {
+    // KS_SERVER_v12_GOOGLE_WORKSPACE - Google Calendar event with a Google Meet link instead of Teams.
+    return scheduleGoogleMeeting(req, res, google!, String(userId));
+  }
+  if (!graph) return res.status(412).json({ error: "o365_not_connected" });
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const contactId = typeof body.contact_id === "string" ? body.contact_id : null;

@@ -9,6 +9,7 @@
 // "reauth_required" and the portal asks the person to connect again.
 import { createHash } from "node:crypto";
 import { serverUrl } from "../licensee/urls.js";
+import { redirectUriFor } from "../licensee/oauthBroker.js"; // KS_ZOOM_MEETINGS_v1
 import { decryptToken, encryptToken } from "../services/workspace/tokenCrypto.js";
 
 export const ZOOM_AUTHORIZE = "https://zoom.us/oauth/authorize";
@@ -21,14 +22,32 @@ export type Q = { query: (sql: string, params?: unknown[]) => Promise<{ rows: an
 export type ZoomConfig = { clientId: string; clientSecret: string; redirectUri: string };
 const env = (n: string, e: NodeJS.ProcessEnv) => String(e[n] ?? "").trim();
 
+// KS_ZOOM_MEETINGS_v1 - one Keystone Zoom app for every brokerage (KS_ZOOM_CLIENT_ID / KS_ZOOM_CLIENT_SECRET, shared
+// App Service settings), its single redirect on the KS-Ops broker. A brokerage's own ZOOM_CLIENT_ID still wins.
+// Without ZOOM_TOKEN_ENCRYPTION_KEY the tokens are sealed with a key derived from JWT_SECRET, so a new brokerage
+// needs no extra key. Scopes on the Keystone app add meeting:write:meeting (create Zoom meetings) to the four above.
+const clientIdOf = (e: NodeJS.ProcessEnv) => env("ZOOM_CLIENT_ID", e) || env("KS_ZOOM_CLIENT_ID", e);
+const clientSecretOf = (e: NodeJS.ProcessEnv) => (env("ZOOM_CLIENT_ID", e) ? env("ZOOM_CLIENT_SECRET", e) : env("KS_ZOOM_CLIENT_SECRET", e));
+
+/** The env tokenCrypto reads: the server's own key, else one derived from JWT_SECRET. */
+export function zoomCryptoEnv(e: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  if (env(KEY, e)) return e;
+  const jwt = env("JWT_SECRET", e);
+  return jwt ? { [KEY]: `zoom-tokens:${jwt}` } : {};
+}
+
 export function zoomConfigProblem(e: NodeJS.ProcessEnv = process.env): string | null {
-  const missing = ["ZOOM_CLIENT_ID", "ZOOM_CLIENT_SECRET", KEY].filter((n) => !env(n, e));
+  const missing: string[] = [];
+  if (!clientIdOf(e)) missing.push("KS_ZOOM_CLIENT_ID");
+  if (!clientSecretOf(e)) missing.push(env("ZOOM_CLIENT_ID", e) ? "ZOOM_CLIENT_SECRET" : "KS_ZOOM_CLIENT_SECRET");
+  if (!env(KEY, zoomCryptoEnv(e))) missing.push(KEY);
   return missing.length ? `Zoom is not set up on this server yet (${missing.join(", ")}).` : null;
 }
 
 export function zoomConfig(e: NodeJS.ProcessEnv = process.env): ZoomConfig | null {
   if (zoomConfigProblem(e)) return null;
-  return { clientId: env("ZOOM_CLIENT_ID", e), clientSecret: env("ZOOM_CLIENT_SECRET", e), redirectUri: env("ZOOM_REDIRECT_URI", e) || `${serverUrl().replace(/\/+$/, "")}/api/meeting-notes/zoom/callback` };
+  return { clientId: clientIdOf(e), clientSecret: clientSecretOf(e),
+    redirectUri: env("ZOOM_REDIRECT_URI", e) || redirectUriFor("zoom", `${serverUrl().replace(/\/+$/, "")}/api/meeting-notes/zoom/callback`, e) };
 }
 
 export const stateHash = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -77,24 +96,25 @@ export async function saveZoomAccount(db: Q, userId: string, t: Tokens, me: { id
      ON CONFLICT (user_id) DO UPDATE SET zoom_user_id = EXCLUDED.zoom_user_id, zoom_email = EXCLUDED.zoom_email, access_token_enc = EXCLUDED.access_token_enc,
        refresh_token_enc = EXCLUDED.refresh_token_enc, access_token_expires_at = EXCLUDED.access_token_expires_at, scopes = EXCLUDED.scopes,
        status = 'connected', last_error = NULL, connected_at = now(), updated_at = now()`,
-    [userId, me.id, me.email, encryptToken(t.accessToken, process.env, KEY), encryptToken(t.refreshToken, process.env, KEY), t.expiresAt, t.scopes]);
+    [userId, me.id, me.email, encryptToken(t.accessToken, zoomCryptoEnv(), KEY), encryptToken(t.refreshToken, zoomCryptoEnv(), KEY), t.expiresAt, t.scopes]);
 }
 
-export type ZoomClient = { userId: string; get: <T = any>(path: string) => Promise<T>; download: (url: string) => Promise<string>; token: () => string };
+export type ZoomClient = { userId: string; get: <T = any>(path: string) => Promise<T>; download: (url: string) => Promise<string>; token: () => string;
+  /** KS_ZOOM_MEETINGS_v1 */ post: <T = any>(path: string, body: unknown) => Promise<T> };
 
 /** The person's Zoom client (refreshing the token when it is about to expire), or null when not connected. */
 export async function zoomForUser(db: Q, cfg: ZoomConfig, userId: string): Promise<ZoomClient | null> {
   const row = (await db.query(`SELECT access_token_enc, refresh_token_enc, access_token_expires_at, status FROM zoom_accounts WHERE user_id = $1::uuid`, [userId])).rows[0];
   if (!row || row.status !== "connected") return null;
-  let access = decryptToken(row.access_token_enc, process.env, KEY);
+  let access = decryptToken(row.access_token_enc, zoomCryptoEnv(), KEY);
   const expires = row.access_token_expires_at ? new Date(row.access_token_expires_at).getTime() : 0;
   const refresh = async (): Promise<string | null> => {
-    const rt = decryptToken((await db.query(`SELECT refresh_token_enc FROM zoom_accounts WHERE user_id = $1::uuid`, [userId])).rows[0]?.refresh_token_enc, process.env, KEY);
+    const rt = decryptToken((await db.query(`SELECT refresh_token_enc FROM zoom_accounts WHERE user_id = $1::uuid`, [userId])).rows[0]?.refresh_token_enc, zoomCryptoEnv(), KEY);
     if (!rt) { await markZoomReauth(db, userId, "no_refresh_token"); return null; }
     try {
       const t = await tokenRequest(cfg, { grant_type: "refresh_token", refresh_token: rt });
       await db.query(`UPDATE zoom_accounts SET access_token_enc = $2, refresh_token_enc = $3, access_token_expires_at = $4, updated_at = now() WHERE user_id = $1::uuid`,
-        [userId, encryptToken(t.accessToken, process.env, KEY), encryptToken(t.refreshToken || rt, process.env, KEY), t.expiresAt]);
+        [userId, encryptToken(t.accessToken, zoomCryptoEnv(), KEY), encryptToken(t.refreshToken || rt, zoomCryptoEnv(), KEY), t.expiresAt]);
       return t.accessToken;
     } catch (err) {
       if (err instanceof ZoomError && (err.code === "invalid_grant" || err.status === 400 || err.status === 401)) await markZoomReauth(db, userId, err.message);
@@ -104,9 +124,12 @@ export async function zoomForUser(db: Q, cfg: ZoomConfig, userId: string): Promi
   if (!access || expires - Date.now() < 60_000) access = await refresh();
   if (!access) return null;
   let current = access;
-  const call = async (url: string, accept = "application/json"): Promise<Response> => {
-    let r = await fetchImpl(url, { headers: { Authorization: `Bearer ${current}`, Accept: accept } });
-    if (r.status === 401) { const fresh = await refresh(); if (fresh) { current = fresh; r = await fetchImpl(url, { headers: { Authorization: `Bearer ${current}`, Accept: accept } }); } }
+  const call = async (url: string, accept = "application/json", body?: unknown): Promise<Response> => {
+    const init = (): RequestInit => body === undefined
+      ? { headers: { Authorization: `Bearer ${current}`, Accept: accept } }
+      : { method: "POST", headers: { Authorization: `Bearer ${current}`, Accept: accept, "Content-Type": "application/json" }, body: JSON.stringify(body) };
+    let r = await fetchImpl(url, init());
+    if (r.status === 401) { const fresh = await refresh(); if (fresh) { current = fresh; r = await fetchImpl(url, init()); } }
     return r;
   };
   return {
@@ -114,6 +137,12 @@ export async function zoomForUser(db: Q, cfg: ZoomConfig, userId: string): Promi
     token: () => current,
     async get<T>(path: string): Promise<T> {
       const r = await call(`${ZOOM_API}${path}`);
+      const text = await r.text();
+      if (!r.ok) throw new ZoomError(r.status, null, `zoom_api_${r.status} ${path.split("?")[0]} ${text.slice(0, 200)}`);
+      return (text ? JSON.parse(text) : null) as T;
+    },
+    async post<T>(path: string, body: unknown): Promise<T> {
+      const r = await call(`${ZOOM_API}${path}`, "application/json", body);
       const text = await r.text();
       if (!r.ok) throw new ZoomError(r.status, null, `zoom_api_${r.status} ${path.split("?")[0]} ${text.slice(0, 200)}`);
       return (text ? JSON.parse(text) : null) as T;
@@ -134,7 +163,7 @@ export async function markZoomReauth(db: Q, userId: string, reason: string): Pro
 export async function disconnectZoom(db: Q, cfg: ZoomConfig | null, userId: string): Promise<boolean> {
   const row = (await db.query(`SELECT access_token_enc FROM zoom_accounts WHERE user_id = $1::uuid`, [userId])).rows[0];
   let revoked = false;
-  const token = row ? decryptToken(row.access_token_enc, process.env, KEY) : null;
+  const token = row ? decryptToken(row.access_token_enc, zoomCryptoEnv(), KEY) : null;
   if (cfg && token) {
     try {
       const r = await fetchImpl(ZOOM_REVOKE, {
@@ -187,4 +216,17 @@ export async function zoomParticipantEmails(z: ZoomClient, uuid: string): Promis
     console.warn("[zoom] participants not available", { message: err instanceof Error ? err.message : String(err) });
     return [];
   }
+}
+
+// KS_ZOOM_MEETINGS_v1 - a scheduled Zoom meeting on the person's own Zoom account. Cloud recording is asked for so the
+// transcript comes back into the CRM (Settings > Meeting notes); Zoom ignores it on plans without cloud recording.
+export async function createZoomMeeting(z: ZoomClient, input: { topic: string; start: string; end: string; agenda?: string | null }): Promise<{ id: string; joinUrl: string }> {
+  const minutes = Math.max(15, Math.round((new Date(input.end).getTime() - new Date(input.start).getTime()) / 60_000) || 30);
+  const m = await z.post<any>("/users/me/meetings", {
+    topic: input.topic.slice(0, 200), type: 2, start_time: new Date(input.start).toISOString().replace(/\.\d{3}Z$/, "Z"), timezone: "UTC", duration: minutes,
+    agenda: input.agenda ? String(input.agenda).slice(0, 2000) : undefined,
+    settings: { join_before_host: false, waiting_room: true, auto_recording: "cloud" },
+  });
+  if (!m?.join_url) throw new ZoomError(502, null, "zoom_meeting_no_join_url");
+  return { id: String(m.id), joinUrl: String(m.join_url) };
 }

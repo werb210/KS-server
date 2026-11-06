@@ -25,6 +25,6 @@ describe("BF_SERVER_TEAMS_MEETINGS_v1", () => {
   });
 
   it("only registers a teams_meeting for real online meetings", () => {
-    expect(meetings).toContain("if (wantsOnline && graphId)");
+    expect(meetings).toContain("if (teamsOnline && graphId)"); // KS_ZOOM_MEETINGS_v1 - only a Teams meeting
   });
 });

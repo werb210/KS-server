@@ -26,6 +26,7 @@ import { PROVIDER_LABEL, runMeetingNotesSync } from "../meetingNotes/sync.js";
 import {
   ZoomError, disconnectZoom, exchangeZoomCode, saveZoomAccount, stateHash, zoomAuthorizeUrl, zoomConfig, zoomConfigProblem, zoomMe, type Q,
 } from "../meetingNotes/zoom.js";
+import { unwrapState, wrapState } from "../licensee/oauthBroker.js"; // KS_ZOOM_MEETINGS_v1
 
 const router = Router();
 const db = (): Q => pool as unknown as Q;
@@ -61,12 +62,12 @@ router.post("/zoom/connect", ...staff, safeHandler(async (req: any, res: any) =>
   const state = randomBytes(24).toString("base64url");
   await db().query(`DELETE FROM zoom_oauth_states WHERE created_at < now() - make_interval(mins => $1::int)`, [STATE_TTL_MINUTES]);
   await db().query(`INSERT INTO zoom_oauth_states (state_hash, user_id) VALUES ($1, $2::uuid)`, [stateHash(state), me]);
-  res.json({ ok: true, url: zoomAuthorizeUrl(cfg, state) });
+  res.json({ ok: true, url: zoomAuthorizeUrl(cfg, wrapState("zoom", state, STATE_TTL_MINUTES * 60_000)) }); // KS_ZOOM_MEETINGS_v1
 }));
 
 router.get("/zoom/callback", publicLimiter, safeHandler(async (req: any, res: any) => {
   const cfg = zoomConfig();
-  const state = String(req.query?.state ?? "");
+  const state = unwrapState("zoom", String(req.query?.state ?? "")) ?? ""; // KS_ZOOM_MEETINGS_v1 - via the KS-Ops broker
   const claimed = state ? (await db().query(
     `DELETE FROM zoom_oauth_states WHERE state_hash = $1 AND created_at > now() - make_interval(mins => $2::int) RETURNING user_id::text AS user_id`,
     [stateHash(state), STATE_TTL_MINUTES])).rows[0] : null;

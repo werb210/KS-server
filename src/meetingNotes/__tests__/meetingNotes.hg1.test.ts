@@ -33,7 +33,7 @@ describe("set-up", () => {
   });
 
   it("names the missing Zoom settings and sends people to Zoom's consent screen", () => {
-    expect(zoomConfigProblem({})).toContain("ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET, ZOOM_TOKEN_ENCRYPTION_KEY");
+    expect(zoomConfigProblem({})).toContain("KS_ZOOM_CLIENT_ID, KS_ZOOM_CLIENT_SECRET, ZOOM_TOKEN_ENCRYPTION_KEY"); // KS_ZOOM_MEETINGS_v1 - the Keystone app
     const u = new URL(zoomAuthorizeUrl({ clientId: "zc", clientSecret: "zs", redirectUri: "https://s.example/api/meeting-notes/zoom/callback" }, "st"));
     expect(u.origin + u.pathname).toBe("https://zoom.us/oauth/authorize");
     expect(Object.fromEntries(u.searchParams)).toMatchObject({ response_type: "code", client_id: "zc", state: "st" });
