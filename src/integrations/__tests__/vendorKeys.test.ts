@@ -1,6 +1,6 @@
 // KS_SERVER_VENDOR_KEYS - a brokerage's own verification-service keys.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { clearVendorKeyCacheForTests, loadVendorKeys, saveVendorKeys, VendorKeyError, viewOf } from "../vendorKeys.js";
+import { clearVendorKeyCacheForTests, loadVendorKeys, saveVendorKeys, sealingKey, VendorKeyError, viewOf } from "../vendorKeys.js";
 import { createEnvOverlay } from "../../tenancy/envOverlay.js";
 import { runWithTenant } from "../../tenancy/context.js";
 
@@ -57,5 +57,23 @@ describe("vendor keys", () => {
     await runWithTenant(a, () => saveVendorKeys(dbA, { IPINFO_TOKEN: "alpha-key" }, null));
     expect(runWithTenant(a, () => overlay.IPINFO_TOKEN)).toBe("alpha-key");
     expect(runWithTenant(b, () => overlay.IPINFO_TOKEN)).toBeUndefined();
+  });
+
+  // KS_SERVER_VENDOR_KEYS_JWT_FALLBACK
+  it("with no encryption key it seals with a JWT_SECRET-derived key and reads it back", async () => {
+    delete process.env.LENDER_CREDENTIALS_ENCRYPTION_KEY;
+    delete process.env.GOOGLE_TOKEN_ENCRYPTION_KEY;
+    delete process.env.QBO_TOKEN_ENCRYPTION_KEY;
+    process.env.JWT_SECRET = "test-jwt-secret-for-vendor-keys";
+    expect(sealingKey()).toBe("JWT_SECRET");
+    const db = memoryDb();
+    await saveVendorKeys(db, { IPINFO_TOKEN: "tok_jwt_9999" }, null);
+    const row = db.rows.get("IPINFO_TOKEN")!;
+    expect(row.key_name).toBe("JWT_SECRET");
+    expect(row.value_enc).not.toContain("tok_jwt_9999");
+    clearVendorKeyCacheForTests();
+    expect((await loadVendorKeys(db)).IPINFO_TOKEN).toBe("tok_jwt_9999");
+    delete process.env.JWT_SECRET;
+    expect(sealingKey()).toBeNull();
   });
 });

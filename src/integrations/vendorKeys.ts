@@ -35,9 +35,31 @@ export function vendorKeyFor(name: string): string | undefined {
 setVendorKeyLookup(vendorKeyFor);
 
 const KEY_NAMES: TokenKeyName[] = ["LENDER_CREDENTIALS_ENCRYPTION_KEY", "GOOGLE_TOKEN_ENCRYPTION_KEY", "QBO_TOKEN_ENCRYPTION_KEY"];
-/** The first encryption key this brokerage has (KS-Ops generates them per brokerage). */
-export function sealingKey(e: NodeJS.ProcessEnv = process.env): TokenKeyName | null {
-  return KEY_NAMES.find((k) => String(e[k] ?? "").trim()) ?? null;
+// KS_SERVER_VENDOR_KEYS_JWT_FALLBACK - a server with none of those keys (e.g. a fresh dev slot) still seals with a key
+// derived from JWT_SECRET (SHA-256 of "vendor-keys:" + JWT_SECRET), the same fallback Boreal uses.
+export const JWT_DERIVED = "JWT_SECRET" as const;
+export type SealingKeyName = TokenKeyName | typeof JWT_DERIVED;
+
+/** The first encryption key this brokerage has (KS-Ops generates them per brokerage), else the JWT-derived key. */
+export function sealingKey(e: NodeJS.ProcessEnv = process.env): SealingKeyName | null {
+  const named = KEY_NAMES.find((k) => String(e[k] ?? "").trim());
+  if (named) return named;
+  return String(e.JWT_SECRET ?? "").trim() ? JWT_DERIVED : null;
+}
+
+function cryptoEnv(keyName: SealingKeyName, e: NodeJS.ProcessEnv = process.env): [NodeJS.ProcessEnv, TokenKeyName] {
+  if (keyName !== JWT_DERIVED) return [e, keyName];
+  const secret = String(e.JWT_SECRET ?? "").trim();
+  // keyBytes() stretches any non-hex, non-base64-32 value with SHA-256; the prefix keeps it from ever being a valid hex key.
+  return [secret ? { LENDER_CREDENTIALS_ENCRYPTION_KEY: `vendor-keys:${secret}` } : {}, "LENDER_CREDENTIALS_ENCRYPTION_KEY"];
+}
+export function sealVendorValue(plain: string, keyName: SealingKeyName, e: NodeJS.ProcessEnv = process.env): string {
+  const [env, name] = cryptoEnv(keyName, e);
+  return encryptToken(plain, env, name);
+}
+export function unsealVendorValue(sealed: string, keyName: SealingKeyName, e: NodeJS.ProcessEnv = process.env): string | null {
+  const [env, name] = cryptoEnv(keyName, e);
+  return decryptToken(sealed, env, name);
 }
 
 type Q = Pick<Pool, "query">;
@@ -47,10 +69,10 @@ export async function loadVendorKeys(db: Q): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
   try {
     const r = await db.query(`SELECT key, value_enc, key_name FROM vendor_keys`);
-    for (const row of r.rows as Array<{ key: string; value_enc: string; key_name: TokenKeyName }>) {
+    for (const row of r.rows as Array<{ key: string; value_enc: string; key_name: SealingKeyName }>) {
       if (!VENDOR_KEY_NAMES.has(row.key)) continue;
       let v: string | null = null;
-      try { v = decryptToken(row.value_enc, process.env, row.key_name); } catch (err) { console.warn("[vendor-keys] could not decrypt", { key: row.key, message: (err as Error)?.message }); }
+      try { v = unsealVendorValue(row.value_enc, row.key_name); } catch (err) { console.warn("[vendor-keys] could not decrypt", { key: row.key, message: (err as Error)?.message }); }
       if (v) out[row.key] = v;
     }
   } catch (err) {
@@ -95,7 +117,7 @@ export async function saveVendorKeys(db: Q, changes: Record<string, unknown>, us
     await db.query(
       `INSERT INTO vendor_keys (key, value_enc, key_name, updated_by, updated_at) VALUES ($1, $2, $3, $4, now())
        ON CONFLICT (key) DO UPDATE SET value_enc = EXCLUDED.value_enc, key_name = EXCLUDED.key_name, updated_by = EXCLUDED.updated_by, updated_at = now()`,
-      [k, encryptToken(value, process.env, keyName), keyName, userId],
+      [k, sealVendorValue(value, keyName), keyName, userId],
     );
   }
   return loadVendorKeys(db);
