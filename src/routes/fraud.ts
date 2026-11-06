@@ -22,7 +22,7 @@ import { checkFeature, featureDef } from "../plans/catalogue.js";
 import { getPlanState, type Q } from "../plans/state.js";
 import { FRAUD_CHECKS } from "../fraud/catalogue.js";
 import { allowedChecks, enqueueFraudRun, getFraudSettings, listResults, queueStatus, saveFraudSettings } from "../fraud/store.js";
-import { computeScore, prescreenText } from "../fraud/score.js";
+import { bankStatementIds, computeScore, prescreenText } from "../fraud/score.js"; // BF_SERVER_v906_FRAUD_FLOOR
 import { buildNetwork, loadProfile } from "../fraud/engine.js";
 import { fraudProviders, providerStatus } from "../fraud/providers/index.js";
 import { watchlistReady } from "../fraud/watchlist.js";
@@ -77,11 +77,19 @@ router.get("/applications/:id", ...staff, safeHandler(async (req: any, res) => {
       statement_math: math ? { status: math.status, reasons: math.reasons, checked_at: math.checked_at } : null,
     };
   });
-  const score = allowed.has("fraud_16") ? computeScore(rows, allowed) : null;
+  const queue = await queueStatus(db(), app.id);
+  // BF_SERVER_v906_FRAUD_FLOOR - a tampered bank statement floors the score; while a run is queued or a document is
+  // still waiting for its tamper scan the score is marked not final (the tab shows "Checks still running").
+  const pendingDocuments = allowed.has("fraud_1") ? documents.filter((d: any) => !d.tamper).length : 0;
+  const score = allowed.has("fraud_16") ? computeScore(rows, allowed, {
+    bankStatementIds: bankStatementIds(docs.rows.map((d: any) => ({ id: String(d.id), category: d.category ?? null }))),
+    queued: Boolean(queue.queued),
+    pendingDocuments,
+  }) : null;
   return res.json({
     ok: true, application_id: app.id, checks, documents, score,
     include_prescreen_in_package: app.include ?? (await getFraudSettings(db())).include_prescreen_in_package,
-    queue: await queueStatus(db(), app.id),
+    queue,
   });
 }));
 
@@ -104,7 +112,8 @@ router.get("/applications/:id/prescreen", ...staff, requireFeature("fraud_16"), 
   const app = await appExists(String(req.params.id));
   if (!app) return res.status(404).json({ ok: false, error: "not_found" });
   const allowed = await allowedChecks(db());
-  const s = computeScore(await listResults(db(), app.id), allowed);
+  const docRows = await db().query(`SELECT id::text AS id, COALESCE(category, document_type) AS category FROM documents WHERE application_id::text = $1`, [app.id]);
+  const s = computeScore(await listResults(db(), app.id), allowed, { bankStatementIds: bankStatementIds(docRows.rows as Array<{ id: string; category: string | null }>) }); // BF_SERVER_v906_FRAUD_FLOOR
   const include = app.include ?? (await getFraudSettings(db())).include_prescreen_in_package;
   return res.json({ ok: true, score: s, include_in_package: include, lines: prescreenText(s, { company: brandName(), applicationName: app.name, at: new Date() }) });
 }));

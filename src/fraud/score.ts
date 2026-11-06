@@ -17,7 +17,23 @@ export type FraudScore = {
   reasons: Array<{ check: string; label: string; severity: "red" | "amber"; text: string }>;
   covered: Array<{ check: string; label: string; status: FraudStatus }>;
   not_covered: Array<{ check: string; label: string; status: FraudStatus; why: string }>;
+  // BF_SERVER_v906_FRAUD_FLOOR - false while checks are queued or documents still wait for their tamper scan: the
+  // number is not final then and the tab says "Checks still running" instead of showing it as the score.
+  complete?: boolean;
+  pending_reason?: string | null;
+  floor?: { applied: boolean; reason: string | null };
 };
+
+// BF_SERVER_v906_FRAUD_FLOOR - a file with tampered bank statements scored 45 on its first run (before every tamper
+// scan was in) and 85 after "Run again". A confirmed tamper finding (red) on a bank statement now holds the score in
+// High risk on every run, whatever else has or has not run yet.
+export const TAMPER_FLOOR = 75;
+export type ScoreOptions = { bankStatementIds?: ReadonlySet<string>; queued?: boolean; pendingDocuments?: number };
+
+/** The documents filed as bank statements (category or type mentions "bank"). */
+export function bankStatementIds(docs: Array<{ id: string; category: string | null }>): Set<string> {
+  return new Set(docs.filter((d) => /bank/i.test(String(d.category ?? "")) && !/void|cheque|check|pad\b/i.test(String(d.category ?? ""))).map((d) => String(d.id)));
+}
 
 export function band(score: number): ScoreBand {
   return score >= 50 ? "high" : score >= 20 ? "medium" : "low";
@@ -25,7 +41,7 @@ export function band(score: number): ScoreBand {
 
 export const BAND_TEXT: Record<ScoreBand, string> = { low: "low risk", medium: "needs a closer look", high: "high risk" };
 
-export function computeScore(results: StoredResult[], allowed: ReadonlySet<string>): FraudScore {
+export function computeScore(results: StoredResult[], allowed: ReadonlySet<string>, opts: ScoreOptions = {}): FraudScore {
   let score = 0;
   const reasons: FraudScore["reasons"] = [];
   const covered: FraudScore["covered"] = [];
@@ -52,8 +68,25 @@ export function computeScore(results: StoredResult[], allowed: ReadonlySet<strin
     }
   }
   reasons.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "red" ? -1 : 1));
-  const s = Math.min(100, Math.round(score));
-  return { score: s, band: band(s), reasons: reasons.slice(0, 12), covered, not_covered: notCovered };
+  let s = Math.min(100, Math.round(score));
+  // BF_SERVER_v906_FRAUD_FLOOR
+  const tamperedStatement = opts.bankStatementIds && allowed.has("fraud_1")
+    ? results.find((r) => r.check_key === "fraud_1" && r.status === "red" && opts.bankStatementIds!.has(r.subject))
+    : undefined;
+  let floorReason: string | null = null;
+  if (tamperedStatement) {
+    floorReason = "A bank statement shows signs of editing (document tamper scan), so this file is High risk until a person reviews the statements.";
+    if (s < TAMPER_FLOOR) s = TAMPER_FLOOR;
+    reasons.unshift({ check: "fraud_1", label: fraudCheck("fraud_1")?.label ?? "Document tamper scan", severity: "red", text: floorReason });
+  }
+  const pendingDocs = Math.max(0, Number(opts.pendingDocuments ?? 0));
+  const pendingReason = opts.queued ? "Checks are still running. The score will be final when they finish."
+    : pendingDocs > 0 ? `${pendingDocs} document(s) are still waiting for their tamper scan. The score will be final when they are scanned.`
+    : null;
+  return {
+    score: s, band: band(s), reasons: reasons.slice(0, 12), covered, not_covered: notCovered,
+    complete: !pendingReason, pending_reason: pendingReason, floor: { applied: Boolean(tamperedStatement), reason: floorReason },
+  };
 }
 
 /** Plain-text pre-screen summary for the lender package. */
