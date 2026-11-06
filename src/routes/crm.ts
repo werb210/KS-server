@@ -1692,7 +1692,7 @@ router.post('/contacts/bulk-delete', requireCrmWrite, safeHandler(async (req: an
   const plan = await planBulkDelete('contact', selected, async (ids) => {
     // v692: protect contacts attached to an application (direct FK or join table).
     const r = await pool.query(
-      `SELECT c.id::text AS id FROM contacts c
+      `SELECT c.id FROM contacts c
         WHERE c.id = ANY($1::uuid[]) AND c.silo = $2
           AND (EXISTS (SELECT 1 FROM applications a WHERE a.contact_id = c.id)
                OR EXISTS (SELECT 1 FROM application_contacts ac WHERE ac.contact_id = c.id))`,
