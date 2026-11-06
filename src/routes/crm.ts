@@ -32,6 +32,7 @@ import { emitAutomationEvent } from "../modules/automation/automationEngine.js";
 import { requireFeature } from "../plans/requireFeature.js"; // KS_SERVER_v6_PLANS
 import { requireMarketingTool, visitorHistoryDays } from "../plans/marketingGate.js"; // KS_SERVER_MARKETING_ADDON
 import { lockedAmong, refuseIfLocked } from "../retention/retention.js"; // KS_SERVER_v14_RETENTION
+import { linkContactToCompanyQuietly } from "../services/crm/companyFromEmail.js"; // BF_SERVER_v907_EMAIL_DOMAIN_COMPANY
 import { CRM_RULES, recordGuard } from "../visibility/recordGuard.js"; // KS_SERVER_v20_TEAMS
 import { ownerFilterSql, scopeForRequest, visibleIds } from "../visibility/scope.js"; // KS_SERVER_v20_TEAMS
 import { scopedRequest } from "../visibility/scopedDb.js"; // KS_SERVER_v21_VISIBILITY_GAPS
@@ -626,6 +627,11 @@ router.post("/contacts", requireCrmWrite, safeHandler(async (req: any, res: any)
     const w = await pool.query(`UPDATE contacts SET custom_fields = $2::jsonb WHERE id = $1 RETURNING custom_fields`, [row.id, JSON.stringify(cf.value)]);
     (row as any).custom_fields = w.rows[0]?.custom_fields ?? cf.value;
   }
+  // BF_SERVER_v907_EMAIL_DOMAIN_COMPANY - a work email attaches the contact to its company (found or created).
+  if (row?.id && !company_id && email) {
+    const link = await linkContactToCompanyQuietly(pool as any, String(row.id));
+    if (link) { (row as any).company_id = link.company_id; (row as any).company_created = link.created; }
+  }
   if (row?.id) void pushContactToOutlook(pool, String(row.id)); // BF_SERVER_BLOCK_v_CONTACTS_OUTLOOK_SYNC_v1
   // BF_SERVER_v786_WORKFLOW_GRAPH - automation trigger.
   if (row?.id) void emitAutomationEvent("contact.created", { silo, contactId: String(row.id), data: { source: "manual" } });
@@ -1142,6 +1148,11 @@ router.patch("/contacts/:id", requireCrmWrite, safeHandler(async (req: any, res:
      WHERE id = $${i} RETURNING *`,
     params,
   );
+  // BF_SERVER_v907_EMAIL_DOMAIN_COMPANY - a new work email on a contact with no company attaches it to that company.
+  if (rows[0] && "email" in (req.body ?? {}) && !rows[0].company_id) {
+    const link = await linkContactToCompanyQuietly(pool as any, id);
+    if (link) rows[0].company_id = link.company_id;
+  }
   void pushContactToOutlook(pool, id); // BF_SERVER_BLOCK_v_CONTACTS_OUTLOOK_SYNC_v1
   if (before && rows[0]) emitFieldChanges(String(rows[0].silo ?? "BF"), id, before, rows[0], ALLOWED);
   res.json({ data: rows[0] ?? null });
@@ -1651,25 +1662,50 @@ async function visibleSelection(req: any, kind: "contact" | "company"): Promise<
   return selected.filter((id) => ok.has(id));
 }
 
+type SkippedDelete = { id: string; name: string; reason: string };
+/** BF_SERVER_v907_PARTIAL_BULK_DELETE (Keystone port) - which of the selected records can go, and why the others cannot. */
+async function planBulkDelete(type: "contact" | "company", ids: string[], protectedReasons: (ids: string[]) => Promise<Map<string, string>>): Promise<{ deletable: string[]; skipped: SkippedDelete[]; locked: any[]; fk: string[] }> {
+  const skipped: SkippedDelete[] = [];
+  const fk = ids.length ? await protectedReasons(ids) : new Map<string, string>();
+  for (const [id, reason] of fk) skipped.push({ id, name: id, reason });
+  const rest = ids.filter((id) => !fk.has(id));
+  const locked = rest.length ? await lockedAmong(type, rest) : [];
+  for (const l of locked) skipped.push({ id: l.id, name: l.id, reason: "kept on record (legal hold)" });
+  const lockedIds = new Set(locked.map((l: any) => String(l.id)));
+  const deletable = rest.filter((id) => !lockedIds.has(id));
+  if (skipped.length) {
+    const table = type === "contact" ? "contacts" : "companies";
+    const label = type === "contact" ? "COALESCE(NULLIF(name, ''), email, id::text)" : "COALESCE(NULLIF(name, ''), id::text)";
+    const n = await pool.query(`SELECT id::text AS id, ${label} AS name FROM ${table} WHERE id = ANY($1::uuid[])`, [skipped.map((x) => x.id)]);
+    const nameOf = new Map(n.rows.map((r: any) => [String(r.id), String(r.name)]));
+    for (const x of skipped) x.name = nameOf.get(x.id) ?? x.name;
+  }
+  return { deletable, skipped, locked, fk: [...fk.keys()] };
+}
+
+// BF_SERVER_v907_PARTIAL_BULK_DELETE (Keystone port) - a mass delete removes the records that can be deleted and
+// reports the rest with the reason, instead of refusing the whole selection. When nothing can be deleted the old
+// answers stand: 409 (fk_protected) or 423 (legal hold).
 router.post('/contacts/bulk-delete', requireCrmWrite, safeHandler(async (req: any, res: any) => {
   const selected = await visibleSelection(req, "contact"); const silo = getSilo(res);
-  if (!selected.length) return res.json({ deleted: 0, protectedIds: [] });
-  // v692: protect contacts attached to an application (direct FK or join table).
-  // (Previous code joined a non-existent lenders.owner_contact_id column -> crash.)
-  const protectedRes = await pool.query(
-    `SELECT c.id FROM contacts c
-      WHERE c.id = ANY($1::uuid[]) AND c.silo = $2
-        AND (EXISTS (SELECT 1 FROM applications a WHERE a.contact_id = c.id)
-             OR EXISTS (SELECT 1 FROM application_contacts ac WHERE ac.contact_id = c.id))`,
-    [selected, silo]
-  );
-  const protectedIds = protectedRes.rows.map((r:any)=>r.id);
-  if (protectedIds.length) return res.status(409).json({ error: 'fk_protected', protectedIds });
-  // KS_SERVER_v14_RETENTION - a legal hold (on the contact or its company) blocks the whole batch.
-  const locked = await lockedAmong('contact', selected);
-  if (locked.length) return res.status(423).json({ error: 'retention_locked', code: 'retention_locked', message: locked[0].message, locked, protectedIds: locked.map((l) => l.id) });
-  const out = await pool.query(`DELETE FROM contacts WHERE id = ANY($1::uuid[]) AND silo = $2`, [selected, silo]);
-  res.json({ deleted: out.rowCount ?? 0, protectedIds: [] });
+  if (!selected.length) return res.json({ deleted: 0, protectedIds: [], skipped: [] });
+  const plan = await planBulkDelete('contact', selected, async (ids) => {
+    // v692: protect contacts attached to an application (direct FK or join table).
+    const r = await pool.query(
+      `SELECT c.id FROM contacts c
+        WHERE c.id = ANY($1::uuid[]) AND c.silo = $2
+          AND (EXISTS (SELECT 1 FROM applications a WHERE a.contact_id = c.id)
+               OR EXISTS (SELECT 1 FROM application_contacts ac WHERE ac.contact_id = c.id))`,
+      [ids, silo]
+    );
+    return new Map(r.rows.map((x: any) => [String(x.id), "linked to an application"]));
+  });
+  if (!plan.deletable.length) {
+    if (plan.fk.length) return res.status(409).json({ error: 'fk_protected', protectedIds: plan.fk, skipped: plan.skipped });
+    if (plan.locked.length) return res.status(423).json({ error: 'retention_locked', code: 'retention_locked', message: plan.locked[0].message, locked: plan.locked, protectedIds: plan.locked.map((l: any) => l.id), skipped: plan.skipped });
+  }
+  const out = await pool.query(`DELETE FROM contacts WHERE id = ANY($1::uuid[]) AND silo = $2`, [plan.deletable, silo]);
+  res.json({ deleted: out.rowCount ?? 0, protectedIds: plan.skipped.map((x) => x.id), skipped: plan.skipped });
 }));
 
 router.post('/contacts/bulk-tag', safeHandler(async (req: any, res: any) => {
@@ -1688,12 +1724,29 @@ router.post('/contacts/bulk-assign', safeHandler(async (req: any, res: any) => {
 }));
 
 router.post('/companies/bulk-delete', safeHandler(async (req: any, res: any) => {
-  const selected = await visibleSelection(req, "company"); const silo = getSilo(res);
-  const prot = await pool.query(`SELECT id FROM companies WHERE id = ANY($1::uuid[]) AND silo = $2 AND (EXISTS (SELECT 1 FROM contacts c WHERE c.company_id = companies.id) OR EXISTS (SELECT 1 FROM applications a WHERE a.company_id = companies.id))`, [selected, silo]);
-  const protectedIds = prot.rows.map((r:any)=>r.id); if (protectedIds.length) return res.status(409).json({ error:'fk_protected', protectedIds });
-  const locked = await lockedAmong('company', selected); // KS_SERVER_v14_RETENTION - a legal hold blocks the whole batch
-  if (locked.length) return res.status(423).json({ error: 'retention_locked', code: 'retention_locked', message: locked[0].message, locked, protectedIds: locked.map((l) => l.id) });
-  const out = await pool.query(`DELETE FROM companies WHERE id = ANY($1::uuid[]) AND silo = $2`, [selected, silo]); res.json({ deleted: out.rowCount ?? 0, protectedIds: [] });
+  const selected = await visibleSelection(req, "company"); const silo = getSilo(res); // BF_SERVER_v907_PARTIAL_BULK_DELETE
+  if (!selected.length) return res.json({ deleted: 0, protectedIds: [], skipped: [] });
+  const plan = await planBulkDelete('company', selected, async (ids) => {
+    const r = await pool.query(
+      `SELECT co.id::text AS id,
+              EXISTS (SELECT 1 FROM applications a WHERE a.company_id = co.id) AS has_applications,
+              EXISTS (SELECT 1 FROM contacts c WHERE c.company_id = co.id) AS has_contacts
+         FROM companies co WHERE co.id = ANY($1::uuid[]) AND co.silo = $2`,
+      [ids, silo]
+    );
+    const out = new Map<string, string>();
+    for (const x of r.rows as any[]) {
+      if (x.has_applications) out.set(String(x.id), "has applications");
+      else if (x.has_contacts) out.set(String(x.id), "has contacts (delete or move them first)");
+    }
+    return out;
+  });
+  if (!plan.deletable.length) {
+    if (plan.fk.length) return res.status(409).json({ error: 'fk_protected', protectedIds: plan.fk, skipped: plan.skipped });
+    if (plan.locked.length) return res.status(423).json({ error: 'retention_locked', code: 'retention_locked', message: plan.locked[0].message, locked: plan.locked, protectedIds: plan.locked.map((l: any) => l.id), skipped: plan.skipped });
+  }
+  const out = await pool.query(`DELETE FROM companies WHERE id = ANY($1::uuid[]) AND silo = $2`, [plan.deletable, silo]);
+  res.json({ deleted: out.rowCount ?? 0, protectedIds: plan.skipped.map((x) => x.id), skipped: plan.skipped });
 }));
 
 router.post('/companies/bulk-tag', safeHandler(async (req: any, res: any) => {

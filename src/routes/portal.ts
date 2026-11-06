@@ -1,5 +1,6 @@
 import { countOutboundText } from "../plans/usage.js"; // KS_SERVER_v8_USAGE - monthly text count
 import { sharedTwilio } from "../lib/sharedClients.js"; // BF_SERVER_SNAT_REUSE_v784
+import { pipelineSearchClause } from "../services/pipeline/pipelineSearch.js"; // BF_SERVER_v906_PIPELINE_SEARCH
 import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import { fetchStatus as startupStatus, isReady } from "../startupState.js";
@@ -329,6 +330,9 @@ router.get(
         // KS_HUBSPOT_GAPS_1_PIPELINES - a deal moved to another pipeline (Renewals, Equipment...) shows on that board.
         where.push(`a.pipeline_id IS NULL`);
       }
+      // BF_SERVER_v906_PIPELINE_SEARCH - ?q= searches every stage on the server (the board loads at most 500 cards).
+      const searchSql = pipelineSearchClause(req.query.q, values);
+      if (searchSql) where.push(searchSql);
       // KS_SERVER_v20_TEAMS - only the files this user may see, narrowed to ?team_id= (the Team filter, growth and up).
       let pipelineScope = await scopeForRequest(req, pool as any);
       const teamFilter = String(req.query.team_id ?? "").trim();

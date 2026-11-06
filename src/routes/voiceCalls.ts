@@ -451,6 +451,25 @@ router.get("/direct-numbers", auth, safeHandler(async (_req: any, res) => {
       ORDER BY first_name NULLS LAST, last_name NULLS LAST`);
   return res.json({ ok: true, users: rows });
 }));
+// BF_SERVER_v909_AVAILABLE_NUMBERS - Admin: Twilio numbers not yet anyone's direct line (and not the main lines).
+router.get("/available-numbers", auth, safeHandler(async (req: any, res) => {
+  if (String(req.user?.role ?? "").toLowerCase() !== "admin") return res.status(403).json({ ok: false, error: "admin_only" });
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  if (!sid || !token) return res.json({ ok: true, configured: false, numbers: [] });
+  try {
+    const { sharedTwilio } = await import("../lib/sharedClients.js");
+    const { availableNumbers } = await import("../voice/availableNumbers.js");
+    const client: any = sharedTwilio(sid, token);
+    const numbers = await availableNumbers(pool, async () => (await client.incomingPhoneNumbers.list({ limit: 200 })).map((n: any) => ({ phoneNumber: String(n.phoneNumber ?? ""), friendlyName: n.friendlyName ?? null })));
+    res.setHeader("Cache-Control", "no-store");
+    return res.json({ ok: true, configured: true, numbers });
+  } catch (err: any) {
+    console.error("available_numbers_failed", { message: err?.message });
+    return res.status(502).json({ ok: false, error: "twilio_unavailable", message: "Could not read the phone numbers from Twilio. Try again in a minute." });
+  }
+}));
+
 
 // KS_SERVER_PHONE_PROVISIONING - typing in a number bought elsewhere (or ported) is the pro direct-lines feature too.
 router.put("/direct-numbers/:userId", auth, requireFeature("multiple_lines"), safeHandler(async (req: any, res) => {
