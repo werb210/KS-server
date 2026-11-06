@@ -8,6 +8,8 @@ import { resolveSiloFromRequest } from "../../middleware/silo.js";
 import { enableAutoRecording } from "../../services/teams/autoRecord.js"; // BF_SERVER_TEAMS_AUTO_RECORD_v1
 import { getGoogleForUser } from "../../services/workspace/googleAuth.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
 import { createGoogleEvent } from "../../services/workspace/google.js"; // KS_SERVER_v12_GOOGLE_WORKSPACE
+import { pickMeetingApp, zoomClientFor, zoomConnected } from "../../services/meetings/meetingApps.js"; // KS_ZOOM_MEETINGS_v1
+import { createZoomMeeting } from "../../meetingNotes/zoom.js"; // KS_ZOOM_MEETINGS_v1
 
 const router = express.Router({ mergeParams: true });
 
@@ -44,25 +46,48 @@ router.post("/", safeHandler(async (req: any, res: any) => {
   // BF_SERVER_TEAMS_MEETING_GRAPH_DIAG_v1 - a null graph client means the user
   // has no usable o365 delegated token. Previously this silently produced a
   // local-only meeting with no Teams link and no teams_meetings row.
-  if (!graph && wantsOnline) {
+  // KS_ZOOM_MEETINGS_v1 - an online meeting is Teams, Google Meet or Zoom: b.meeting_app picks one; left out, the
+  // default for what this person connected (Teams, then Meet, then Zoom). Meet needs Google, Zoom needs Zoom connected.
+  const google = wantsOnline || !graph ? await getGoogleForUser(pool, userId) : null;
+  const app = wantsOnline
+    ? pickMeetingApp({ teams: Boolean(graph), google_meet: Boolean(google), zoom: await zoomConnected(String(userId)) }, b.meeting_app)
+    : null;
+  if (wantsOnline && b.meeting_app && !app) {
+    return res.status(412).json({ error: `${String(b.meeting_app)}_not_connected`, message: "Connect it first (Settings), or pick another meeting app." });
+  }
+  const teamsOnline = app === "teams";
+  const useGraph = Boolean(graph) && app !== "google_meet";
+  let zoomJoin: string | null = null;
+  if (app === "zoom") {
+    const z = await zoomClientFor(String(userId));
+    try {
+      if (!z) throw new Error("zoom_not_connected");
+      zoomJoin = (await createZoomMeeting(z, { topic: title, start: new Date(b.start_at).toISOString(), end: new Date(b.end_at).toISOString(), agenda: b.attendee_description ?? null })).joinUrl;
+    } catch (e: any) {
+      console.error("zoom_meeting_create_failed", { user_id: userId, message: String(e?.message ?? e).slice(0, 200) });
+      return res.status(502).json({ error: "zoom_meeting_create_failed", message: "Zoom did not create the meeting. Reconnect Zoom under Settings > Meeting notes and try again." });
+    }
+  }
+  const zoomHtml = zoomJoin ? `<p>Join Zoom meeting: <a href="${zoomJoin}">${zoomJoin}</a></p>` : "";
+  if (!graph && wantsOnline && !app) {
     console.error("teams_meeting_no_graph_client", { user_id: userId });
   }
-  if (graph) {
+  if (graph && useGraph) {
     try {
       const create = await graph.fetch("/me/events", {
         method: "POST",
         body: JSON.stringify({
           subject: title,
-          body: { contentType: "HTML", content: b.attendee_description ?? "" },
+          body: { contentType: "HTML", content: zoomHtml + (b.attendee_description ?? "") },
           start: { dateTime: new Date(b.start_at).toISOString(), timeZone: "UTC" },
           end: { dateTime: new Date(b.end_at).toISOString(), timeZone: "UTC" },
-          location: b.location ? { displayName: b.location } : undefined,
+          location: zoomJoin ? { displayName: "Zoom", locationUri: zoomJoin } : b.location ? { displayName: b.location } : undefined,
           attendees: (b.attendees ?? []).map((a: any) => ({
             emailAddress: { address: a.address, name: a.name ?? a.address },
             type: a.optional ? "optional" : "required",
           })),
           reminderMinutesBeforeStart: b.reminder_minutes ?? 60,
-          ...(wantsOnline ? { isOnlineMeeting: true, onlineMeetingProvider: "teamsForBusiness" } : {}),
+          ...(teamsOnline ? { isOnlineMeeting: true, onlineMeetingProvider: "teamsForBusiness" } : {}),
         }),
       });
       if (create.ok) {
@@ -72,7 +97,7 @@ router.post("/", safeHandler(async (req: any, res: any) => {
         // BF_SERVER_TEAMS_MEETING_GRAPH_DIAG_v1 - the event can be created while
         // Teams declines to attach an online meeting (licensing / policy). The
         // event id alone is useless without a joinWebUrl to resolve later.
-        if (wantsOnline && !joinUrl) {
+        if (teamsOnline && !joinUrl) {
           console.error("teams_meeting_no_join_url", { graph_event_id: graphId });
         }
       } else {
@@ -96,7 +121,7 @@ router.post("/", safeHandler(async (req: any, res: any) => {
     // knowing the event id alone is not enough: we must also know WHO organised
     // it. crm_meetings stores neither pairing, so capture the organiser's UPN
     // here while we still hold their delegated Graph client.
-    if (wantsOnline && graphId) {
+    if (teamsOnline && graphId) {
       try {
         const meRes = await graph.fetch("/me?$select=userPrincipalName");
         if (meRes.ok) {
@@ -111,22 +136,21 @@ router.post("/", safeHandler(async (req: any, res: any) => {
   // KS_SERVER_v12_GOOGLE_WORKSPACE - no Microsoft 365: the event goes on the user's Google Calendar, and an
   // online meeting gets a Google Meet link where Teams would have been used.
   let googleEventId: string | null = null;
-  if (!graph) {
-    const google = await getGoogleForUser(pool, userId);
+  if (!useGraph) {
     if (google) {
       try {
         const created = await createGoogleEvent(google, {
           title,
           start: new Date(b.start_at).toISOString(),
           end: new Date(b.end_at).toISOString(),
-          notes: b.attendee_description ?? null,
-          location: b.location ?? null,
+          notes: [zoomJoin ? `Join Zoom meeting: ${zoomJoin}` : "", b.attendee_description ?? ""].filter(Boolean).join("\n\n") || null,
+          location: zoomJoin ?? b.location ?? null,
           attendees: (b.attendees ?? []).map((a: any) => ({ email: String(a?.address ?? ""), name: a?.name ?? null, optional: a?.optional === true })),
           reminderMinutes: b.reminder_minutes ?? 60,
-          meet: wantsOnline,
+          meet: app === "google_meet",
         });
         googleEventId = created.id;
-        joinUrl = created.joinUrl;
+        joinUrl = created.joinUrl ?? joinUrl;
       } catch (e: any) {
         console.error("google_meeting_event_create_failed", { message: e?.message, detail: String(e?.bodyText ?? "").slice(0, 300) });
       }
@@ -146,7 +170,7 @@ router.post("/", safeHandler(async (req: any, res: any) => {
       b.internal_note ?? null,
       b.start_at,
       b.end_at,
-      joinUrl ?? b.location ?? null, // BF_SERVER_BLOCK_v336_TEAMS_MEETING_v1
+      zoomJoin ?? joinUrl ?? b.location ?? null, // BF_SERVER_BLOCK_v336_TEAMS_MEETING_v1; KS_ZOOM_MEETINGS_v1
       JSON.stringify(b.attendees ?? []),
       b.reminder_minutes ?? 60,
       userId,
@@ -160,7 +184,7 @@ router.post("/", safeHandler(async (req: any, res: any) => {
   // transcript/recording poller can find it after it ends and attach the
   // artifacts (recording link, transcript, Maya summary) to this contact's CRM
   // timeline. Best-effort: a failure here must never break scheduling.
-  if (wantsOnline && graphId) {
+  if (teamsOnline && graphId) {
     try {
       await pool.query(
         `INSERT INTO teams_meetings
@@ -205,7 +229,7 @@ router.post("/", safeHandler(async (req: any, res: any) => {
   // the meeting itself, so a transcript exists without anyone remembering to press
   // Record. Fire-and-forget: Teams needs a moment to provision the onlineMeeting, and
   // scheduling must not wait on it or fail because of it.
-  if (wantsOnline && graphId && organizerUpn && joinUrl) {
+  if (teamsOnline && graphId && organizerUpn && joinUrl) {
     void enableAutoRecording(pool, graphId, organizerUpn, joinUrl);
   }
   if (googleEventId && rows[0]?.id) {
@@ -213,7 +237,7 @@ router.post("/", safeHandler(async (req: any, res: any) => {
     rows[0].google_event_id = googleEventId; // KS_SERVER_v12_GOOGLE_WORKSPACE
   }
 
-  res.status(201).json({ ok: true, data: rows[0] });
+  res.status(201).json({ ok: true, data: { ...rows[0], meeting_app: app } }); // KS_ZOOM_MEETINGS_v1
 }));
 
 function resolveScope(req: any): { contactId: string | null; companyId: string | null } {
