@@ -7,7 +7,7 @@ import request from "supertest";
 const { queryMock } = vi.hoisted(() => ({ queryMock: vi.fn() }));
 vi.mock("../../db.js", () => ({ pool: { query: queryMock }, db: { query: queryMock } }));
 
-import provisionRoutes, { createFirstAdmin, e164, teardownCheck } from "../provision.js";
+import provisionRoutes, { createFirstAdmin, createTeamUser, e164, teamRole, teardownCheck } from "../provision.js";
 
 type Row = Record<string, any>;
 let users: Row[];
@@ -75,6 +75,51 @@ describe("POST /api/provision/admin", () => {
     expect(e164("+1 403 555 0123")).toBe("+14035550123");
     expect(e164("+44 20 7946 0958")).toBe("+442079460958");
     expect(e164("555")).toBeNull();
+  });
+});
+
+// KS_SERVER_PROVISION_TEAM_USERS_v1
+describe("POST /api/provision/users", () => {
+  const post = (body: unknown) => request(app).post("/api/provision/users").set("X-KS-Ops-Key", KEY).send(body as object);
+
+  it("needs the ops key", async () => {
+    expect((await request(app).post("/api/provision/users").send({ users: [] })).status).toBe(401);
+  });
+
+  it("creates each roster member once with the mapped role, and never changes an existing user", async () => {
+    users.push({ id: "owner-1", email: "owner@acme.example", phone_number: "+14035550100", role: "Admin" });
+    const body = {
+      users: [
+        { name: "Bea Broker", email: "Bea@Acme.example", phone: "1 (587) 555-0101", role: "Broker" },
+        { name: "Mo Marketer", email: "mo@acme.example", phone: "+15875550102", role: "Marketing" },
+        { name: "Owner Again", email: "owner@acme.example", phone: "4035550100", role: "Broker" },
+      ],
+    };
+    const first = await post(body);
+    expect(first.status).toBe(200);
+    expect(first.body.results.map((r: Row) => r.status)).toEqual(["created", "created", "existing"]);
+    expect(users.find((u) => u.email === "bea@acme.example")).toMatchObject({ phone_number: "+15875550101", role: "Staff", first_name: "Bea", last_name: "Broker" });
+    expect(users.find((u) => u.email === "mo@acme.example")).toMatchObject({ role: "Marketing" });
+    expect(users.find((u) => u.id === "owner-1")).toMatchObject({ role: "Admin" });
+    const again = await post(body);
+    expect(again.body.results.map((r: Row) => r.status)).toEqual(["existing", "existing", "existing"]);
+    expect(users).toHaveLength(3);
+  });
+
+  it("refuses bad rows one by one and an empty or oversized list", async () => {
+    const r = await post({ users: [{ name: "X Y", email: "nope", phone: "4035550101", role: "Broker" }, { name: "X Y", email: "x@y.co", phone: "4035550101", role: "Lender" }] });
+    expect(r.body.results.map((x: Row) => x.error)).toEqual(["invalid_email", "invalid_role"]);
+    expect(users).toHaveLength(0);
+    expect((await post({ users: [] })).body.error).toBe("users_required");
+    expect((await post({ users: Array.from({ length: 201 }, () => ({})) })).body.error).toBe("too_many_users");
+    expect(await createTeamUser({ query: queryMock }, { name: "", email: "a@b.co", phone: "4035550101", role: "admin" })).toMatchObject({ status: "invalid", error: "invalid_name" });
+  });
+
+  it("maps Keystone's role names", () => {
+    expect(teamRole("Broker")).toBe("Staff");
+    expect(teamRole("marketing")).toBe("Marketing");
+    expect(teamRole("Admin")).toBe("Admin");
+    expect(teamRole("Ops")).toBeNull();
   });
 });
 

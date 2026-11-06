@@ -2,6 +2,11 @@
 //   POST /api/provision/admin           { name, email, phone } - creates this copy's first Admin when no user has that
 //                                       email or mobile; an existing user is never changed. 201 { created: true } or
 //                                       200 { created: false }.
+//   POST /api/provision/users           { users: [{ name, email, phone, role }] } - KS_SERVER_PROVISION_TEAM_USERS_v1:
+//                                       the brokerage's team from the sign-up roster. Same key and checks as /admin;
+//                                       role Broker (KS's name for Staff), Marketing or Admin. A person already here
+//                                       (same email or mobile) is never changed, so a repeat is a no-op.
+//                                       200 { ok, results: [{ email, status: created|existing|invalid, user_id?, error? }] }.
 //   GET  /api/provision/teardown-check  whether KS-Ops may delete this copy's Azure resources: only when the copy is
 //                                       cancelled, the cancellation purge ran, nothing is left in the retention archive
 //                                       (KS_SERVER_v14_RETENTION) and no legal hold is open. Never deletes anything.
@@ -79,6 +84,65 @@ export async function createFirstAdmin(q: Q, input: { name?: unknown; email?: un
   return { ok: true, created: true, user_id: id, role: ROLES.ADMIN };
 }
 
+// KS_SERVER_PROVISION_TEAM_USERS_v1 - the roster roles KS-Ops sends. "Broker" is what Keystone calls the Staff role.
+const TEAM_ROLES: Record<string, string> = {
+  broker: ROLES.STAFF,
+  staff: ROLES.STAFF,
+  marketing: ROLES.MARKETING,
+  admin: ROLES.ADMIN,
+};
+export const MAX_TEAM_USERS = 200;
+
+export function teamRole(raw: unknown): string | null {
+  return TEAM_ROLES[String(raw ?? "").trim().toLowerCase()] ?? null;
+}
+
+type TeamResult = { email: string; status: "created" | "existing" | "invalid"; user_id?: string; role?: string | null; error?: string };
+
+/** Creates one roster member when nobody here has that email or mobile; an existing user is never changed. */
+export async function createTeamUser(q: Q, input: { name?: unknown; email?: unknown; phone?: unknown; role?: unknown }): Promise<TeamResult> {
+  const email = String(input.email ?? "").trim().toLowerCase();
+  if (!EMAIL_RE.test(email) || email.length > 254) return { email, status: "invalid", error: "invalid_email" };
+  const phone = e164(input.phone);
+  if (!phone) return { email, status: "invalid", error: "invalid_phone" };
+  const role = teamRole(input.role);
+  if (!role) return { email, status: "invalid", error: "invalid_role" };
+  const parts = String(input.name ?? "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return { email, status: "invalid", error: "invalid_name" };
+  const first = (parts[0] ?? "").slice(0, 100);
+  const last = parts.slice(1).join(" ").slice(0, 100);
+  const digits = phone.replace(/\D/g, "").slice(-10);
+  const existing = await q.query(
+    `SELECT id, role FROM users
+      WHERE lower(email) = $1
+         OR right(regexp_replace(coalesce(phone_number, ''), '[^0-9]', '', 'g'), 10) = $2
+         OR right(regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g'), 10) = $2
+      ORDER BY (lower(email) = $1) DESC LIMIT 1`,
+    [email, digits],
+  );
+  if (existing.rows[0]) return { email, status: "existing", user_id: String(existing.rows[0].id), role: existing.rows[0].role ?? null };
+  const id = randomUUID();
+  const inserted = await q.query(
+    `INSERT INTO users (id, email, phone_number, phone, role, active, is_active, disabled, phone_verified, status, first_name, last_name)
+     VALUES ($1, $2, $3, $3, $4, true, true, false, false, 'ACTIVE', $5, $6)
+     ON CONFLICT DO NOTHING
+     RETURNING id`,
+    [id, email, phone, role, first || null, last || null],
+  );
+  if (!inserted.rows[0]) return { email, status: "invalid", error: "user_conflict" };
+  return { email, status: "created", user_id: id, role };
+}
+
+export async function createTeamUsers(q: Q, raw: unknown): Promise<{ ok: true; results: TeamResult[] } | { ok: false; error: string }> {
+  const list = (raw as { users?: unknown })?.users;
+  if (!Array.isArray(list) || list.length === 0) return { ok: false, error: "users_required" };
+  if (list.length > MAX_TEAM_USERS) return { ok: false, error: "too_many_users" };
+  const results: TeamResult[] = [];
+  // One at a time, so two rows with the same email or mobile make one user.
+  for (const u of list) results.push(await createTeamUser(q, (u ?? {}) as Record<string, unknown>));
+  return { ok: true, results };
+}
+
 export async function teardownCheck(q: Q) {
   const plan = (await q.query(
     `SELECT service_status, purged_at, retention_archived_at, retention_released_at, retention_archive FROM licensee_plan WHERE id = 1`,
@@ -113,6 +177,16 @@ router.post("/admin", safeHandler(async (req: any, res) => {
   if (!r.ok) return res.status(r.error === "user_conflict" ? 409 : 400).json({ ok: false, error: r.error });
   console.log(`[provision] first admin ${r.created ? "created" : "already present"} (by ${String(req.headers["x-ks-ops-user"] ?? "ops").slice(0, 80)})`);
   return res.status(r.created ? 201 : 200).json(r);
+}));
+
+// KS_SERVER_PROVISION_TEAM_USERS_v1 - the sign-up roster (KS-Ops step team_users).
+router.post("/users", safeHandler(async (req: any, res) => {
+  if (!opsAuthorized(req, res)) return;
+  const r = await createTeamUsers(db(), req.body ?? {});
+  if (!r.ok) return res.status(400).json({ ok: false, error: r.error });
+  const count = (s: string) => r.results.filter((x) => x.status === s).length;
+  console.log(`[provision] team users: ${count("created")} created, ${count("existing")} already present, ${count("invalid")} refused (by ${String(req.headers["x-ks-ops-user"] ?? "ops").slice(0, 80)})`);
+  return res.json(r);
 }));
 
 // KS_SERVER_PHONE_PROVISIONING - tests swap the Twilio client for a fake.
