@@ -101,15 +101,17 @@ describe("each role's list", () => {
     const r = await get(ADMIN);
     expect(r.status).toBe(200);
     expect(r.body.role).toBe("admin");
-    expect(keys(r.body)).toEqual(["profile", "brand", "client_languages", "team", "phone", "email", "lenders", "import", "payments", "test_link"]);
+    expect(keys(r.body)).toEqual(["profile", "brand", "client_languages", "team", "phone", "phone_numbers", "email", "lenders", "import", "payments", "test_link"]);
     expect(r.body.steps.map((s: any) => s.link)).toEqual([
-      "/settings/profile", "/settings/company", "/settings/company", "/settings/users", "/settings/phone", "/settings/connections", "/lenders",
+      "/settings/profile", "/settings/company", "/settings/company", "/settings/users", "/settings/phone", "/settings/phone", "/settings/connections", "/lenders",
       "/settings/import", "/settings/payments", "/crm/contacts",
     ]);
     expect(step(r.body, "brand").help_slug).toBe("brand-your-portal");
     expect(step(r.body, "payments")).toMatchObject({ title: "Payments and QuickBooks", optional: true });
     expect(step(r.body, "test_link").external_url).toMatch(/^https:\/\//);
-    expect(r.body).toMatchObject({ done: 0, total: 10, complete: false, dismissed: false });
+    expect(r.body).toMatchObject({ done: 0, total: 11, complete: false, dismissed: false });
+    // KS_SERVER_NUMBER_PORTING_v1 - keeping an existing number is optional and opens inside the wizard.
+    expect(step(r.body, "phone_numbers")).toMatchObject({ title: "Your phone numbers", optional: true, can_mark_done: true, help_slug: "keep-your-existing-number" });
     for (const s of r.body.steps) {
       expect(s.status).toBe("todo");
       expect(s.title).not.toMatch(/[A-Z_]{4,}|_/);
@@ -152,8 +154,8 @@ describe("detection from existing data", () => {
   it("Admin steps tick themselves off from the brokerage's data", async () => {
     world.ok = { profile: true, brand: true, clientLanguages: true, team: true, phoneNumber: true, ownMicrosoft: true, companyMicrosoft: true, lender: true, imported: true, quickbooks: true, application: true };
     const r = await get(ADMIN);
-    expect(r.body.steps.map((s: any) => s.status)).toEqual(Array(10).fill("done"));
-    expect(r.body).toMatchObject({ done: 10, total: 10, complete: true });
+    expect(r.body.steps.map((s: any) => s.status)).toEqual(Array(11).fill("done"));
+    expect(r.body).toMatchObject({ done: 11, total: 11, complete: true });
   });
 
   it("Microsoft needs the company approval as well as your own sign-in; Google is enough on its own", async () => {
@@ -216,7 +218,7 @@ describe("status changes", () => {
   });
 
   it("skipping every remaining step completes the wizard; a detected step overrides a skip", async () => {
-    world.progress = ["profile", "brand", "client_languages", "team", "phone", "email", "lenders", "import", "payments", "test_link"].map((k) => ({ user_id: ADMIN, step_key: k, status: "skipped" }));
+    world.progress = ["profile", "brand", "client_languages", "team", "phone", "phone_numbers", "email", "lenders", "import", "payments", "test_link"].map((k) => ({ user_id: ADMIN, step_key: k, status: "skipped" }));
     world.ok = { lender: true };
     const r = await get(ADMIN);
     expect(r.body.complete).toBe(true);

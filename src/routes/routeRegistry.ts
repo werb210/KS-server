@@ -162,6 +162,7 @@ import taskDefaultsRoutes from "./taskDefaults.js"; // KS_SETTINGS_PACK_v1_TASK_
 import planRoutes from "./plan.js"; // KS_SERVER_v6_PLANS
 import provisionRoutes from "./provision.js"; // KS_SERVER_v15_PROVISION
 import phoneNumbersRoutes from "./phoneNumbers.js"; // KS_SERVER_PHONE_PROVISIONING
+import portRequestsRoutes from "./portRequests.js"; // KS_SERVER_NUMBER_PORTING_v1
 import dataExportRoutes from "./dataExport.js"; // KS_SERVER_v8_DATA_EXPORT
 import dataImportRoutes from "./dataImport.js"; // KS_SERVER_v16_DATA_IMPORT
 import fraudRoutes from "./fraud.js"; // KS_SERVER_v9_FRAUD
@@ -431,6 +432,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/plan", router: planRoutes }, // KS_SERVER_v6_PLANS
   { path: "/provision", router: provisionRoutes }, // KS_SERVER_v15_PROVISION - KS-Ops automatic provisioning (ops key)
   { path: "/phone-numbers", router: phoneNumbersRoutes }, // KS_SERVER_PHONE_PROVISIONING - Admins buy / release numbers (Twilio)
+  { path: "/port-requests", router: portRequestsRoutes }, // KS_SERVER_NUMBER_PORTING_v1 - Admins keep (transfer) an existing number
   { path: "/export", router: dataExportRoutes }, // KS_SERVER_v8_DATA_EXPORT - Admin
   { path: "/data-import", router: dataImportRoutes }, // KS_SERVER_v16_DATA_IMPORT - Admin: the Import data wizard
   { path: "/fraud", router: fraudRoutes }, // KS_SERVER_v9_FRAUD - staff; individual checks gated per route

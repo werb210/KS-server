@@ -37,6 +37,8 @@ export interface TwilioNumbersApi {
   purchase(p: PurchaseParams): Promise<{ sid: string; phone_number: string }>;
   setWebhooks(sid: string, p: WebhookParams): Promise<void>;
   release(sid: string): Promise<void>;
+  /** KS_SERVER_NUMBER_PORTING_v1 - a number already in this copy's Twilio account (e.g. one transferred in), or null. */
+  findOwned(phoneNumber: string): Promise<{ sid: string; phone_number: string } | null>;
 }
 
 /** A Twilio failure, kept with its numeric code (e.g. 21631 = an address is required). */
@@ -127,6 +129,13 @@ export function liveTwilioNumbersApi(clientFactory: () => any = getTwilioClient)
     async release(sid) {
       try {
         await client().incomingPhoneNumbers(sid).remove();
+      } catch (err) { throw wrap(err); }
+    },
+    async findOwned(phoneNumber) {
+      try {
+        const rows = await client().incomingPhoneNumbers.list({ phoneNumber, limit: 5 });
+        const n = (rows ?? []).find((x: any) => String(x?.phoneNumber ?? "") === phoneNumber) ?? (rows ?? [])[0];
+        return n?.sid ? { sid: String(n.sid), phone_number: String(n.phoneNumber ?? phoneNumber) } : null;
       } catch (err) { throw wrap(err); }
     },
   };
