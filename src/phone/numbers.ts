@@ -139,8 +139,10 @@ async function event(db: Q, id: string | null, name: string, detail: Record<stri
 
 const LIVE = `status IN ('purchasing', 'active')`;
 
+/** Live numbers of a kind that count against the plan. KS_SERVER_NUMBER_PORTING_v1 - a number the brokerage
+ *  transferred in (ported) is its own and never counts. */
 async function liveCount(db: Q, kind: NumberKind): Promise<number> {
-  const r = await db.query(`SELECT count(*)::int AS n FROM phone_numbers WHERE kind = $1 AND ${LIVE}`, [kind]);
+  const r = await db.query(`SELECT count(*)::int AS n FROM phone_numbers WHERE kind = $1 AND ${LIVE} AND NOT COALESCE(ported, false)`, [kind]);
   return Number(r.rows[0]?.n ?? 0) || 0;
 }
 
@@ -325,10 +327,12 @@ const fmtDate = (d: Date) => d.toISOString().slice(0, 10);
 
 /** Moves an active number to 'releasing' for the grace period and tells the admins. Calls to a direct line go to the
  *  main line meanwhile. Nothing is given back to Twilio here. */
-export async function scheduleRelease(db: Q, id: string, opts: { reason: string; actor: string; now?: Date; env?: NodeJS.ProcessEnv; send?: PlanMailer })
+export async function scheduleRelease(db: Q, id: string, opts: { reason: string; actor: string; now?: Date; env?: NodeJS.ProcessEnv; send?: PlanMailer;
+  /** KS_SERVER_NUMBER_PORTING_v1 - another grace period (the temporary number after a transfer: 7 days by default). */
+  days?: number; extra?: string[] })
   : Promise<{ ok: true; number: NumberRow } | Refusal> {
   const now = opts.now ?? new Date();
-  const days = graceDays(opts.env);
+  const days = opts.days && Number.isFinite(opts.days) ? Math.min(365, Math.max(1, Math.floor(opts.days))) : graceDays(opts.env);
   const after = new Date(now.getTime() + days * DAY);
   const r = await db.query(
     `UPDATE phone_numbers SET status = 'releasing', release_after = $2, release_reason = $3, updated_at = now()
@@ -343,6 +347,7 @@ export async function scheduleRelease(db: Q, id: string, opts: { reason: string;
   await notifyAdmins(db, row.id, `Phone number ${row.phone_number} will be released on ${fmtDate(after)}`, [
     `The ${KIND_LABEL[row.kind as NumberKind] ?? "number"} ${row.phone_number} will be given back to the phone company on ${fmtDate(after)} (${days} days from now). Reason: ${opts.reason}.${mainNote}`,
     row.kind === "direct" ? "Until then, calls to it go to your main line." : "Until then it keeps working.",
+    ...(opts.extra ?? []),
     "To keep it, open Settings > Phone lines in the staff portal and press Keep before that date. After it is released the number may not be available again.",
   ], opts.send);
   console.log(`[phone-numbers] release of ${row.phone_number} scheduled for ${after.toISOString()} (${opts.reason}) by ${opts.actor}`);
@@ -358,11 +363,13 @@ export async function keepNumber(db: Q, id: string, input: { user_id?: unknown; 
   const kind = cur.kind as NumberKind;
   const state = await getPlanState(db, now.getTime());
   if (state.service_status === "cancelled") return refuse(409, "service_cancelled", "The service is cancelled, so numbers cannot be kept.");
-  const gate = planRefusal(state, kind, now);
-  if (gate) return gate;
-  const plan = effectivePlan(state, now);
-  const limit = limitFor(plan, kind, await seatCount(db));
-  if ((await liveCount(db, kind)) >= limit) return refuse(409, "limit_reached", `Your plan includes ${limit} ${KIND_LABEL[kind]}${limit === 1 ? "" : "s"}, already in use.`, { limit });
+  if (!cur.ported) { // KS_SERVER_NUMBER_PORTING_v1 - the brokerage's own transferred number is not limited by the plan
+    const gate = planRefusal(state, kind, now);
+    if (gate) return gate;
+    const plan = effectivePlan(state, now);
+    const limit = limitFor(plan, kind, await seatCount(db));
+    if ((await liveCount(db, kind)) >= limit) return refuse(409, "limit_reached", `Your plan includes ${limit} ${KIND_LABEL[kind]}${limit === 1 ? "" : "s"}, already in use.`, { limit });
+  }
   let userId: string | null = null;
   if (kind === "direct") {
     const u = await activeStaff(db, String(input.user_id ?? cur.assigned_user_id ?? ""));
@@ -463,10 +470,12 @@ export async function reconcileNumbers(db: Q, opts: { now?: Date; env?: NodeJS.P
     return scheduled;
   }
   const done = new Set<string>();
+  // KS_SERVER_NUMBER_PORTING_v1 - transferred-in numbers are the brokerage's own: plan changes never release them.
+  for (const n of active) if (n.ported) done.add(n.id);
   if (state) {
     for (const kind of ["toll_free", "direct"] as const) {
       if (planRefusal(state, kind, now)) {
-        for (const n of active.filter((x) => x.kind === kind)) {
+        for (const n of active.filter((x) => x.kind === kind && !done.has(x.id))) {
           await schedule(n.id, `your plan no longer includes ${kind === "direct" ? "direct lines" : "a toll-free line"}`);
           done.add(n.id);
         }
@@ -482,7 +491,7 @@ export async function reconcileNumbers(db: Q, opts: { now?: Date; env?: NodeJS.P
       }
     }
   }
-  for (const n of active.filter((x) => x.kind === "direct" && !done.has(x.id))) {
+  for (const n of active.filter((x) => x.kind === "direct" && (!done.has(x.id) || x.ported))) {
     const u = n.assigned_user_id ? await activeStaff(db, String(n.assigned_user_id)) : null;
     if (!u) await schedule(n.id, "the person it belonged to no longer has a seat");
   }
@@ -541,7 +550,7 @@ export async function changeNumber(db: Q, api: TwilioNumbersApi, id: string, inp
 export async function listNumbers(db: Q, env: NodeJS.ProcessEnv = process.env, now: Date = new Date()) {
   const rows = await db.query(
     `SELECT p.id::text AS id, p.phone_number, p.kind, p.status, p.assigned_user_id::text AS assigned_user_id, p.locality, p.region,
-            p.iso_country, p.release_after, p.release_reason, p.last_error, p.purchased_at,
+            p.iso_country, p.release_after, p.release_reason, p.last_error, p.purchased_at, COALESCE(p.ported, false) AS ported,
             trim(coalesce(u.first_name, '') || ' ' || coalesce(u.last_name, '')) AS assigned_name
        FROM phone_numbers p LEFT JOIN users u ON u.id = p.assigned_user_id
       WHERE p.status IN ('purchasing', 'active', 'releasing')

@@ -19,6 +19,12 @@
 //   PUT  /api/provision/texting         { registrations: [{ kind, status, phone_number?, reason?, message? }] } -
 //                                       KS_SERVER_TEXTING_REGISTRATION: toll-free verification / A2P 10DLC status, for
 //                                       Settings > Phone lines and for where texts to US mobiles may go from.
+//   POST /api/provision/ported-numbers  { port_request_id, grace_days?, numbers: [{ phone_number, number_type, user_id?,
+//                                       temporary_number? }] } - KS_SERVER_NUMBER_PORTING_v1: a transfer finished; each
+//                                       number is found in this copy's Twilio account, pointed at this server and given to
+//                                       its person (direct line) or made the main / toll-free line; the temporary number
+//                                       is released after grace_days (default 7). 200 { ok, results: [{ phone_number,
+//                                       status: attached|already_attached|failed, released?, error?, message? }] }.
 //   GET  /api/provision/connections     KS_SERVER_M365_ONE_CLICK: whether the brokerage connected Microsoft 365 / Google
 //                                       Workspace, for KS-Ops's provisioning page. No names or email addresses.
 import { randomUUID } from "node:crypto";
@@ -28,6 +34,7 @@ import { ROLES } from "../auth/roles.js";
 import { safeHandler } from "../middleware/safeHandler.js";
 import { opsKeyMatches } from "./plan.js";
 import { provisionMainLines } from "../phone/numbers.js"; // KS_SERVER_PHONE_PROVISIONING
+import { attachPortedNumber } from "../phone/porting.js"; // KS_SERVER_NUMBER_PORTING_v1
 import { liveTwilioNumbersApi, type TwilioNumbersApi } from "../phone/twilioNumbers.js";
 import { saveCompliance, saveTexting } from "../phone/textingState.js"; // KS_SERVER_TEXTING_REGISTRATION
 import { opsConnectionsView } from "../licensee/workspaceConnections.js"; // KS_SERVER_M365_ONE_CLICK
@@ -209,6 +216,28 @@ router.post("/phone-numbers", safeHandler(async (req: any, res) => {
   }
   for (const x of r.results.filter((y) => y.status === "failed")) console.error("[provision] phone number not bought", x);
   return res.json(r);
+}));
+
+// KS_SERVER_NUMBER_PORTING_v1 - KS-Ops marks a transfer complete.
+router.post("/ported-numbers", safeHandler(async (req: any, res) => {
+  if (!opsAuthorized(req, res)) return;
+  const b = req.body ?? {};
+  const list = Array.isArray(b.numbers) ? b.numbers.slice(0, 20) : [];
+  if (!list.length) return res.status(400).json({ ok: false, error: "numbers_required" });
+  const actor = `ks-ops ${String(req.headers["x-ks-ops-user"] ?? "porting").slice(0, 80)}`;
+  const results: Array<Record<string, unknown>> = [];
+  for (const n of list) {
+    const r = await attachPortedNumber(db(), numbersApi(), {
+      phone_number: n?.phone_number, number_type: n?.number_type, user_id: n?.user_id, temporary_number: n?.temporary_number,
+      port_request_id: b.port_request_id, grace_days: b.grace_days, actor,
+    });
+    if (r.ok) results.push({ phone_number: r.number.phone_number, status: r.status, kind: r.number.kind, released: r.released, release_after: r.release_after });
+    else {
+      console.error("[provision] transferred number not attached", { phone_number: n?.phone_number, error: r.error, message: r.message });
+      results.push({ phone_number: n?.phone_number ?? null, status: "failed", error: r.error, message: r.message });
+    }
+  }
+  return res.json({ ok: true, results });
 }));
 
 router.put("/texting", safeHandler(async (req: any, res) => {

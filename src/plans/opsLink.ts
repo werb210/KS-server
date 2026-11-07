@@ -8,7 +8,7 @@ export type OpsConfig = { url: string; licenseeId: string; key: string };
 export type OpsFetch = (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) =>
   Promise<{ ok: boolean; status: number; json: () => Promise<any>; text: () => Promise<string> }>;
 
-export type OpsResult = { ok: true; status: number; body: any } | { ok: false; status: number | null; error: string };
+export type OpsResult = { ok: true; status: number; body: any } | { ok: false; status: number | null; error: string; body?: any };
 
 export const OPS_TIMEOUT_MS = 15_000;
 
@@ -30,7 +30,8 @@ export async function postToOps(
     | "beta/enrolment" | "beta/feedback" // KS_SERVER_BETA_v1
     | `tickets/${string}/messages` // KS_SERVER_v17_TICKET_FOLLOW_UPS
     | "kb/search" | "kb/article" | "kb/categories" | "kb/ask" // KS_SERVER_KB_v1 - the Help Center (helpCenter/helpCenter.ts)
-    | "meta-pages", // KS_META_LEAD_ADS_v1 - which Facebook Pages are this brokerage's (KS-Ops relays their lead webhooks here)
+    | "meta-pages" // KS_META_LEAD_ADS_v1 - which Facebook Pages are this brokerage's (KS-Ops relays their lead webhooks here)
+    | "port-requests" | `port-requests/${string}`, // KS_SERVER_NUMBER_PORTING_v1 - "Keep your existing phone number"
   body: unknown,
   opts: { env?: NodeJS.ProcessEnv; fetchImpl?: OpsFetch } = {},
 ): Promise<OpsResult> {
@@ -47,9 +48,13 @@ export async function postToOps(
       signal: ctrl.signal,
     });
     if (!r.ok) {
-      let detail = "";
-      try { detail = (await r.text()).slice(0, 200); } catch (err) { detail = String(err).slice(0, 200); }
-      return { ok: false, status: r.status, error: `status_${r.status}${detail ? `: ${detail}` : ""}` };
+      let full = "";
+      try { full = await r.text(); } catch (err) { full = String(err); }
+      const detail = full.slice(0, 200);
+      // KS_SERVER_NUMBER_PORTING_v1 - KS-Ops's own JSON answer (e.g. { errors }) for callers that show it to the person.
+      let body: any;
+      try { body = full ? JSON.parse(full) : undefined; } catch { body = undefined; }
+      return { ok: false, status: r.status, error: `status_${r.status}${detail ? `: ${detail}` : ""}`, ...(body !== undefined ? { body } : {}) };
     }
     let parsed: any = null;
     try { parsed = await r.json(); } catch (err) { console.warn("[ops-link] reply was not JSON", path, String(err)); }

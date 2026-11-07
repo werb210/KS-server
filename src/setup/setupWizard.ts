@@ -91,6 +91,14 @@ export function adminSteps(ctx: Ctx): StepDef[] {
       why: "Calls and texts to clients come from your business number.",
       detect: (f) => f.phoneNumber,
     },
+    // KS_SERVER_NUMBER_PORTING_v1 - each person keeps the new Keystone number (the default: nothing to do) or keeps the
+    // number they already have, transferred in. The portal opens the choice inside the wizard; Settings > Phone lines
+    // has the same panel later. Done once a Keystone number exists; optional and skippable like any step.
+    {
+      key: "phone_numbers", title: "Your phone numbers", link: "/settings/phone", help: "keep-your-existing-number",
+      why: "Everyone already has a new Keystone number. If you or a broker want to keep a number you use today, start the transfer here and forward it so no calls are missed.",
+      detect: (f) => f.phoneNumber, manual: true, optional: true,
+    },
     {
       key: "email", title: "Connect Microsoft 365 or Google", link: "/settings/connections", help: "connect-email-and-calendar",
       why: "Approve it once for your company, then connect your own email and calendar.",

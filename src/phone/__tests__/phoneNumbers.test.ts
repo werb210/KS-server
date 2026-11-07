@@ -108,6 +108,7 @@ function fakeTwilio(over: Partial<TwilioNumbersApi> = {}) {
     purchase: async (prm) => { calls.purchase.push(prm); return { sid: `PN${calls.purchase.length}`, phone_number: prm.phoneNumber }; },
     setWebhooks: async () => undefined,
     release: async (sid) => { calls.release.push(sid); },
+    findOwned: async () => null,
     ...over,
   };
   return { api, calls };
