@@ -21,6 +21,7 @@ import { runQuery as dbQuery_v68 } from "../lib/db.js";
 import { pool } from "../db.js";
 import { notifyAllStaff } from "../services/notifications/notifyAllStaff.js";
 import { isReviewPhone, reviewCodeMatches } from "../services/reviewLogin.js"; // BF_SERVER_REVIEW_LOGIN_v710
+import { isQaPhone, qaCodeMatches } from "../services/qaLogin.js"; // KS_SERVER_QA_LOGIN_v1
 import microsoftRoutes from "./authMicrosoft.js";
 import ssoRoutes from "./authSso.js"; // KS_SERVER_SSO_API_KEYS
 import { SSO_REQUIRED_MESSAGE, ssoRequiredFor } from "../sso/settings.js"; // KS_SERVER_SSO_API_KEYS
@@ -162,6 +163,11 @@ router.post("/otp/start", otpStartLimiter, async (req, res) => {
       });
     }
 
+    // KS_SERVER_QA_LOGIN_v1 - a test brokerage's fictional QA number gets no text (src/services/qaLogin.ts).
+    if (isQaPhone(phone)) {
+      return res.status(200).json({ status: "ok", data: { sent: true } });
+    }
+
     // BF_SERVER_REVIEW_LOGIN_v710 - the store-review number gets no text.
     if (isReviewPhone(phone)) {
       // BF_SERVER_STORE_REVIEW_TEST_v734 - keep anything the reviewer made out of the real pipeline.
@@ -295,8 +301,9 @@ router.post("/otp/verify", otpVerifyLimiter, async (req, res) => {
     return res.status(400).json({ error: "Phone and code are required" });
   }
 
+  const qa = isQaPhone(phone); // KS_SERVER_QA_LOGIN_v1
   const serviceSid = process.env.TWILIO_VERIFY_SERVICE_SID;
-  if (!serviceSid) {
+  if (!serviceSid && !qa) {
     return res.status(500).json({ error: "OTP failed" });
   }
 
@@ -304,10 +311,12 @@ router.post("/otp/verify", otpVerifyLimiter, async (req, res) => {
     const twilioClient = getTwilioClient();
 
     // BF_SERVER_REVIEW_LOGIN_v710 - the store-review number accepts only its configured code.
-    const verificationCheck = isReviewPhone(phone)
+    const verificationCheck = qa
+      ? { status: qaCodeMatches(phone, String(code)) ? "approved" : "denied" }
+      : isReviewPhone(phone)
       ? { status: reviewCodeMatches(phone, String(code)) ? "approved" : "denied" }
       : await twilioClient.verify.v2
-          .services(serviceSid)
+          .services(serviceSid as string)
           .verificationChecks.create({ to: phone, code });
 
     if (verificationCheck.status !== "approved") {
