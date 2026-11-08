@@ -1,13 +1,19 @@
-// KS_SHARED_HOSTING_v1 - one pg Pool per brokerage, created on first use: max 5 connections, idle connections
-// closed after 30 s, the whole pool closed after 10 idle minutes. A pool only ever connects to its own brokerage's
+// KS_SHARED_HOSTING_v1 - one pg Pool per brokerage, created on first use (limits below, KS_SERVER_TENANT_SCALE_v1). A pool only ever connects to its own brokerage's
 // database (with that brokerage's own role); there is no fallback to another one.
 import pg, { type Pool, type PoolConfig } from "pg";
 import { currentTenant, NoBrokerageContextError } from "./context.js";
 import type { Tenant, TenantContext } from "./types.js";
 
-export const TENANT_POOL_MAX = 5;
-export const TENANT_POOL_IDLE_MS = 30_000;
-export const TENANT_POOL_CLOSE_AFTER_IDLE_MS = 10 * 60_000;
+// KS_SERVER_TENANT_SCALE_v1 - connections are the shared Postgres's scarcest resource (50 on Burstable B1ms): each
+// brokerage pool now opens at most 2 (KS_TENANT_POOL_MAX to change), idle connections close after 10 s and an unused
+// pool after 2 minutes, so hundreds of brokerages can share one server when only a few are busy at any moment.
+function envInt(name: string, fallback: number, min: number, max: number): number {
+  const n = Number.parseInt(String(process.env[name] ?? ""), 10);
+  return Number.isFinite(n) && n >= min && n <= max ? n : fallback;
+}
+export const TENANT_POOL_MAX = envInt("KS_TENANT_POOL_MAX", 2, 1, 20);
+export const TENANT_POOL_IDLE_MS = 10_000;
+export const TENANT_POOL_CLOSE_AFTER_IDLE_MS = 2 * 60_000;
 
 type Entry = { pool: Pool; url: string; lastUsed: number };
 const pools = new Map<string, Entry>();
@@ -37,7 +43,7 @@ export function tenantPoolConfig(databaseUrl: string): PoolConfig {
 
 function startSweeper(): void {
   if (sweeper) return;
-  sweeper = setInterval(() => { void sweepIdlePools(); }, 60_000);
+  sweeper = setInterval(() => { void sweepIdlePools(); }, 30_000);
   sweeper.unref?.();
 }
 
