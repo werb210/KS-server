@@ -39,6 +39,25 @@ const DEFAULT_LOCK_FAST_PHASE_MS = 10_000;
 const DEFAULT_LOCK_SLOW_POLL_MS = 5_000;
 const DEFAULT_LOCK_TIMEOUT_MS = 5 * 60_000;
 
+// KS_SERVER_SKIP_INSTALLED_EXTENSIONS_v1 - on Azure Postgres a non-admin login is refused
+// "CREATE EXTENSION IF NOT EXISTS vector" even when vector is already installed (Azure's extension
+// guard checks before IF NOT EXISTS). Shared-hosting brokerage databases migrate as their own
+// non-admin role, after KS-Ops installed the extensions with the admin login. So an
+// "IF NOT EXISTS" extension statement for an extension that is already installed is left out;
+// anything else (a missing extension, a plain CREATE EXTENSION) still runs and still fails loudly.
+const IF_NOT_EXISTS_EXTENSION_RE = /CREATE\s+EXTENSION\s+IF\s+NOT\s+EXISTS\s+"?([A-Za-z0-9_-]+)"?[^;]*;/gi;
+
+export function stripInstalledExtensions(sql: string, installed: ReadonlySet<string>): string {
+  return sql.replace(IF_NOT_EXISTS_EXTENSION_RE, (stmt, name: string) =>
+    installed.has(name.toLowerCase()) ? `-- skipped (already installed): ${name.toLowerCase()}` : stmt,
+  );
+}
+
+async function installedExtensions(client: PoolClient): Promise<Set<string>> {
+  const r = await client.query("SELECT extname FROM pg_extension");
+  return new Set((r?.rows ?? []).map((row: { extname: string }) => String(row.extname).toLowerCase()));
+}
+
 export class MigrationLockTimeoutError extends Error {
   constructor(waitedMs: number) {
     super(`[MIGRATIONS] migration lock still held by another instance after ${Math.round(waitedMs / 1000)}s; refusing to boot on an unmigrated schema`);
@@ -178,10 +197,11 @@ export async function runMigrations(pool: Pool, opts: RunMigrationsOptions = {})
           // then the inserts below repopulate it - rather than teaching the
           // baseline to be idempotent, which is not ours to edit.
           let recorded = 0;
+          const installedForBaseline = await installedExtensions(client);
           await client.query("BEGIN");
           try {
             await client.query("DROP TABLE IF EXISTS schema_migrations");
-            await client.query(baselineSql);
+            await client.query(stripInstalledExtensions(baselineSql, installedForBaseline));
             // pg_dump emits SET search_path = '' and qualifies every object, so
             // anything unqualified after it fails with "no schema has been
             // selected to create in". Put it back before touching the tracking
@@ -232,9 +252,10 @@ export async function runMigrations(pool: Pool, opts: RunMigrationsOptions = {})
         const sqlPath = path.join(migrationsDir, file);
         const sql = fs.readFileSync(sqlPath, "utf8");
 
+        const installed = await installedExtensions(client);
         try {
           await client.query("BEGIN");
-          await client.query(sql);
+          await client.query(stripInstalledExtensions(sql, installed));
           await client.query(
             "INSERT INTO schema_migrations (id) VALUES ($1) ON CONFLICT (id) DO NOTHING",
             [file]
