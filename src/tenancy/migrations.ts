@@ -31,6 +31,30 @@ const inFlight = new Map<string, Promise<void>>();
 const failedAt = new Map<string, number>();
 const RETRY_AFTER_FAILURE_MS = 60_000;
 
+// KS_SERVER_TENANT_SCALE_v1 - brokerage migrations run one at a time on each instance. Seven new brokerages migrating
+// at once ran the shared Postgres out of lock memory ("out of shared memory") and connection slots; a queue makes a
+// busy sign-up day slower by seconds instead of failing it. KS_TENANT_MIGRATE_CONCURRENCY raises the limit.
+export function migrateConcurrency(env: NodeJS.ProcessEnv = process.env): number {
+  const n = Number.parseInt(String(env.KS_TENANT_MIGRATE_CONCURRENCY ?? ""), 10);
+  return Number.isFinite(n) && n >= 1 && n <= 16 ? n : 1;
+}
+let active = 0;
+const waiting: Array<() => void> = [];
+async function withMigrateSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (active >= migrateConcurrency()) await new Promise<void>((resolve) => waiting.push(resolve));
+  active += 1;
+  try {
+    return await fn();
+  } finally {
+    active -= 1;
+    waiting.shift()?.();
+  }
+}
+/** Tests: how many migrations are running and queued on this instance. */
+export function migrateQueueState(): { active: number; waiting: number } {
+  return { active, waiting: waiting.length };
+}
+
 /** Run the migrations for one brokerage now (KS-Ops' migrate call, and startup). Throws on failure. */
 export function migrateTenantNow(tenant: Tenant): Promise<void> {
   const running = inFlight.get(tenant.code);
@@ -40,7 +64,7 @@ export function migrateTenantNow(tenant: Tenant): Promise<void> {
     console.log(JSON.stringify({ event: "ks_tenant_migrate_start", tenant: tenant.code }));
     try {
       const ctx = contextFor(tenant);
-      await runWithTenant(ctx, () => migrator(ctx.pool, tenant));
+      await withMigrateSlot(() => runWithTenant(ctx, () => migrator(ctx.pool, tenant)));
       migrated.set(tenant.code, tenant.databaseUrl);
       failedAt.delete(tenant.code);
       console.log(JSON.stringify({ event: "ks_tenant_migrate_done", tenant: tenant.code, ms: Date.now() - started }));

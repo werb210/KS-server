@@ -7,7 +7,7 @@ import { decryptTenantEnv, decryptTenantValue, encryptTenantValue } from "../cry
 import { currentTenantCode, NoBrokerageContextError, runWithTenant, tenantKey, tenantLocal } from "../context.js";
 import { createEnvOverlay, installEnvOverlay, uninstallEnvOverlayForTests } from "../envOverlay.js";
 import { forEachTenant, serialAcrossTenants } from "../jobs.js";
-import { setTenantMigratorForTests } from "../migrations.js";
+import { migrateConcurrency, migrateQueueState, migrateTenantNow, setTenantMigratorForTests } from "../migrations.js";
 import { patchExpressForTenantContext, tenantMiddleware } from "../middleware.js";
 import { tenantOpsRouter } from "../opsRoutes.js";
 import {
@@ -195,8 +195,8 @@ describe("per-brokerage pools", () => {
     expect(getTenantPool(tenant("northwind"))).toBe(a); // reused
     const cfg = tenantPoolConfig("postgres://x@y/z");
     expect(cfg.max).toBe(TENANT_POOL_MAX);
-    expect(cfg.max).toBe(5);
-    expect(cfg.idleTimeoutMillis).toBe(30_000);
+    expect(cfg.max).toBe(2);
+    expect(cfg.idleTimeoutMillis).toBe(10_000);
   });
 
   it("the shared pool proxy queries the current brokerage's pool and throws no_brokerage_context outside one", async () => {
@@ -392,5 +392,45 @@ describe("ops endpoints (X-KS-Ops-Service-Key)", () => {
     const f = await request(a).post("/api/ops/tenants/northwind/migrate").set(k);
     expect(f.status).toBe(500);
     expect(f.body).toMatchObject({ ok: false, error: "migration_failed" });
+  });
+});
+
+
+// KS_SERVER_TENANT_SCALE_v1
+describe("brokerage migrations queue", () => {
+  it("runs one migration at a time on an instance, in order", async () => {
+    setTenantPoolFactoryForTests(fakeFactory([]) as never);
+    let running = 0;
+    let peak = 0;
+    const order: string[] = [];
+    setTenantMigratorForTests(async (_pool, t) => {
+      running += 1;
+      peak = Math.max(peak, running);
+      await new Promise((r) => setTimeout(r, 15));
+      order.push(t.code);
+      running -= 1;
+    });
+    const codes = ["qa1", "qa2", "qa3", "qa4", "qa5", "qa6", "qa7"];
+    const all = Promise.all(codes.map((c) => migrateTenantNow(tenant(c))));
+    await new Promise((r) => setTimeout(r, 5));
+    expect(migrateQueueState().waiting).toBe(6);
+    await all;
+    expect(peak).toBe(1);
+    expect(order).toEqual(codes);
+    expect(migrateQueueState()).toEqual({ active: 0, waiting: 0 });
+  });
+
+  it("keeps the queue moving after a failed migration", async () => {
+    setTenantPoolFactoryForTests(fakeFactory([]) as never);
+    setTenantMigratorForTests(async (_pool, t) => { if (t.code === "qb1") throw new Error("boom"); });
+    const r = await Promise.allSettled([migrateTenantNow(tenant("qb1")), migrateTenantNow(tenant("qb2"))]);
+    expect(r.map((x) => x.status)).toEqual(["rejected", "fulfilled"]);
+    expect(migrateQueueState()).toEqual({ active: 0, waiting: 0 });
+  });
+
+  it("reads the concurrency from KS_TENANT_MIGRATE_CONCURRENCY", () => {
+    expect(migrateConcurrency({})).toBe(1);
+    expect(migrateConcurrency({ KS_TENANT_MIGRATE_CONCURRENCY: "3" })).toBe(3);
+    expect(migrateConcurrency({ KS_TENANT_MIGRATE_CONCURRENCY: "zero" })).toBe(1);
   });
 });
