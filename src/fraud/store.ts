@@ -2,6 +2,7 @@
 import type { Q } from "../plans/state.js";
 import { getPlanState } from "../plans/state.js";
 import { checkFeature } from "../plans/catalogue.js";
+import { humanDuration } from "../lib/humanDuration.js"; // BF_SERVER_v885_FRAUD_TEXT (KS port)
 import { FRAUD_CHECKS } from "./catalogue.js";
 import { ADDON_FRAUD_CHECKS, hasAddon } from "../plans/addons.js"; // KS_SERVER_BANK_CONNECT_ADDON
 import type { CheckResult, FraudStatus, Reason } from "./types.js";
@@ -22,6 +23,15 @@ export async function upsertResult(db: Q, applicationId: string, checkKey: strin
   );
 }
 
+// BF_SERVER_v885_FRAUD_TEXT - reasons stored before the wording fix say "changed 3791521 minute(s) after";
+// read them with the gap in words. Stored rows are not rewritten; the next scan stores the new wording.
+export function readableReasons(reasons: unknown[]): any[] {
+  return reasons.map((r: any) => {
+    const m = typeof r?.text === "string" ? r.text.match(/^The file was changed (\d+) minute\(s\) after it was created\.$/) : null;
+    return m ? { ...r, text: `The file was last changed ${humanDuration(Number(m[1]) * 60_000)} after it was created (dates stored in the PDF).` } : r;
+  });
+}
+
 export async function listResults(db: Q, applicationId: string): Promise<ResultRow[]> {
   const r = await db.query(
     `SELECT application_id, check_key, subject, status, reasons, details, provider, checked_at
@@ -30,7 +40,7 @@ export async function listResults(db: Q, applicationId: string): Promise<ResultR
   );
   return r.rows.map((x: any) => ({
     ...x,
-    reasons: Array.isArray(x.reasons) ? x.reasons : [],
+    reasons: Array.isArray(x.reasons) ? readableReasons(x.reasons) : [],
     details: x.details && typeof x.details === "object" ? x.details : {},
     checked_at: x.checked_at instanceof Date ? x.checked_at.toISOString() : String(x.checked_at),
   }));

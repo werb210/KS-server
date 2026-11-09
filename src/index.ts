@@ -122,6 +122,16 @@ export async function start(): Promise<void> {
   } catch (err) {
     console.warn("[startup] licensee brand refresh not started:", err instanceof Error ? err.message : String(err));
   }
+  // BF_SERVER_v886_OCR_REEXTRACT (KS port) - once per brokerage database, re-read every stored document with the current
+  // field parser (two minutes after start, in the background, one brokerage at a time; never fatal).
+  {
+    const t = setTimeout(() => {
+      void Promise.all([import("./db.js"), import("./modules/ocr/reextract.js"), import("./tenancy/jobs.js")])
+        .then(([{ pool }, m, j]) => j.forEachTenant(() => m.runOcrReextractOnce(pool as any), { job: "ocr_reextract" }))
+        .catch((err) => console.error("[startup] ocr re-extract failed:", err instanceof Error ? err.message : String(err)));
+    }, 120_000);
+    (t as any).unref?.();
+  }
   // BF_SERVER_TEMPLATE_LANDING_BACKFILL_v28 - repair marketing template landing
   // pages (bad host from a misconfigured LANDING_BASE_URL, or seeded rows that
   // never had html and so never had a page). Deliberately not fatal.

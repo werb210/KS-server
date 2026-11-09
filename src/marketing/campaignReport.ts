@@ -90,6 +90,9 @@ router.get("/campaign-report", safeHandler(async (req: any, res: any) => {
       return {
         id: String(r.id), channel: "email" as const, name: r.subject ?? "(no subject)", status: r.status,
         sent_at: r.finished_at ?? r.created_at, sent,
+        // BF_SERVER_v885_CAMPAIGN_TRACKING - false for campaigns sent before the per-campaign ledger (v874): their
+        // opens and clicks were never recorded against the campaign, so they are unknown (null), not zero.
+        tracked,
         opened: tracked ? Number(r.opened) || 0 : null, clicked: tracked ? Number(r.clicked) || 0 : null,
         unsubscribed: tracked ? Number(r.unsubscribed) || 0 : null,
         open_rate: tracked ? rate(Number(r.opened) || 0, sent) : null, click_rate: tracked ? rate(Number(r.clicked) || 0, sent) : null,
@@ -101,14 +104,23 @@ router.get("/campaign-report", safeHandler(async (req: any, res: any) => {
       const sent = Number(r.sent) || 0;
       return {
         id: String(r.id), channel: "sms" as const, name: String(r.body ?? "").slice(0, 80) || "(text)", status: r.status,
-        sent_at: r.finished_at ?? r.created_at, sent, opened: null, clicked: Number(r.clicked) || 0, unsubscribed: null,
+        sent_at: r.finished_at ?? r.created_at, sent, tracked: true, opened: null, clicked: Number(r.clicked) || 0, unsubscribed: null,
         open_rate: null, click_rate: rate(Number(r.clicked) || 0, sent), fallback_emails: Number(r.fallback_emails) || 0,
         ...(withFunded ? smsFunded.get(String(r.campaign_id ?? "")) ?? empty : {}),
       };
     }),
   ].sort((a, b) => new Date(String(b.sent_at)).getTime() - new Date(String(a.sent_at)).getTime());
   res.setHeader("Cache-Control", "no-store");
-  return res.json({ ok: true, days, attribution_days: ATTRIBUTION_DAYS, funded_included: withFunded, campaigns });
+  const totals = campaigns.reduce((t, c: any) => ({
+    sent: t.sent + (Number(c.sent) || 0), applications: t.applications + (Number(c.applications) || 0),
+    funded: t.funded + (Number(c.funded) || 0), funded_amount: t.funded_amount + (Number(c.funded_amount) || 0),
+  }), { sent: 0, applications: 0, funded: 0, funded_amount: 0 });
+  const untracked = campaigns.filter((c: any) => c.channel === "email" && !c.tracked).length;
+  return res.json({ ok: true, days, attribution_days: ATTRIBUTION_DAYS, funded_included: withFunded, totals, campaigns,
+    // BF_SERVER_v885_CAMPAIGN_TRACKING - what a "-" means on the report.
+    tracking_note: untracked
+      ? `${untracked} email campaign(s) were sent before open, click and unsubscribe tracking per campaign started, so those columns are unknown for them. Campaigns sent from now on are tracked.`
+      : null });
 }));
 
 export default router;

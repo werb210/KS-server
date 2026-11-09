@@ -22,6 +22,10 @@ export type FraudScore = {
   complete?: boolean;
   pending_reason?: string | null;
   floor?: { applied: boolean; reason: string | null };
+  // BF_SERVER_v885_FRAUD_TEXT - how many checks the score rests on, so "0 / 100" is never read as a full check.
+  checks_run: number;
+  checks_total: number;
+  summary: string;
 };
 
 // BF_SERVER_v906_FRAUD_FLOOR - a file with tampered bank statements scored 45 on its first run (before every tamper
@@ -83,27 +87,48 @@ export function computeScore(results: StoredResult[], allowed: ReadonlySet<strin
   const pendingReason = opts.queued ? "Checks are still running. The score will be final when they finish."
     : pendingDocs > 0 ? `${pendingDocs} document(s) are still waiting for their tamper scan. The score will be final when they are scanned.`
     : null;
+  // BF_SERVER_v885_FRAUD_TEXT (KS port) - how many checks the score rests on, so "0 / 100" is never read as a full check.
+  const total = covered.length + notCovered.length;
+  const summary = `${s} / 100 (${BAND_TEXT[band(s)]}), based on ${covered.length} of ${total} checks`
+    + (notCovered.length ? `; ${notCovered.length} could not run yet, so a low score does not clear the file.` : ".");
   return {
     score: s, band: band(s), reasons: reasons.slice(0, 12), covered, not_covered: notCovered,
     complete: !pendingReason, pending_reason: pendingReason, floor: { applied: Boolean(tamperedStatement), reason: floorReason },
+    checks_run: covered.length, checks_total: total, summary,
   };
+}
+
+// BF_SERVER_v885_FRAUD_TEXT - the pre-screen goes to lenders. It never carries the brokerage's internal checks on its
+// own staff (inside-job alerts) or the reasons a check did not run, which are written for the brokerage's staff
+// ("An Admin can turn it on in Settings -> Fraud protection"). Lenders see only that the check was not covered.
+export const INTERNAL_ONLY_CHECKS: ReadonlySet<string> = new Set(["fraud_14"]);
+function lenderWhy(status: FraudStatus, why: string): string {
+  if (why === "not run yet") return "not run yet";
+  if (status === "not_configured") return "not available for this file";
+  if (status === "error") return "could not be completed";
+  return "no information available yet";
 }
 
 /** Plain-text pre-screen summary for the lender package. */
 export function prescreenText(s: FraudScore, opts: { company: string; applicationName: string | null; at: Date }): string[] {
   const date = opts.at.toISOString().slice(0, 10);
+  const covered = s.covered.filter((c) => !INTERNAL_ONLY_CHECKS.has(c.check));
+  const notCovered = s.not_covered.filter((c) => !INTERNAL_ONLY_CHECKS.has(c.check));
+  const reasons = s.reasons.filter((r) => !INTERNAL_ONLY_CHECKS.has(r.check));
+  const total = covered.length + notCovered.length;
   const lines = [
     `Fraud pre-screen - ${opts.applicationName ?? "application"}`,
     `Prepared by ${opts.company} on ${date}`,
     "",
-    `Fraud score: ${s.score} / 100 (${BAND_TEXT[s.band]})`,
+    `Fraud score: ${s.score} / 100 (${BAND_TEXT[s.band]}), based on ${covered.length} of ${total} checks`,
+    ...(notCovered.length ? [`${notCovered.length} check(s) could not run yet, so this score is not a complete screen.`] : []),
     "",
     "Checks completed:",
-    ...(s.covered.length ? s.covered.map((c) => `  - ${c.label}: ${c.status === "green" ? "no concerns" : c.status === "amber" ? "worth a look" : "concern found"}`) : ["  (none yet)"]),
+    ...(covered.length ? covered.map((c) => `  - ${c.label}: ${c.status === "green" ? "no concerns" : c.status === "amber" ? "worth a look" : "concern found"}`) : ["  (none yet)"]),
     "",
   ];
-  if (s.reasons.length) lines.push("Items needing attention:", ...s.reasons.map((r) => `  - [${r.severity === "red" ? "Concern" : "Review"}] ${r.text}`), "");
-  if (s.not_covered.length) lines.push("Not covered by this pre-screen:", ...s.not_covered.map((c) => `  - ${c.label}: ${c.why}`), "");
+  if (reasons.length) lines.push("Items needing attention:", ...reasons.map((r) => `  - [${r.severity === "red" ? "Concern" : "Review"}] ${r.text}`), "");
+  if (notCovered.length) lines.push("Not covered by this pre-screen:", ...notCovered.map((c) => `  - ${c.label}: ${lenderWhy(c.status, c.why)}`), "");
   lines.push("This pre-screen lists signs worth reviewing. It is not a finding of fraud and does not replace the lender's own checks.");
   return lines;
 }

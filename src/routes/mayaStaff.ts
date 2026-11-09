@@ -19,6 +19,7 @@ import { parseAndResolveMentions } from "../services/notes/mentions.js"; // BF_S
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js"; // BF_SERVER_SILENT_QUERIES_v678
 import { clientUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 import { brandName, assistantName } from "../licensee/brand.js"; // KS_SERVER_v4_BRANDING
+import { productCategoryLabel } from "../modules/applications/productCategoryChange.js"; // BF_SERVER_v887_PRODUCT_LABELS
 
 const router = Router();
 
@@ -343,7 +344,7 @@ router.post(
         stage,
         status: app.status,
         requestedAmount: app.requested_amount,
-        productType: app.product_type,
+        productType: productCategoryLabel(app.product_type) || app.product_type,
         applicant,
         docs: { total: docsTotal, accepted, missing },
         startedAt: app.created_at ?? null, // BF_SERVER_BLOCK_v493
@@ -719,7 +720,9 @@ router.post(
       const matches = arr.slice(0, 10).map((m: any) => ({
         lender: m?.lenderName ?? m?.lender_name ?? null,
         product: m?.productName ?? m?.product_name ?? null,
-        category: m?.productCategory ?? m?.product_category ?? null,
+        // BF_SERVER_v887_PRODUCT_LABELS - Maya reads the words to staff, not the stored code.
+        category: productCategoryLabel(m?.productCategory ?? m?.product_category) || null,
+        categoryCode: m?.productCategory ?? m?.product_category ?? null,
         matchPercent: m?.matchPercent ?? m?.match_percent ?? null,
         reasoning: m?.reasoning ?? null,
       }));

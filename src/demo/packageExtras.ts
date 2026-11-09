@@ -13,7 +13,7 @@
 import { PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
 import { FRAUD_CHECKS } from "../fraud/catalogue.js";
 import { renderPrescreenPdf } from "../fraud/prescreen.js";
-import { band, prescreenText, type FraudScore } from "../fraud/score.js";
+import { BAND_TEXT, band, prescreenText, type FraudScore } from "../fraud/score.js";
 import {
   CALL_SCRIPT, CALL_SUMMARY, DEMO_BANK, DEMO_DURATION_SECONDS, DOCTORED, SAMPLE_STATEMENTS, monthlyPayment, type FinancialYear,
 } from "./fixture.js";
@@ -183,7 +183,9 @@ export function demoFraudScore(docs: DemoDocState[], callAnswered: boolean): Fra
   const anyRed = docs.some((d) => d.fraud_status === "red");
   const anyAmber = docs.some((d) => d.fraud_status === "amber");
   const score = anyRed ? DEMO_FRAUD_SCORE : anyAmber ? 24 : 6;
-  return { score, band: band(score), reasons, covered, not_covered: notCovered };
+  const total = covered.length + notCovered.length; // BF_SERVER_v885_FRAUD_TEXT (KS port)
+  return { score, band: band(score), reasons, covered, not_covered: notCovered, checks_run: covered.length, checks_total: total,
+    summary: `${score} / 100 (${BAND_TEXT[band(score)]}), based on ${covered.length} of ${total} checks` };
 }
 
 export async function fraudPrescreenPdf(input: { docs: DemoDocState[]; callAnswered: boolean; company: string; applicationName: string; at: Date }): Promise<ExtraPdf> {

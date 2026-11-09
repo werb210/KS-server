@@ -20,6 +20,7 @@
 export const INTEGRATION_TEST_FILES: string[] = [
   "src/__tests__/setupWizard.ks.integration.test.ts", // KS_SETUP_WIZARD - needs Postgres
   "src/tenancy/__tests__/sharedHosting.integration.test.ts", // KS_SHARED_HOSTING_v1 - needs Postgres (creates databases and roles)
+  "src/__tests__/mayaLeadTask.v887.integration.test.ts", // BF_SERVER_v887_MAYA_LEAD_TASK - needs Postgres
   "src/__tests__/aiSummary.v864.integration.test.ts", // BF_SERVER_v864_AI_SUMMARY_FIX - needs Postgres
   "src/__tests__/oooUntil.v864.integration.test.ts", // BF_SERVER_v864_OOO_UNTIL - needs Postgres
   "src/__tests__/contactsPull.v864.integration.test.ts", // BF_SERVER_v864_CONTACTS_PULL_FIX - needs Postgres
