@@ -19,6 +19,7 @@ import { applySiloMiddleware, registerApiRouteMounts } from "./routes/routeRegis
 import { requireAuth } from "./middleware/auth.js";
 import { errorHandler } from "./middleware/errors.js";
 import { listRoutes } from "./debug/printRoutes.js";
+import { stripForwardedPort } from "./middleware/stripForwardedPort.js"; // BF_SERVER_v885_IP_NO_PORT (KS port)
 import { clientUrl, portalUrl, serverUrl, websiteUrl } from "./licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 import { pool as demoPool } from "./db.js"; // KS_SERVER_v10_DEMO
 import { demoMode } from "./demo/config.js"; // KS_SERVER_v10_DEMO
@@ -30,6 +31,7 @@ import { tenantOpsRouter, type TenantOpsHooks } from "./tenancy/opsRoutes.js"; /
 export function createApp(opts: { tenantOps?: TenantOpsHooks } = {}) {
   const app = express();
   app.set("trust proxy", 1); // BF_SERVER_RATELIMIT_TRUSTPROXY_v1 - Azure runs one proxy hop; lets express-rate-limit read the real client IP
+  app.use(stripForwardedPort); // BF_SERVER_v885_IP_NO_PORT - req.ip without Azure's ":port"
   // KS_SHARED_HOSTING_v1 - the shared server finds the request's brokerage before anything else runs (before CORS,
   // body parsing and auth), and KS-Ops' tenant endpoints sit beside it. Single-brokerage mode adds nothing.
   const multiBrokerage = isMultiBrokerage();

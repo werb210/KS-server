@@ -360,7 +360,7 @@ router.get("/counts", safeHandler(async (req: any, res: any) => {
   // KS_SERVER_v20_TEAMS - counts of what this user may see.
   const scope = await scopeForRequest(req, pool as any);
   const cp: unknown[] = [silo];
-  const c = await pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM contacts c WHERE c.silo = $1 AND ${ownerFilterSql(scope, "contact", "c", cp)}`, cp);
+  const c = await pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM contacts c WHERE c.silo = $1 AND coalesce(c.status, 'active') <> 'archived' AND ${ownerFilterSql(scope, "contact", "c", cp)}` /* BF_SERVER_v885_COUNTS (KS port) - archived (merged) contacts left out, like the list */, cp);
   const cop: unknown[] = [silo];
   const co = await pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM companies co WHERE co.silo = $1 AND ${ownerFilterSql(scope, "company", "co", cop)}`, cop);
   res.json({ data: { contacts: c.rows[0]?.n ?? 0, companies: co.rows[0]?.n ?? 0 } });
