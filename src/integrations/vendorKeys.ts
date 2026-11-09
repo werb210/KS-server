@@ -20,6 +20,7 @@ export const VENDOR_KEYS: readonly VendorKeyDef[] = [
   { key: "ONFIDO_REGION", service: "id", label: "Entrust IDV (Onfido) region", secret: false, hint: "ca, us or eu (ca keeps applicant data in Canada)" },
   { key: "IPINFO_TOKEN", service: "ip", label: "ipinfo token", secret: true },
   { key: "CORPORATIONS_CANADA_API_KEY", service: "registry", label: "Corporations Canada API key", secret: true },
+  { key: "OPENAI_ADS_API_KEY", service: "chatgpt_ads", label: "ChatGPT Ads (OpenAI Ads Manager) API key", secret: true, hint: "Ads Manager > Settings > API keys. An OpenAI developer-platform key does not work here." }, // KS_SERVER_CHATGPT_ADS_v1
 ];
 export const VENDOR_KEY_NAMES: ReadonlySet<string> = new Set(VENDOR_KEYS.map((d) => d.key));
 
