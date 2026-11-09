@@ -75,7 +75,7 @@ export function startSendQueueWorker(pool: Pool): { stop: () => void } {
             );
           }
         } else {
-          const result = await runEmailSend(pool, { silo: job.silo, tag: job.tag, subject: String(p.subject || ""), html: String(p.html || ""), tags: (p.tags as string[] | undefined) ?? null, excludeTags: (p.excludeTags as string[] | undefined) ?? null, templateId: (p as any).templateId ?? null, resend: (p as any).resend === true, jobId: job.id }, progress, abortCheck); // BF_SERVER_EMAIL_AUDIENCE_INCL_EXCL_v1 BF_SERVER_TEMPLATE_ANALYTICS_v1 BF_SERVER_SEND_KILL_SWITCH_v1 KS_SERVER_MARKETING_ADDON
+          const result = await runEmailSend(pool, { silo: job.silo, tag: job.tag, subject: String(p.subject || ""), html: String(p.html || ""), tags: (p.tags as string[] | undefined) ?? null, excludeTags: (p.excludeTags as string[] | undefined) ?? null, templateId: (p as any).templateId ?? null, resend: (p as any).resend === true, jobId: job.id, skipTextedDays: Number.isInteger((p as any).skipTextedDays) ? Number((p as any).skipTextedDays) : null }, progress, abortCheck); // BF_SERVER_EMAIL_AUDIENCE_INCL_EXCL_v1 BF_SERVER_TEMPLATE_ANALYTICS_v1 BF_SERVER_SEND_KILL_SWITCH_v1 KS_SERVER_MARKETING_ADDON
           // KS_SERVER_MARKETING_ADDON - a send that stopped at the month's campaign email allowance says so.
           const error = result.rejectError
             ? `rejected (status ${result.rejectStatus ?? "unknown"}): ${result.rejectError}`

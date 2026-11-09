@@ -42,7 +42,7 @@ describe("campaign type", () => {
     await emailRecipients({ query } as any, { silo: "BF", tag: "x", subject: "s", html: "h", subscriptionTypeId: T1 });
     const call = callsMatching(query, /FROM contacts c/)[0];
     expect(String(call[0])).toContain("contact_subscription_optouts");
-    expect(call[1]).toEqual(["BF", "x", null, null, T1]);
+    expect(call[1]).toEqual(["BF", "x", null, null, T1, null]);
   });
 });
 

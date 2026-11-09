@@ -188,6 +188,7 @@ export function jobOf(row: CampaignJobRow): EmailJob {
     tags: (p.tags as string[] | undefined) ?? null, excludeTags: (p.excludeTags as string[] | undefined) ?? null,
     templateId: (p.templateId as string | undefined) ?? null, resend: p.resend === true, jobId: row.id,
     subscriptionTypeId: typeof p.subscriptionTypeId === "string" ? p.subscriptionTypeId : null, // KS_EMAIL_SUBSCRIPTION_TYPES_v1
+    skipTextedDays: Number.isInteger(p.skipTextedDays) ? Number(p.skipTextedDays) : null, // KS_SERVER_SKIP_TEXTED_v1
   };
 }
 

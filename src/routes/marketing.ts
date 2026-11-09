@@ -994,7 +994,8 @@ router.post("/email/send", safeHandler(async (req: any, res: any) => {
   // KS_EMAIL_SUBSCRIPTION_TYPES_v1 - an optional email type; people who opted out of it are skipped.
   const subscriptionTypeId = await campaignTypeOr400(req, res, silo);
   if (subscriptionTypeId === undefined) return;
-  const total = await countEmailRecipients(pool, silo, tag, includeTags, excludeTags, subscriptionTypeId);
+  const skipTextedDays = skipTextedDaysOf(b.skipTextedDays); // KS_SERVER_SKIP_TEXTED_v1
+  const total = await countEmailRecipients(pool, silo, tag, includeTags, excludeTags, subscriptionTypeId, skipTextedDays);
   if (total === 0) { respondOk(res, { configured: true, recipients: 0, sent: 0, failed: 0, capped: false }); return; }
   // BF_SERVER_ALWAYS_QUEUE_v1 - always use the durable queue; inline sends cannot resume.
   // BF_SERVER_v791_DEAD_INLINE_SEND - countEmailRecipients returns count(*)::int (a
@@ -1018,7 +1019,7 @@ router.post("/email/send", safeHandler(async (req: any, res: any) => {
      VALUES ('email', $1, $2, $3, $4, $5, $6::timestamptz) RETURNING id, not_before`,
     // BF_SERVER_EMAIL_TWO_COLUMN_ONLY_v15 - `resend` rides along in the payload
     // so the worker that picks this job up honours it too.
-    [silo, tag, JSON.stringify({ subject, html: htmlOut, tags: includeTags, excludeTags, templateId, resend: b.resend === true, subscriptionTypeId, ...options }), total, req.user?.userId ?? null, schedule.at.toISOString()],
+    [silo, tag, JSON.stringify({ subject, html: htmlOut, tags: includeTags, excludeTags, skipTextedDays, templateId, resend: b.resend === true, subscriptionTypeId, ...options }), total, req.user?.userId ?? null, schedule.at.toISOString()],
   );
   respondOk(res, { configured: true, queued: true, jobId: job.rows[0].id, total, notBefore: job.rows[0].not_before, holdMinutes: SEND_HOLD_MINUTES, scheduled: schedule.scheduled });
 }));
@@ -1296,6 +1297,13 @@ export function emailAudienceMissing(tag: string | null, includeTags: string[] |
   return !(tag && tag.trim()) && !(includeTags && includeTags.length > 0);
 }
 
+// KS_SERVER_SKIP_TEXTED_v1 - "Skip contacts who got a marketing text in the last 7 days" (parity with BF-Server v923).
+export function skipTextedDaysOf(v: unknown): number | null {
+  if (v === true || v === "true" || v === "1" || v === 1) return 7;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1 && n <= 90 ? n : null;
+}
+
 function tagArr(v: unknown): string[] | null {
   const raw = Array.isArray(v) ? v : typeof v === "string" ? v.split(",") : [];
   const out = [...new Set(raw.map((x) => String(x).trim()).filter(Boolean))];
@@ -1310,7 +1318,7 @@ router.get("/email/audience-count", safeHandler(async (req: any, res: any) => {
   const exclude = tagArr(req.query.exclude);
   const subscriptionTypeId = await campaignTypeOr400(req, res, silo, req.query.subscriptionTypeId); // KS_EMAIL_SUBSCRIPTION_TYPES_v1
   if (subscriptionTypeId === undefined) return;
-  const n = await countEmailRecipients(pool, silo, null, include, exclude, subscriptionTypeId);
+  const n = await countEmailRecipients(pool, silo, null, include, exclude, subscriptionTypeId, skipTextedDaysOf(req.query.skipTexted)); // KS_SERVER_SKIP_TEXTED_v1
   const budget = await campaignEmailBudget(pool as any); // KS_SERVER_MARKETING_ADDON
   respondOk(res, { n, campaignEmails: { used: budget.used, allowance: budget.allowance, remaining: budget.remaining, addon: budget.addon } });
 }));
@@ -1343,7 +1351,8 @@ router.post("/email/send-template", safeHandler(async (req: any, res: any) => {
   } catch (e) { console.error("landing_page_failed", { error: e instanceof Error ? e.message : String(e) }); }
   const subscriptionTypeId = await campaignTypeOr400(req, res, silo); // KS_EMAIL_SUBSCRIPTION_TYPES_v1
   if (subscriptionTypeId === undefined) return;
-  const total = await countEmailRecipients(pool, silo, tag, includeTags, excludeTags, subscriptionTypeId);
+  const skipTextedDays = skipTextedDaysOf(b.skipTextedDays); // KS_SERVER_SKIP_TEXTED_v1
+  const total = await countEmailRecipients(pool, silo, tag, includeTags, excludeTags, subscriptionTypeId, skipTextedDays);
   if (total === 0) { respondOk(res, { configured: true, recipients: 0, sent: 0, failed: 0 }); return; }
   // BF_SERVER_ALWAYS_QUEUE_v1 - always use the durable queue; inline sends cannot resume.
   // BF_SERVER_v791_DEAD_INLINE_SEND - countEmailRecipients returns count(*)::int (a
@@ -1366,7 +1375,7 @@ router.post("/email/send-template", safeHandler(async (req: any, res: any) => {
     `INSERT INTO marketing_send_jobs (channel, silo, tag, payload, total, created_by, not_before) VALUES ('email', $1, $2, $3, $4, $5, $6::timestamptz) RETURNING id, not_before`,
     // BF_SERVER_EMAIL_TWO_COLUMN_ONLY_v15 - `resend` rides along in the payload
     // so the worker that picks this job up honours it too.
-    [silo, tag, JSON.stringify({ subject, html: htmlOut, tags: includeTags, excludeTags, templateId, resend: b.resend === true, subscriptionTypeId, ...options }), total, req.user?.userId ?? null, schedule.at.toISOString()],
+    [silo, tag, JSON.stringify({ subject, html: htmlOut, tags: includeTags, excludeTags, skipTextedDays, templateId, resend: b.resend === true, subscriptionTypeId, ...options }), total, req.user?.userId ?? null, schedule.at.toISOString()],
   );
   respondOk(res, { configured: true, queued: true, jobId: job.rows[0].id, total, notBefore: job.rows[0].not_before, holdMinutes: SEND_HOLD_MINUTES, scheduled: schedule.scheduled });
 }));
