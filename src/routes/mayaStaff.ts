@@ -1794,4 +1794,99 @@ router.post(
   }),
 );
 
+// KS_SERVER_CUSTOM_EVERYWHERE_v1 - the assistant reads the brokerage's own properties and extra pipelines.
+// crm.properties: a record's property values (with labels), or the list of properties and pipelines when no record is named.
+router.post(
+  "/staff/properties",
+  safeHandler(async (req: Request, res: Response) => {
+    if (!verifyMayaService(req)) return res.status(401).json({ ok: false, error: "service_jwt_required" });
+    const { listDefinitions } = await import("../customFields/service.js");
+    const { OBJECT_LABEL, customBuilderFields, extraPipelineSummaries } = await import("../customFields/everywhere.js");
+    const objectRaw = String(biStr(req.body?.object) ?? "").toLowerCase();
+    const object = (objectRaw === "deal" || objectRaw === "application" ? "application" : objectRaw) as "contact" | "company" | "application";
+    const id = biStr(req.body?.id);
+    try {
+      if (!id || !["contact", "company", "application"].includes(object)) {
+        const [fields, pipelines] = await Promise.all([customBuilderFields(pool as any), extraPipelineSummaries(pool as any)]);
+        const summary = `${fields.length} custom propert${fields.length === 1 ? "y" : "ies"} and ${pipelines.length} extra pipeline(s).`;
+        await audit({ audience: "staff", tool: "crm.properties", args: {}, ok: true, summary, sessionId: biStr(req.body?.session_id) });
+        return res.json({ ok: true, properties: fields, pipelines, summary });
+      }
+      const table = object === "contact" ? "contacts" : object === "company" ? "companies" : "applications";
+      const r = await pool.query(`SELECT custom_fields FROM ${table} WHERE id::text = $1`, [id]);
+      if (!r.rows[0]) return res.json({ ok: false, error: "not_found", summary: `No ${OBJECT_LABEL[object].toLowerCase()} with that id.` });
+      const defs = await listDefinitions(pool as any, object, { includeArchived: false });
+      const values = (r.rows[0].custom_fields ?? {}) as Record<string, unknown>;
+      const properties = defs.map((d) => ({ name: d.name, label: d.label, type: d.field_type, value: values[d.name] ?? null }));
+      const filled = properties.filter((x) => x.value !== null && x.value !== "").length;
+      const summary = `${filled} of ${properties.length} properties filled in.`;
+      await audit({ audience: "staff", tool: "crm.properties", args: { object, id }, ok: true, summary, sessionId: biStr(req.body?.session_id) });
+      return res.json({ ok: true, object, id, properties, summary });
+    } catch (e: any) {
+      logError("maya_properties_failed", { code: "maya_properties_failed", error: e?.message ?? "unknown" });
+      return res.status(500).json({ ok: false, error: "properties_failed" });
+    }
+  }),
+);
+
+// crm.find_by_property: contacts, companies or deals whose property matches a value (exact, or "contains" for text).
+router.post(
+  "/staff/find-by-property",
+  safeHandler(async (req: Request, res: Response) => {
+    if (!verifyMayaService(req)) return res.status(401).json({ ok: false, error: "service_jwt_required" });
+    const { parseCfKey } = await import("../customFields/everywhere.js");
+    const target = parseCfKey(String(biStr(req.body?.field) ?? ""));
+    if (!target) return res.status(400).json({ ok: false, error: "field_required", summary: "Name the property as contact_cf_<name>, company_cf_<name> or deal_cf_<name> (crm.properties lists them)." });
+    const value = String(biStr(req.body?.value) ?? "");
+    const contains = String(biStr(req.body?.match) ?? "") === "contains";
+    const limit = Math.min(biNum(req.body?.limit) ?? 25, 100);
+    const sql = target.object === "contact"
+      ? `SELECT id::text AS id, COALESCE(NULLIF(name, ''), trim(concat_ws(' ', first_name, last_name))) AS label, custom_fields->>$1 AS value FROM contacts WHERE merged_into_id IS NULL AND `
+      : target.object === "company"
+        ? `SELECT id::text AS id, name AS label, custom_fields->>$1 AS value FROM companies WHERE `
+        : `SELECT id::text AS id, COALESCE(NULLIF(name, ''), id::text) AS label, custom_fields->>$1 AS value, pipeline_state AS stage FROM applications WHERE `;
+    const cond = value
+      ? (contains ? `custom_fields->>$1 ILIKE '%' || $2 || '%'` : `(lower(custom_fields->>$1) = lower($2) OR custom_fields->$1 @> to_jsonb($2::text))`)
+      : `COALESCE(custom_fields->>$1, '') <> ''`;
+    try {
+      const params: unknown[] = value ? [target.name, value, limit] : [target.name, limit];
+      const r = await pool.query(`${sql}${cond} ORDER BY 2 LIMIT $${params.length}`, params);
+      const summary = r.rows.length ? `${r.rows.length} match(es).` : "No matches.";
+      await audit({ audience: "staff", tool: "crm.find_by_property", args: { field: req.body?.field, value, contains }, ok: true, summary, sessionId: biStr(req.body?.session_id) });
+      return res.json({ ok: true, object: target.object === "application" ? "deal" : target.object, matches: r.rows, summary });
+    } catch (e: any) {
+      logError("maya_find_by_property_failed", { code: "maya_find_by_property_failed", error: e?.message ?? "unknown" });
+      return res.status(500).json({ ok: false, error: "find_by_property_failed" });
+    }
+  }),
+);
+
+// pipelines.overview: every extra pipeline with deals per stage; with pipeline + stage, the deals in that stage.
+router.post(
+  "/staff/pipelines-overview",
+  safeHandler(async (req: Request, res: Response) => {
+    if (!verifyMayaService(req)) return res.status(401).json({ ok: false, error: "service_jwt_required" });
+    try {
+      const { yourPipelines } = await import("../services/reports/data8.js");
+      const overview = await yourPipelines({});
+      const pipelineName = String(biStr(req.body?.pipeline) ?? "").toLowerCase();
+      const stageName = String(biStr(req.body?.stage) ?? "").toLowerCase();
+      let deals: any[] = [];
+      if (pipelineName && stageName) {
+        const r = await pool.query(
+          `SELECT a.id::text AS id, COALESCE(NULLIF(a.name, ''), a.id::text) AS name, a.requested_amount, a.pipeline_stage_entered_at
+             FROM applications a JOIN pipelines p ON p.id = a.pipeline_id JOIN pipeline_stages s ON s.id = a.pipeline_stage_id
+            WHERE lower(p.name) = $1 AND lower(s.name) = $2 ORDER BY a.pipeline_stage_entered_at NULLS LAST LIMIT 50`, [pipelineName, stageName]);
+        deals = r.rows;
+      }
+      const summary = overview.pipelines.length ? `${overview.pipelines.length} pipeline(s).${deals.length ? ` ${deals.length} deal(s) in that stage.` : ""}` : overview.note ?? "No extra pipelines.";
+      await audit({ audience: "staff", tool: "pipelines.overview", args: { pipeline: pipelineName, stage: stageName }, ok: true, summary, sessionId: biStr(req.body?.session_id) });
+      return res.json({ ok: true, ...overview, deals, summary });
+    } catch (e: any) {
+      logError("maya_pipelines_overview_failed", { code: "maya_pipelines_overview_failed", error: e?.message ?? "unknown" });
+      return res.status(500).json({ ok: false, error: "pipelines_overview_failed" });
+    }
+  }),
+);
+
 export default router;

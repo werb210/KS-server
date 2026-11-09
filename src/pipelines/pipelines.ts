@@ -190,6 +190,14 @@ export async function moveApplication(db: Q, applicationId: string, toPipeline: 
       WHERE id::text = $1`, [applicationId, p.id, stage.id]);
   await db.query(`INSERT INTO pipeline_moves (application_id, from_pipeline_id, from_stage, to_pipeline_id, to_stage, moved_by) VALUES ($1, $2::uuid, $3, $4::uuid, $5, $6::uuid)`,
     [applicationId, app.pipeline_id, fromStage, p.id, stage.name, actor]);
+  // KS_SERVER_CUSTOM_EVERYWHERE_v1 - workflows can start on a stage change in an extra pipeline.
+  if (fromStage !== stage.name || app.pipeline_id !== p.id) {
+    void import("../modules/automation/automationEngine.js")
+      .then((m) => m.emitAutomationEvent("application.pipeline_stage_changed", {
+        silo: "BF", applicationId, data: { pipeline_name: p.name, from_stage: app.pipeline_id === p.id ? fromStage : null, to_stage: stage.name },
+      } as any))
+      .catch((err) => console.warn("[pipelines] automation event failed", String(err?.message ?? err)));
+  }
   return { ok: true, pipeline_id: p.id, stage: stage.name };
 }
 

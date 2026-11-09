@@ -386,6 +386,18 @@ export async function runDailyTriggers(deps: EngineDeps): Promise<number> {
         const target = localDate(now, tz, -Number(tparam(t, "offsetDays") ?? 0));
         const field = String(tparam(t, "field") ?? "created_at");
         const tzName = effectiveTz(tz);
+        // KS_SERVER_CUSTOM_EVERYWHERE_v1 - a date property (contact_cf_*, company_cf_*, deal_cf_*) can drive the trigger too.
+        const cf = /^(contact|company|deal)_cf_([a-z][a-z0-9_]{0,62})$/.exec(field);
+        if (cf) {
+          const name = cf[2]!;
+          const cfWhere = cf[1] === "contact"
+            ? `left(c.custom_fields->>$3, 10) = to_char($2::date, 'YYYY-MM-DD')`
+            : cf[1] === "company"
+              ? `EXISTS (SELECT 1 FROM companies co WHERE co.id = c.company_id AND left(co.custom_fields->>$3, 10) = to_char($2::date, 'YYYY-MM-DD'))`
+              : `EXISTS (SELECT 1 FROM applications a WHERE a.contact_id::text = c.id::text AND left(a.custom_fields->>$3, 10) = to_char($2::date, 'YYYY-MM-DD'))`;
+          const r = await q(`SELECT c.id::text AS id FROM contacts c WHERE c.silo = $1 AND c.merged_into_id IS NULL AND ${cfWhere} LIMIT 500`, [rule.silo, target, name]);
+          ids = r.rows.map((x: any) => x.id);
+        } else {
         const where = field === "dob"
           ? `to_char(c.dob, 'MM-DD') = to_char($2::date, 'MM-DD')`
           : field === "booking_starts_at"
@@ -395,6 +407,7 @@ export async function runDailyTriggers(deps: EngineDeps): Promise<number> {
               : `(c.created_at AT TIME ZONE '${tzName.replace(/'/g, "")}')::date = $2::date`;
         const r = await q(`SELECT c.id::text AS id FROM contacts c WHERE c.silo = $1 AND c.merged_into_id IS NULL AND ${where} LIMIT 500`, [rule.silo, target]);
         ids = r.rows.map((x: any) => x.id);
+        }
       } else if (t.type === "no_reply") {
         const days = Math.max(1, Number(tparam(t, "days") ?? 3) || 3);
         const r = await q(

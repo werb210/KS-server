@@ -87,6 +87,13 @@ export async function buildContext(q: Query, ev: AutomationEvent): Promise<Recor
       if (ctx.application_link === undefined) ctx.application_link = String(process.env.CLIENT_URL ?? clientUrl()).replace(/\/$/, "") + "/portal";
     }
   }
+  // KS_SERVER_CUSTOM_EVERYWHERE_v1 - the brokerage's own properties (contact_cf_*, company_cf_*, deal_cf_*) and the deal's
+  // extra pipeline (pipeline_name, pipeline_stage), for conditions and {{tokens}}. Event data keeps priority.
+  {
+    const { customFieldContext } = await import("../../customFields/everywhere.js");
+    const extra = await customFieldContext({ query: (sql: string, params?: unknown[]) => q(sql, params) }, { contactId, applicationId: ev.applicationId ?? null });
+    for (const [k, v] of Object.entries(extra)) if (ctx[k] === undefined) ctx[k] = v;
+  }
   if (ctx.document_type) ctx.document_type = String(ctx.document_type).replace(/_/g, " ");
   ctx.silo = String(silo || "BF").toUpperCase();
   ctx.contact_id = contactId;

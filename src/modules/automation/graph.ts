@@ -166,10 +166,12 @@ export const TRIGGER_TYPES = [
   "contact.created", "contact.field_changed", "application.created", "application.stage_changed", "document.uploaded", "document.rejected",
   "booking.created", "meeting.completed", "message.inbound", "call.missed", "link.clicked", "email.opened", "email.clicked", "email.bounced",
   "email.unsubscribed", "date.relative", "no_reply", "manual",
+  "application.pipeline_stage_changed", "record.custom_field_changed", // KS_SERVER_CUSTOM_EVERYWHERE_v1
 ] as const;
 export const ACTION_TYPES = [
   "send_email", "send_sms", "notify_client", "notify_staff", "team_post", "rotate_owner", "assign_owner", "create_task", "add_note",
   "set_contact_field", "set_application_stage", "add_tag", "remove_tag", "add_to_list", "remove_from_list", "webhook", "enroll_workflow",
+  "set_custom_field", "move_pipeline_stage", // KS_SERVER_CUSTOM_EVERYWHERE_v1
 ] as const;
 export const SEND_ACTIONS = new Set(["send_email", "send_sms", "notify_client", "notify_staff"]);
 export const CONTACT_FIELDS_SETTABLE = ["first_name", "last_name", "name", "email", "phone", "job_title", "company_name", "lead_status", "lifecycle_stage", "status", "role"];
@@ -230,6 +232,9 @@ export function validateGraph(graph: unknown, settings?: unknown, goal?: unknown
         if (n.action === "add_note" && !String(p.body ?? "").trim()) issues.push({ nodeId: id, message: "the note needs text" });
         if (n.action === "set_contact_field" && !CONTACT_FIELDS_SETTABLE.includes(String(p.field))) issues.push({ nodeId: id, message: "pick a contact field that can be set" });
         if (n.action === "set_application_stage" && !String(p.stage ?? "").trim()) issues.push({ nodeId: id, message: "pick a stage" });
+        // KS_SERVER_CUSTOM_EVERYWHERE_v1
+        if (n.action === "set_custom_field" && !/^(contact|company|deal)_cf_[a-z][a-z0-9_]{0,62}$/.test(String(p.field ?? ""))) issues.push({ nodeId: id, message: "pick a property to set" });
+        if (n.action === "move_pipeline_stage" && (!String(p.pipeline ?? "").trim() || !String(p.stage ?? "").trim())) issues.push({ nodeId: id, message: "pick a pipeline and a stage" });
         if ((n.action === "add_tag" || n.action === "remove_tag") && !String(p.tag ?? "").trim()) issues.push({ nodeId: id, message: "enter a tag" });
         if (n.action === "add_to_list" || n.action === "remove_from_list") {
           if (!p.listId) issues.push({ nodeId: id, message: "pick a list" });

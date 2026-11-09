@@ -178,7 +178,26 @@ export async function writeRecordValues(
       WHERE id = $1::${idCast} RETURNING custom_fields`,
     [recordId, removed, JSON.stringify(set)],
   );
+  // KS_SERVER_CUSTOM_EVERYWHERE_v1 - workflows can start when a property changes ("record.custom_field_changed").
+  void emitPropertyChanges(object, recordId, current, check.changes);
   return { ok: true, custom_fields: (r.rows[0]?.custom_fields ?? mergeValues(current, check.changes)) as Record<string, unknown>, changed };
+}
+
+async function emitPropertyChanges(object: ObjectType, recordId: string, before: Record<string, unknown>, changes: Record<string, unknown>): Promise<void> {
+  try {
+    const { cfKey, cfText } = await import("./everywhere.js");
+    const { emitAutomationEvent } = await import("../modules/automation/automationEngine.js");
+    for (const [name, to] of Object.entries(changes)) {
+      await emitAutomationEvent("record.custom_field_changed", {
+        silo: "BF",
+        contactId: object === "contact" ? recordId : undefined,
+        applicationId: object === "application" ? recordId : undefined,
+        data: { object: object === "application" ? "deal" : object, field: cfKey(object, name), from: cfText(before[name]), to: cfText(to) },
+      } as any);
+    }
+  } catch (err) {
+    console.warn("[custom-fields] automation event failed", String((err as Error)?.message ?? err));
+  }
 }
 
 /** Validates values for a record that is about to be created (no current values). */

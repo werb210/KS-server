@@ -36,6 +36,10 @@ export const FIELDS: Field[] = [
   { key: "sms.replied", label: "Replied by text since enrolling", type: "boolean" },
   { key: "link.clicked", label: "Clicked a link since enrolling", type: "boolean" },
   { key: "booking.made", label: "Booked a call since enrolling", type: "boolean" },
+  // KS_SERVER_CUSTOM_EVERYWHERE_v1 - the brokerage's own properties are added per request (catalogWithCustom).
+  { key: "pipeline_name", label: "Pipeline", type: "text" },
+  { key: "pipeline_stage", label: "Stage in that pipeline", type: "text" },
+  { key: "object", label: "Property belongs to", type: "text", options: ["contact", "company", "deal"] },
 ];
 
 const LABELS: Record<string, [string, string, string[]]> = {
@@ -57,6 +61,9 @@ const LABELS: Record<string, [string, string, string[]]> = {
   "date.relative": ["A date is reached (days before/after)", "Dates", ["contact_tag", "lead_status"]],
   "no_reply": ["No reply after a number of days", "Messages", ["contact_tag", "lead_status"]],
   "manual": ["Enrolled by staff", "Manual", []],
+  // KS_SERVER_CUSTOM_EVERYWHERE_v1
+  "application.pipeline_stage_changed": ["A deal moves stage in one of your pipelines", "Applications", ["pipeline_name", "from_stage", "to_stage", "requested_amount"]],
+  "record.custom_field_changed": ["One of your properties changes", "Contacts", ["object", "field", "from", "to"]],
 };
 
 type Param = { key: string; label: string; type: string; required?: boolean; options?: string[] };
@@ -72,6 +79,9 @@ const ACTION_INFO: Record<string, [string, string, Param[]]> = {
   add_note: ["Add a note", "Contact", [{ key: "body", label: "Note", type: "textarea", required: true }]],
   set_contact_field: ["Set a contact field", "Contact", [{ key: "field", label: "Field", type: "select", options: ["first_name", "last_name", "name", "email", "phone", "job_title", "company_name", "lead_status", "lifecycle_stage", "status", "role"], required: true }, { key: "value", label: "Value", type: "text" }]],
   set_application_stage: ["Move the application to a stage", "Applications", [{ key: "stage", label: "Stage", type: "select", options: [...STAGES], required: true }]],
+  // KS_SERVER_CUSTOM_EVERYWHERE_v1
+  set_custom_field: ["Set one of your properties", "Contact", [{ key: "field", label: "Property", type: "custom_field", required: true }, { key: "value", label: "Value", type: "text" }]],
+  move_pipeline_stage: ["Move the deal in one of your pipelines", "Applications", [{ key: "pipeline", label: "Pipeline", type: "pipeline", required: true }, { key: "stage", label: "Stage", type: "pipeline_stage", required: true }]],
   add_tag: ["Add a tag", "Contact", [{ key: "tag", label: "Tag", type: "text", required: true }]],
   remove_tag: ["Remove a tag", "Contact", [{ key: "tag", label: "Tag", type: "text", required: true }]],
   add_to_list: ["Add to a list", "Contact", [{ key: "listId", label: "List", type: "list", required: true }]],
@@ -92,6 +102,22 @@ export function catalogStatic() {
 }
 
 // ---- library ------------------------------------------------------------------------
+/** KS_SERVER_CUSTOM_EVERYWHERE_v1 - the static catalog plus this brokerage's properties and extra pipelines. */
+export async function catalogWithCustom(db: { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[] }> }) {
+  const base = catalogStatic();
+  const { customBuilderFields, extraPipelineSummaries } = await import("../../customFields/everywhere.js");
+  const [custom, pipelines] = await Promise.all([customBuilderFields(db), extraPipelineSummaries(db)]);
+  const triggers = base.triggers.map((t) => t.type === "contact.created" || t.type === "application.stage_changed" || t.type === "application.created"
+    || t.type === "application.pipeline_stage_changed" || t.type === "record.custom_field_changed"
+    ? { ...t, filterFields: [...t.filterFields, ...custom.map((c) => c.key)] } : t);
+  return {
+    ...base, triggers,
+    fields: [...base.fields, ...custom],
+    customFields: custom,
+    pipelines,
+  };
+}
+
 export type LibraryItem = { key: string; name: string; description: string; graph: Graph; settings: Settings; goal: Goal };
 
 const v1System = () => [
