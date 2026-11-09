@@ -1,6 +1,7 @@
 // BF_SERVER_BLOCK_v200_SIGNNOW_STUB_MODE_v1
 // BF_SERVER_BLOCK_v201_SIGNNOW_REAL_BUILD_v1
 // BF_SERVER_BLOCK_v202_SIGNNOW_FILLED_PDF_v1
+import { signnowStubMode } from "./stubMode.js"; // KS_SERVER_TEST_SIGNING_SKIP_v1
 import crypto from "node:crypto";
 import { dbQuery } from "../db.js";
 import { crmContactEmail } from "../services/clientEmail.js"; // BF_SERVER_CRM_EMAIL_WINS_v756
@@ -16,7 +17,7 @@ type SendResult =
   | { ok: true; mode: "stub"; documentId: string; blobName: string }
   | { ok: false; mode: "skipped"; reason: string };
 
-function isStubMode(): boolean { const v = (process.env.SIGNNOW_STUB_MODE ?? "").trim().toLowerCase(); return ["1", "true", "yes", "on"].includes(v); }
+function isStubMode(): boolean { return signnowStubMode(); } // KS_SERVER_TEST_SIGNING_SKIP_v1
 function stubDelayMs(): number { const n = Number(process.env.SIGNNOW_STUB_DELAY_MS); return Number.isFinite(n) && n >= 0 ? n : 2000; }
 function fromEmail(): string { return signnowFromEmail(); }
 

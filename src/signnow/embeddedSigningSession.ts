@@ -1,5 +1,6 @@
 // BF_SERVER_BLOCK_v712_EMBEDDED_GROUP_SIGNING_v1
 // BF_SERVER_BLOCK_v203_SIGNNOW_ACCORD_GROUP_v1
+import { signnowStubMode } from "./stubMode.js"; // KS_SERVER_TEST_SIGNING_SKIP_v1
 import { dbQuery } from "../db.js";
 import { loadApplicationForPdf } from "./sendApplicationForSignature.js";
 import { buildApplicationPdf } from "./pdfBuilder.js";
@@ -14,7 +15,7 @@ import { clientUrl, hostOf } from "../licensee/urls.js"; // KS_SERVER_v4_BRANDIN
 const ROLE_OWNER1 = "Owner 1";
 const ROLE_OWNER2 = "Owner 2";
 function fromEmail(): string { return signnowFromEmail(); }
-function isStubMode(): boolean { const v = (process.env.SIGNNOW_STUB_MODE ?? "").trim().toLowerCase(); return ["1", "true", "yes", "on"].includes(v); }
+function isStubMode(): boolean { return signnowStubMode(); } // KS_SERVER_TEST_SIGNING_SKIP_v1
 
 export type SigningSessionResult =
   | { status: "signed" }

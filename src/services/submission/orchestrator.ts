@@ -135,7 +135,7 @@ export async function maybeStartCreditSummaryAndSign(ctx: OrchestratorContext): 
   let signFailReason: string | null = null;
   try {
     const hasKey = (process.env.SIGNNOW_API_KEY ?? "").trim().length > 0;
-    const stub = ["1", "true", "yes", "on"].includes((process.env.SIGNNOW_STUB_MODE ?? "").trim().toLowerCase());
+    const stub = (await import("../../signnow/stubMode.js")).signnowStubMode(); // KS_SERVER_TEST_SIGNING_SKIP_v1
     if (hasKey && !stub) {
       const pthG = "../../signnow/embeddedSigningSession.js";
       const mod = await import(pthG).catch(() => null as any);
