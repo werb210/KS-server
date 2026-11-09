@@ -319,6 +319,7 @@ export const EnvSchema = z
     SIGNNOW_REFERRER_TEMPLATE_ID: z.string().optional(), // identifier; read in routes/admin.ts
     SIGNNOW_STUB_DELAY_MS: z.string().optional(), // interval in milliseconds; read in signnow/sendApplicationForSignature.ts
     SIGNNOW_STUB_MODE: z.string().optional(), // setting; read in services/submission/orchestrator.ts
+    KS_TEST_SKIP_SIGNING: z.string().optional(), // KS_SERVER_TEST_SIGNING_SKIP_v1 - "false" turns the test-brokerage signing skip off
     SIGNNOW_WEBHOOK_SECRET: z.string().optional(), // credential (secret); read in routes/signnow.ts
     SIGNNOW_WEBHOOK_URL: z.string().optional(), // URL; read in signnow/ensureWebhookSubscription.ts
     TWILIO_DEFAULT_OUTBOUND_CALLER_ID: z.string().optional(), // identifier; read in telephony/routes/telephonyRoutes.ts
