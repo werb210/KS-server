@@ -24,7 +24,7 @@ export const PER_BROKERAGE_PREFIXES: readonly string[] = ["QBO_", "TWILIO_", "KS
 
 // KS_SERVER_VENDOR_KEYS - a brokerage's own verification-service keys (Settings > Your services), stored in its own
 // database. Registered by src/integrations/vendorKeys.ts so this file has no database dependency.
-const VENDOR_KEYS_ALSO: ReadonlySet<string> = new Set(["IPINFO_TOKEN", "CORPORATIONS_CANADA_API_KEY"]);
+const VENDOR_KEYS_ALSO: ReadonlySet<string> = new Set(["IPINFO_TOKEN", "CORPORATIONS_CANADA_API_KEY", "OPENAI_ADS_API_KEY"]); // KS_SERVER_CHATGPT_ADS_v1 - each brokerage its own ad account
 let vendorLookup: ((name: string) => string | undefined) | null = null;
 export function setVendorKeyLookup(fn: ((name: string) => string | undefined) | null): void {
   vendorLookup = fn;

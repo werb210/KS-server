@@ -15,6 +15,7 @@ const adminOnly = [auth, requireAuthorization({ roles: [ROLES.ADMIN] })];
 export const VENDOR_SERVICES = [
   { id: "id", name: "ID checks (Entrust Identity Verification, formerly Onfido)", signup: "https://www.entrust.com/products/identity-verification", what: "Applicants photograph their ID and take a selfie; Entrust checks them. Without it, ID checks go to manual review." },
   { id: "ip", name: "IP location and VPN (ipinfo)", signup: "https://ipinfo.io/signup", what: "Adds VPN, proxy and Tor flags. Without it, the free check still gives the country and data-centre networks." },
+  { id: "chatgpt_ads", name: "ChatGPT Ads (OpenAI Ads Manager)", signup: "https://ads.openai.com", what: "Shows your ChatGPT ad campaigns, spend, clicks and conversions on Marketing > Ads > ChatGPT, with pause and resume. Without it, the ChatGPT tab asks for the key." }, // KS_SERVER_CHATGPT_ADS_v1
   { id: "registry", name: "Corporations Canada (federal business registry)", signup: "https://api.ised-isde.canada.ca/", what: "Confirms a federally registered business exists and is active. Without it, the registry check is skipped." },
 ];
 

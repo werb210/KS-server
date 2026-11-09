@@ -76,6 +76,7 @@ import googleOAuthRoutes from "./googleOAuth.js"; // KS_SERVER_v12_GOOGLE_WORKSP
 import connectionsRoutes from "./connections.js"; // KS_SERVER_M365_ONE_CLICK
 import quickbooksRoutes from "./quickbooks.js"; // KS_SERVER_v13_QUICKBOOKS
 import vendorKeysRoutes from "./vendorKeys.js"; // KS_SERVER_VENDOR_KEYS
+import chatgptAdsRoutes from "./chatgptAds.js"; // KS_SERVER_CHATGPT_ADS_v1
 import auditActivityRoutes from "./auditActivity.js"; // BF_SERVER_AUDIT_ACTIVITY_v802
 import portalRoutes from "./portal.js";
 import portalLendersRoutes from "./portalLenders.js";
@@ -399,6 +400,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/gmail-push", router: gmailPushRoutes }, // KS_SERVER_GMAIL_INBOX - Gmail push via Pub/Sub (public, token)
   { path: "/google", router: googleOAuthRoutes }, // KS_SERVER_v12_GOOGLE_WORKSPACE - connect/status/disconnect (callback public)
   { path: "/connections", router: connectionsRoutes }, // KS_SERVER_M365_ONE_CLICK - Settings > Connections status (Admins)
+  { path: "/chatgpt-ads", router: chatgptAdsRoutes }, // KS_SERVER_CHATGPT_ADS_v1 - Marketing > Ads > ChatGPT (Admin, Marketing)
   { path: "/vendor-keys", router: vendorKeysRoutes }, // KS_SERVER_VENDOR_KEYS - a brokerage's own verification-service keys (Admin)
   { path: "/quickbooks", router: quickbooksRoutes }, // KS_SERVER_v13_QUICKBOOKS - connect (Admin), fee invoices (callback public)
   { path: "/audit", router: auditActivityRoutes }, // BF_SERVER_AUDIT_ACTIVITY_v802
