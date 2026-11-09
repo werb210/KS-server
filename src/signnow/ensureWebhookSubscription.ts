@@ -6,6 +6,13 @@ import { serverUrl } from "../licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 // access to signed documents/groups (group GET -> 403, document GET -> 400
 // "not readable"), so a pushed webhook is the only reliable completion signal.
 export async function ensureSignnowWebhook(): Promise<void> {
+  // KS_SERVER_SIGNNOW_SHARED_v1 - on shared hosting the account is Keystone's, used by every brokerage: no user-level
+  // subscription (it would send every brokerage's events to one address). Each document subscribes its own instead
+  // (signnowClient.subscribeEntityEvents).
+  try {
+    const { isMultiBrokerage } = await import("../tenancy/mode.js");
+    if (isMultiBrokerage()) { console.log("[signnow-webhook] shared hosting: per-document subscriptions, no user-level subscription"); return; }
+  } catch { /* single-brokerage build */ }
   if (!isApiKeyConfigured()) {
     console.log("[signnow-webhook] skipped (SIGNNOW_API_KEY not configured)");
     return;

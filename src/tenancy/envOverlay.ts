@@ -18,9 +18,13 @@ export const PER_BROKERAGE_KEYS: ReadonlySet<string> = new Set([
   "KS_OAUTH_BROKER_URL", "SENDGRID_FROM", "SENDGRID_REPLY_TO",
   // Generated per licensee by KS-Ops (GENERATED_SERVER_SECRETS).
   "GOOGLE_TOKEN_ENCRYPTION_KEY", "WATCH_PUSH_ENCRYPTION_KEY",
+  // KS_SERVER_SIGNNOW_SHARED_v1 - the callback address is the brokerage's own (never the shared server's).
+  "SIGNNOW_WEBHOOK_URL",
 ]);
 
-export const PER_BROKERAGE_PREFIXES: readonly string[] = ["QBO_", "TWILIO_", "KS_M365_", "KS_GOOGLE_", "SIGNNOW_", "ONFIDO_"];
+// KS_SERVER_SIGNNOW_SHARED_v1 - SIGNNOW_ is no longer per brokerage: every brokerage signs through Keystone's own
+// SignNow account (the shared SIGNNOW_API_KEY / SIGNNOW_WEBHOOK_SECRET), unless KS-Ops gives a brokerage its own.
+export const PER_BROKERAGE_PREFIXES: readonly string[] = ["QBO_", "TWILIO_", "KS_M365_", "KS_GOOGLE_", "ONFIDO_"];
 
 // KS_SERVER_VENDOR_KEYS - a brokerage's own verification-service keys (Settings > Your services), stored in its own
 // database. Registered by src/integrations/vendorKeys.ts so this file has no database dependency.

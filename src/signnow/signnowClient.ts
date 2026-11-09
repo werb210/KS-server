@@ -12,10 +12,44 @@ async function signnowFetch(path: string, init: RequestInit): Promise<unknown> {
   const res = await fetch(`${baseUrl()}${path}`, { ...init, headers }); const text = await res.text(); let body: unknown; try { body = text ? JSON.parse(text) : null; } catch { body = text; }
   if (!res.ok) throw new SignNowError(`SignNow ${init.method ?? "GET"} ${path} failed: ${res.status} ${(typeof body === "string" ? body : JSON.stringify(body ?? "")).slice(0, 400)}`, res.status, body); return body;
 }
+// KS_SERVER_SIGNNOW_SHARED_v1 - every brokerage signs through Keystone's one SignNow account (app@keystonecrm.online). A
+// user-level subscription on that account would send every brokerage's "signed" events to one address with no way to
+// tell which brokerage they belong to. So, on shared hosting, each document or document group subscribes its own
+// "signed / complete" events to the brokerage's own server address (SIGNNOW_WEBHOOK_URL, else <server>/api/webhooks/signnow),
+// which the shared server already routes to the right brokerage by host. Best effort: a failure is logged, never thrown.
+export async function subscribeEntityEvents(kind: "document" | "document_group", entityId: string): Promise<number> {
+  try {
+    const { isMultiBrokerage } = await import("../tenancy/mode.js");
+    const { currentTenant } = await import("../tenancy/context.js");
+    if (!isMultiBrokerage() || !currentTenant() || !entityId) return 0;
+    const { serverUrl } = await import("../licensee/urls.js");
+    const callback = (process.env.SIGNNOW_WEBHOOK_URL || "").trim() || `${serverUrl().replace(/\/+$/, "")}/api/webhooks/signnow`;
+    const secret = (process.env.SIGNNOW_WEBHOOK_SECRET ?? "").trim();
+    const events = kind === "document" ? ["document.complete", "document.fieldinvite.signed"] : ["document_group.complete", "document_group.invite.signed"];
+    let ok = 0;
+    for (const event of events) {
+      try {
+        await signnowFetch(`/api/v2/events`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ event, entity_id: entityId, action: "callback", attributes: { callback, use_tls_12: true, ...(secret ? { secret_key: secret } : {}) } }),
+        });
+        ok += 1;
+      } catch (err) {
+        console.warn("[signnow-webhook] entity subscription failed", { kind, event, message: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    return ok;
+  } catch (err) {
+    console.warn("[signnow-webhook] entity subscription skipped", { kind, message: err instanceof Error ? err.message : String(err) });
+    return 0;
+  }
+}
 export type UploadDocumentResult = { documentId: string };
 export async function uploadDocument(pdfBytes: Uint8Array, filename: string): Promise<UploadDocumentResult> {
   const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" }); const form = new FormData(); form.append("file", blob, filename);
-  const body = (await signnowFetch("/document", { method: "POST", body: form })) as { id?: string }; if (!body || typeof body.id !== "string") throw new SignNowError("SignNow upload returned no document id", undefined, body); return { documentId: body.id };
+  const body = (await signnowFetch("/document", { method: "POST", body: form })) as { id?: string }; if (!body || typeof body.id !== "string") throw new SignNowError("SignNow upload returned no document id", undefined, body);
+  await subscribeEntityEvents("document", body.id); // KS_SERVER_SIGNNOW_SHARED_v1
+  return { documentId: body.id };
 }
 export type SendInviteParams = { documentId: string; signerEmail: string; signerName?: string; fromEmail: string; subject?: string; message?: string; };
 export async function sendInvite(p: SendInviteParams): Promise<{ inviteId?: string }> {
@@ -40,6 +74,7 @@ export async function createTemplateFromDocument(documentId: string, templateNam
 export async function createDocumentFromTemplate(templateId: string, documentName: string): Promise<{ documentId: string }> {
   const body = (await signnowFetch(`/template/${encodeURIComponent(templateId)}/copy`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ document_name: documentName }) })) as { id?: string };
   if (!body || typeof body.id !== "string") throw new SignNowError("SignNow template copy returned no document id", undefined, body);
+  await subscribeEntityEvents("document", body.id); // KS_SERVER_SIGNNOW_SHARED_v1
   return { documentId: body.id };
 }
 // BF_SERVER_REFERRER_AGREEMENT_PREFILL_v1 - fill text fields by name so a signer
@@ -82,6 +117,7 @@ export async function prefillTextFields(documentId: string, fields: { name: stri
 export async function createDocumentGroup(documentIds: string[], groupName: string): Promise<{ groupId: string }> {
   const body = (await signnowFetch(`/documentgroup`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ document_ids: documentIds, group_name: groupName }) })) as { id?: string };
   if (!body || typeof body.id !== "string") throw new SignNowError("SignNow document group returned no id", undefined, body);
+  await subscribeEntityEvents("document_group", body.id); // KS_SERVER_SIGNNOW_SHARED_v1
   return { groupId: body.id };
 }
 export type EmbeddedSigner = { email: string; name?: string; roleName: string };
@@ -115,6 +151,7 @@ export async function uploadDocumentWithFieldExtract(pdfBytes: Uint8Array, filen
   const form = new FormData(); form.append("file", blob, filename);
   const body = (await signnowFetch("/document/fieldextract", { method: "POST", body: form })) as { id?: string };
   if (!body || typeof body.id !== "string") throw new SignNowError("SignNow fieldextract returned no document id", undefined, body);
+  await subscribeEntityEvents("document", body.id); // KS_SERVER_SIGNNOW_SHARED_v1
   return { documentId: body.id };
 }
 export async function sendGroupEmailInvite(groupId: string, signer: EmbeddedSigner & { fromEmail: string; order?: number }): Promise<{ inviteId?: string }> {
