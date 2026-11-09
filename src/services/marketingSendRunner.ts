@@ -30,9 +30,11 @@ export type EmailSendResult = { total: number; sent: number; failed: number; rej
 // KS_SERVER_EMAIL_CONSENT_v1 - email marketing consent (email_consent_basis) counts on its own; texting consent
 // still counts too. An unsubscribe (marketing_opt_out) always wins.
 export const EMAIL_CONSENT_SQL = `(c.email_consent_basis IN ('express', 'marketing_list') OR ${CONSENT_SQL})`;
+// KS_SERVER_EMAIL_ALL_CONTACTS_v1 - Todd's rule (Nov 9, same as BF-Server v917 and BI): every CRM contact with an
+// email address gets campaign email. Only people who unsubscribed / opted out of marketing are left out (and, per
+// campaign type, people who opted out of that type). EMAIL_CONSENT_SQL is kept for reports only.
 export const EMAIL_BLAST_ELIGIBLE_SQL = `
-      COALESCE(c.email,'') <> '' AND COALESCE(c.marketing_opt_out,false) = false
-  AND ${EMAIL_CONSENT_SQL}`;
+      COALESCE(c.email,'') <> '' AND COALESCE(c.marketing_opt_out,false) = false`;
 
 export async function countEmailRecipients(pool: Pool, silo: string, tag: string | null, tags: string[] | null = null, excludeTags: string[] | null = null, subscriptionTypeId: string | null = null, skipTextedDays: number | null = null): Promise<number> {
   const r = await pool.query<{ n: number }>(
