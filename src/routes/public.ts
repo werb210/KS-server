@@ -86,7 +86,7 @@ type LeadPayload = Record<string, unknown>;
 async function createLead(payload: LeadPayload): Promise<{ leadId?: string }> {
   // BF_SERVER_v789_CASL_EXPRESS_CONSENT - the consent fields are recorded by the
   // route, not part of the (strict) lead schema.
-  const { casl_consent: _c, casl_consent_text: _t, casl_consent_at: _a, ...leadFields } = payload ?? {};
+  const { casl_consent: _c, casl_consent_text: _t, casl_consent_at: _a, sms_consent: _s, email_consent: _e, ...leadFields } = (payload ?? {}) as Record<string, unknown>; // KS_SERVER_SEPARATE_CONSENT_v1
 
   const parsed = LeadSchema.safeParse(leadFields);
 
