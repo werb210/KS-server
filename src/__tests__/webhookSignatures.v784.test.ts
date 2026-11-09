@@ -187,7 +187,7 @@ describe("ensureSignnowWebhook registers subscriptions with secret_key", () => {
       calls.push({ method, path: u.pathname, body });
       let out: unknown = {};
       if (method === "GET" && u.pathname === "/user") out = { id: "u1" };
-      else if (method === "GET" && u.pathname === "/api/v2/events") out = { data: existing };
+      else if (method === "GET" && u.pathname === "/v2/event-subscriptions") out = { data: existing };
       else if (method === "POST" && u.pathname === "/api/v2/events") out = { id: "new" };
       return new Response(JSON.stringify(out), { status: 200, headers: { "content-type": "application/json" } });
     }) as any;
@@ -220,7 +220,7 @@ describe("ensureSignnowWebhook registers subscriptions with secret_key", () => {
     expect(calls.filter((c) => c.method === "POST" && c.path === "/api/v2/events")).toHaveLength(0);
     const puts = calls.filter((c) => c.method === "PUT");
     expect(puts).toHaveLength(1);
-    expect(puts[0].path).toBe("/api/v2/events/s1");
+    expect(puts[0].path).toBe("/v2/event-subscriptions/s1");
     expect(puts[0].body).toMatchObject({ event: "user.document.fieldinvite.signed", entity_id: "u1", action: "callback", attributes: { callback: CB, secret_key: SECRET } });
   });
 });
