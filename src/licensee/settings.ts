@@ -16,6 +16,7 @@ export const LICENSEE_FIELDS = [
   "workspace_provider", // KS_SERVER_v12_GOOGLE_WORKSPACE - m365 | google | both: which Connect buttons staff see
   "background_color", "font_family", // KS_SERVER_v14_BRAND_FONT - "" = the app's own default
   "client_languages", // KS_CLIENT_LANGUAGES_v1 - "en,fr,es": the languages the client app offers
+  "favicon_url", // KS_SERVER_BRAND_ASSETS_v1 - the browser tab icon ("" = the app's own)
 ] as const;
 export type LicenseeField = (typeof LICENSEE_FIELDS)[number];
 
@@ -85,6 +86,7 @@ const ENV_NAMES: Record<LicenseeField, string> = {
   workspace_provider: "KS_WORKSPACE_PROVIDER",
   background_color: "KS_BACKGROUND_COLOR", font_family: "KS_FONT_FAMILY",
   client_languages: "KS_CLIENT_LANGUAGES",
+  favicon_url: "KS_FAVICON_URL",
 };
 
 /** KS_SERVER_v8_USAGE - the time zone a licensee gets when it sets none. */
@@ -97,6 +99,7 @@ const NEUTRAL: LicenseeSettings = {
   workspace_provider: "m365", // today's behaviour: Microsoft 365 only
   background_color: "", font_family: "", // KS_SERVER_v14_BRAND_FONT - unset: each app keeps its own background and font
   client_languages: "en", // KS_CLIENT_LANGUAGES_v1 - English only until the brokerage adds French or Spanish
+  favicon_url: "",
 };
 
 export function envDefaults(env: NodeJS.ProcessEnv = process.env): LicenseeSettings {
@@ -123,6 +126,7 @@ export function checkField(field: LicenseeField, raw: unknown): { ok: true; valu
     return { ok: false, error: `${field} must be a colour like #0B1F3A` };
   }
   if (field === "logo_url" && !/^https:\/\/[^\s]+$/i.test(value)) return { ok: false, error: "logo_url must start with https://" };
+  if (field === "favicon_url" && !/^https:\/\/[^\s]+$/i.test(value)) return { ok: false, error: "favicon_url must start with https://" };
   if (field === "support_email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return { ok: false, error: "support_email is not an email address" };
   if (field === "country" && !/^[A-Z]{2}$/.test(value.toUpperCase())) return { ok: false, error: "country must be a two-letter code like CA or US" };
   // KS_SETTINGS_PACK_v1_TIME_ZONE - the brokerage's zone drives quiet hours, call hours, reports and usage periods,
@@ -241,7 +245,7 @@ export async function adminLicensee(db: Q, env: NodeJS.ProcessEnv = process.env)
 // licensee's admin wins. A field takes the pushed value while it is empty or still equal to what operations pushed
 // last time; once the admin has set a different value on the Company page, later pushes leave it alone (and the pushed
 // value is only recorded in ops_branding).
-export const OPS_BRAND_FIELDS = ["primary_color", "accent_color", "background_color", "font_family", "logo_url"] as const;
+export const OPS_BRAND_FIELDS = ["primary_color", "accent_color", "background_color", "font_family", "logo_url", "favicon_url"] as const; // favicon_url: KS_SERVER_BRAND_ASSETS_v1
 export type OpsBrandField = (typeof OPS_BRAND_FIELDS)[number];
 
 /** Checks a pushed branding object. Not an object = invalid; a field that is not a valid value (say an http logo
