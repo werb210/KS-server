@@ -114,7 +114,7 @@ describe("library and catalog", () => {
     const c = catalogStatic();
     expect(c.triggers.map((t) => t.type)).toContain("date.relative");
     expect(c.triggers.every((t) => t.label && t.group && Array.isArray(t.filterFields))).toBe(true);
-    expect(c.actions.map((a) => a.action)).toEqual(["send_email", "send_sms", "notify_client", "notify_staff", "team_post", "rotate_owner", "assign_owner", "create_task", "add_note", "set_contact_field", "set_application_stage", "add_tag", "remove_tag", "add_to_list", "remove_from_list", "webhook", "enroll_workflow"]);
+    expect(c.actions.map((a) => a.action)).toEqual(["send_email", "send_sms", "notify_client", "notify_staff", "team_post", "rotate_owner", "assign_owner", "create_task", "add_note", "set_contact_field", "set_application_stage", "add_tag", "remove_tag", "add_to_list", "remove_from_list", "webhook", "enroll_workflow", "set_custom_field", "move_pipeline_stage"]);
     expect(c.fields.find((f) => f.key === "email.opened")?.type).toBe("boolean");
   });
 });

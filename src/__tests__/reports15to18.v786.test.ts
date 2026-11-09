@@ -17,12 +17,35 @@ describe("reports 15-18", () => {
   it("the custom builder only runs groupings and measures from its fixed menu", async () => {
     const bad = await customReport({ entity: "applications", groupBy: "id; DROP TABLE applications", measure: "count" });
     expect(bad.error).toBe("unknown_grouping_or_measure");
-    expect(sqls.length).toBe(0);
+    // KS_SERVER_CUSTOM_EVERYWHERE_v1 - only the property-definition lookups ran; no report query, nothing injected.
+    expect(sqls.filter((q) => !q.includes("custom_field_definitions"))).toHaveLength(0);
+    expect(sqls.join("\n")).not.toContain("DROP TABLE");
     const unknown = await customReport({ entity: "users" });
     expect(unknown.error).toBe("unknown_record_type");
+    sqls.length = 0;
     await customReport({ entity: "tasks", groupBy: "assignee", measure: "overdue", days: 30 });
-    expect(sqls[0]).toContain(CUSTOM.tasks!.measures.overdue);
-    expect(sqls[0]).toContain("t.deleted_at IS NULL");
+    const run = sqls.filter((q) => !q.includes("custom_field_definitions"));
+    expect(run[0]).toContain(CUSTOM.tasks!.measures.overdue);
+    expect(run[0]).toContain("t.deleted_at IS NULL");
+  });
+  it("groups by one of the brokerage's own properties, passing its name as a parameter", async () => {
+    const params: unknown[][] = [];
+    sqls.length = 0;
+    const { pool } = await import("../db.js");
+    const orig = (pool as any).query;
+    (pool as any).query = async (sql: string, p: unknown[] = []) => {
+      sqls.push(sql); params.push(p);
+      if (sql.includes("custom_field_definitions")) return { rows: [{ id: "1", object_type: "application", name: "equipment_type", label: "Equipment type", field_type: "single_select", options: [], required: false, sort_order: 0, archived_at: null }] };
+      return { rows: [{ label: "Excavator", value: 3 }] };
+    };
+    try {
+      const r: any = await customReport({ entity: "applications", groupBy: "cf:equipment_type", measure: "count" });
+      expect(r.rows).toEqual([{ label: "Excavator", value: 3 }]);
+      const i = sqls.findIndex((q) => q.includes("GROUP BY 1"));
+      expect(sqls[i]).toContain("custom_fields->>$2");
+      expect(params[i]).toContain("equipment_type");
+      expect((await customReport({ entity: "applications", groupBy: "cf:not_a_property" })).error).toBe("unknown_grouping_or_measure");
+    } finally { (pool as any).query = orig; }
   });
   it("snapshots are taken hourly by a background worker that starts in the staggered sequence", async () => {
     const boot = await bootIndex({ env: { WORKER_STAGGER_MS: "1500" } });

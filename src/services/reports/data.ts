@@ -136,4 +136,5 @@ export const DATA: Record<string, (q: Record<string, unknown>, ctx: B2.Ctx) => P
   pipeline_snapshot: async (q) => (await import("./data8.js")).pipelineSnapshot(q),
   issues_report: async (q) => (await import("./data8.js")).issuesReport(q),
   custom_report: async (q, ctx) => (await import("./data8.js")).customReport(q, ctx),
+  your_pipelines: async (q) => (await import("./data8.js")).yourPipelines(q), // KS_SERVER_CUSTOM_EVERYWHERE_v1
 };

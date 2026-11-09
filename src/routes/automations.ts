@@ -10,7 +10,7 @@ import { ROLES } from "../auth/roles.js";
 import { ACTIONS, CHECKS, TRIGGERS } from "../modules/automation/catalog.js";
 // BF_SERVER_v786_WORKFLOW_GRAPH - v2 workflows: graph, settings, goal.
 import { convertV1Rule, normalizeSettings, validateGraph, type Issue, type ValidateRefs } from "../modules/automation/graph.js";
-import { catalogStatic, libraryItems } from "../modules/automation/library.js";
+import { catalogWithCustom, libraryItems } from "../modules/automation/library.js";
 
 const router = express.Router();
 // BF_SERVER_v787_WORKFLOW_ACCESS - Admin and Marketing read and write every workflow route;
@@ -88,7 +88,7 @@ const firstTrigger = (graph: any) => String(graph?.triggers?.[0]?.type ?? "manua
 router.get("/catalog", readers, safeHandler(async (req: any, res: any) => {
   const silo = resolveSiloFromRequest(req);
   const refs = await refsFor(silo);
-  respondOk(res, { ...catalogStatic(), templates: refs.templateRows, lists: refs.listRows, workflows: refs.workflowRows,
+  respondOk(res, { ...(await catalogWithCustom(pool as any)), templates: refs.templateRows, lists: refs.listRows, workflows: refs.workflowRows,
     // v1 builder keys, kept while the old builder is still deployed.
     legacy: { triggers: TRIGGERS, actions: ACTIONS, checks: CHECKS } });
 }));
@@ -119,14 +119,14 @@ router.post("/draft-from-text", writers, safeHandler(async (req: any, res: any) 
   if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: { code: "openai_not_configured" } });
   const refs = await refsFor(silo);
   const { draftWorkflowFromText } = await import("../modules/automation/draftFromText.js");
-  const out = await draftWorkflowFromText(prompt, { ...catalogStatic(), templates: refs.templateRows, lists: refs.listRows, workflows: refs.workflowRows, users: refs.userRows });
+  const out = await draftWorkflowFromText(prompt, { ...(await catalogWithCustom(pool as any)), templates: refs.templateRows, lists: refs.listRows, workflows: refs.workflowRows, users: refs.userRows });
   if ("error" in out) return res.status(422).json({ error: { code: "draft_failed", message: out.error }, issues: [{ nodeId: null, message: out.error }] });
   let draft = out;
   let issues = validateGraph(draft.graph, draft.settings, draft.goal, refs);
   // BF_SERVER_v795_DRAFT_REPAIR - one repair round: hand the model its problems and keep the
   // corrected draft when it has fewer issues.
   if (issues.length) {
-    const fixed = await draftWorkflowFromText(prompt, { ...catalogStatic(), templates: refs.templateRows, lists: refs.listRows, workflows: refs.workflowRows, users: refs.userRows }, undefined, { previous: JSON.stringify(draft), issues: issues.map((i) => i.message) });
+    const fixed = await draftWorkflowFromText(prompt, { ...(await catalogWithCustom(pool as any)), templates: refs.templateRows, lists: refs.listRows, workflows: refs.workflowRows, users: refs.userRows }, undefined, { previous: JSON.stringify(draft), issues: issues.map((i) => i.message) });
     if (!("error" in fixed)) {
       const again = validateGraph(fixed.graph, fixed.settings, fixed.goal, refs);
       if (again.length < issues.length) { draft = fixed; issues = again; }

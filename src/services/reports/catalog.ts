@@ -39,7 +39,9 @@ export const REPORTS: ReportDef[] = [
   // BF_SERVER_REPORTS15_18_v786
   { key: "pipeline_snapshot", title: "Pipeline snapshot", silo: "BF", group: "operations", size: "full", source: "reports", description: "What the open pipeline looked like on a past day, next to today." },
   { key: "issues_report", title: "Issues", silo: "BF", group: "operations", size: "full", source: "reports", description: "Issues opened and resolved per month, time to resolve, and what is open now." },
-  { key: "custom_report", title: "Custom report", silo: "BF", group: "operations", size: "full", source: "reports", description: "Pick a record type, how to group it and what to count." },
+  { key: "custom_report", title: "Custom report", silo: "BF", group: "operations", size: "full", source: "reports", description: "Pick a record type, how to group it and what to count, including your own properties." },
+  // KS_SERVER_CUSTOM_EVERYWHERE_v1
+  { key: "your_pipelines", title: "Your pipelines", silo: "BF", group: "operations", size: "full", source: "reports", description: "Deals, amount and weighted amount in each stage of every pipeline you created." },
   { key: "commission_by_month", title: "Commission by month", silo: "BF", group: "money", size: "half", source: "reports", description: "Funded amount and estimated commission per month." },
   // BF_SERVER_REPORTS_BATCH4_v722
   { key: "decline_reasons", title: "Decline reasons", silo: "BF", group: "operations", size: "full", source: "reports", description: "Why lenders pass and files are rejected, from the reasons staff record." },

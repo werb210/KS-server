@@ -188,6 +188,36 @@ export async function runGraphAction(deps: EngineDeps, e: any, node: ActionNode)
       e.context = { ...ctx, [field]: value };
       return `${field} = ${value ?? "(empty)"}`;
     }
+    // KS_SERVER_CUSTOM_EVERYWHERE_v1 - set one of the brokerage's own properties on the contact, its company or the deal.
+    case "set_custom_field": {
+      const { parseCfKey } = await import("../../customFields/everywhere.js");
+      const target = parseCfKey(String(p.field ?? ""));
+      if (!target) return "skip: unknown property";
+      let recordId: string | null = null;
+      if (target.object === "application") recordId = e.application_id ?? null;
+      else if (target.object === "contact") recordId = e.contact_id ?? null;
+      else if (e.contact_id) recordId = (await q(`SELECT company_id::text AS id FROM contacts WHERE id::text = $1`, [e.contact_id])).rows[0]?.id ?? null;
+      if (!recordId) return `skip: no ${target.object === "application" ? "deal" : target.object}`;
+      const raw = p.value === null || p.value === undefined || p.value === "" ? null : typeof p.value === "string" ? t(p.value).slice(0, 500) : p.value;
+      const { writeRecordValues } = await import("../../customFields/service.js");
+      const w = await writeRecordValues({ query: (sql: string, params?: unknown[]) => q(sql, params) } as any, target.object, recordId, { [target.name]: raw });
+      if (!w.ok) return `skip: ${w.errors.map((x) => x.error).join("; ") || "could not set the property"}`;
+      e.context = { ...ctx, [String(p.field)]: raw };
+      return `${p.field} = ${raw ?? "(empty)"}`;
+    }
+    // KS_SERVER_CUSTOM_EVERYWHERE_v1 - move the deal into a stage of one of the brokerage's extra pipelines.
+    case "move_pipeline_stage": {
+      if (!e.application_id) return "skip: no application";
+      const { extraPipelines, moveApplication } = await import("../../pipelines/pipelines.js");
+      const db = { query: (sql: string, params?: unknown[]) => q(sql, params) } as any;
+      const wanted = String(p.pipeline ?? "").trim().toLowerCase();
+      const pipeline = (await extraPipelines(db)).find((x: any) => x.id === p.pipeline || String(x.name).toLowerCase() === wanted);
+      if (!pipeline) return `skip: no pipeline ${p.pipeline}`;
+      const stage = pipeline.stages.find((x: any) => x.id === p.stage || String(x.name).toLowerCase() === String(p.stage ?? "").trim().toLowerCase());
+      if (!stage) return `skip: no stage ${p.stage} in ${pipeline.name}`;
+      const r = await moveApplication(db, e.application_id, pipeline.id, stage.id, null);
+      return r.ok ? `moved to ${pipeline.name}: ${stage.name}` : `skip: ${r.message}`;
+    }
     case "set_application_stage": {
       if (!e.application_id) return "skip: no application";
       if (!deps.setApplicationStage) throw new Error("stage changes are not configured");
@@ -270,6 +300,8 @@ export async function describeTestAction(deps: EngineDeps, e: any, node: ActionN
       case "remove_tag": return `would remove tag ${t(p.tag)}`;
       case "set_application_stage": return `would move the application to ${t(p.stage)}`;
       case "set_contact_field": return `would set ${String(p.field ?? "")} to ${t(p.value)}`;
+      case "set_custom_field": return `would set ${String(p.field ?? "")} to ${t(p.value)}`; // KS_SERVER_CUSTOM_EVERYWHERE_v1
+      case "move_pipeline_stage": return `would move the deal to ${t(p.pipeline)}: ${t(p.stage)}`;
       case "assign_owner": {
         const name = await staffName(deps, String(p.userId ?? ""));
         return name ? `would assign to ${name}` : "would fail: the new owner is not a staff member";
