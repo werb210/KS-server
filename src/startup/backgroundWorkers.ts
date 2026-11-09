@@ -236,6 +236,10 @@ export async function startBackgroundWorkers(
   catch (err) { console.error("[startup] task-reminders worker failed to start:", err); }
 
   // KS_SETTINGS_PACK_v1_NPS - post-funding surveys (Growth and Pro).
+  // KS_SERVER_COMPANY_FROM_EMAIL_v1 - contacts with a work email and no company get one (matched or created) and are linked.
+  const { startCompanyFromEmailWorker } = await import("../crm/companyFromEmail.js");
+  try { const w = startCompanyFromEmailWorker(pool); workerStops.push(w.stop); console.log("[startup] company-from-email worker started"); }
+  catch (err) { console.error("[startup] company-from-email worker failed to start:", err); }
   const { startNpsSurveyWorker } = await import("../workers/npsSurveyWorker.js");
   await workerStagger();
   try { const w = startNpsSurveyWorker(pool); workerStops.push(w.stop); console.log("[startup] nps-survey worker started"); }
