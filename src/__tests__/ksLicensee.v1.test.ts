@@ -18,7 +18,7 @@ describe("licensee addresses", () => {
       expect(u).not.toMatch(/boreal/i);
       expect(u).toMatch(/^https:\/\//);
     }
-    expect(serverUrl()).toContain("ks-server-dev");
+    expect(serverUrl()).toContain("ks-demo-server");
     expect(websiteUrl()).toBe(clientUrl());
   });
 

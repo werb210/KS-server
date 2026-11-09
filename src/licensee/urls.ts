@@ -2,9 +2,9 @@
 //
 // KS-server was copied from BF-Server, which wrote Boreal's addresses (server/client/staff/www.boreal.financial) into
 // links, CORS, webhooks and callbacks. Each Keystone copy has its own, set in its App Service settings. When a
-// setting is missing, the development copy's address is used - never Boreal's.
+// setting is missing, the demo copy's address is used (KS_DROP_DEV_SERVER: ks-server-dev is retired) - never Boreal's.
 const DEV = {
-  server: "https://ks-server-dev-chb5htbwaue2hygk.canadacentral-01.azurewebsites.net",
+  server: "https://ks-demo-server.azurewebsites.net",
   portal: "https://thankful-wave-04964490f.2.azurestaticapps.net",
   client: "https://wonderful-island-0b68ae310.5.azurestaticapps.net",
 };

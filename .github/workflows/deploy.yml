@@ -92,13 +92,8 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # KS_SERVER_v1_LICENSEE - Keystone's development copy (resource group ks-dev). Basic plans have no staging
-      # slot, so this deploys straight to the app. AZURE_CREDENTIALS is a service principal limited to ks-dev.
-      - name: Deploy to Azure
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ks-server-dev
-          package: release.zip
+      # KS_DROP_DEV_SERVER - the old development copy (ks-server-dev) is retired: brokerages run on ks-shared-server (the
+      # shared-deploy job below). This job now only deploys the sales-demo server.
 
       # KS_SERVER_v10_DEMO - the shared sales-demo server (runs with DEMO_MODE=true): the same build, deployed only when
       # the repository variable DEMO_WEBAPP_NAME is set (e.g. ks-demo-server in ks-dev). See KS-Ops docs/DEMO_SETUP.md.
