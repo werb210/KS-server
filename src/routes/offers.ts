@@ -333,7 +333,7 @@ router.post("/:id/term-sheet-link", requireAuthAllowClient, safeHandler(async (r
   if (!has.rows[0]?.blob) return res.status(404).json({ error: "no_term_sheet", message: "There is no term sheet on this offer yet." });
   const { termSheetViewToken } = await import("../brokerTools/termSheetView.js");
   const { serverUrl } = await import("../licensee/urls.js"); // KS: each brokerage's own server address
-  const base = (process.env.PUBLIC_BASE_URL || process.env.SERVER_URL || serverUrl()).replace(/\/+$/, "");
+  const base = serverUrl().replace(/\/+$/, ""); // review fix: the brokerage's own KS_SERVER_URL comes first
   return res.json({ ok: true, url: `${base}/api/r/ts/${termSheetViewToken(offerId)}` });
 }));
 
@@ -374,7 +374,7 @@ router.post("/:id/send-for-signature", requireAuth, requireAuthorization({ roles
     const phone = p.rows[0]?.phone ?? null;
     if (phone && offer.application_id) {
       const { clientUrl } = await import("../licensee/urls.js"); // KS: each brokerage's own client app
-      const portalBase = (process.env.CLIENT_PORTAL_URL || clientUrl()).replace(/\/+$/, "");
+      const portalBase = clientUrl().replace(/\/+$/, "");
       const { notifyClient } = await import("../services/notifications/notifyClient.js");
       await notifyClient({ phone, applicationId: offer.application_id, kind: "term_sheet", categoryId: "OFFER_READY",
         sms: `Your term sheet${offer.lender ? ` from ${offer.lender}` : ""} is ready to sign: ${portalBase}/application/${offer.application_id}`,
