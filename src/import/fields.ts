@@ -53,6 +53,8 @@ export const FIELDS: Record<RecordType, FieldDef[]> = {
     { key: "lead_status", label: "Lead status", example: "New" },
     { key: "lifecycle_stage", label: "Lifecycle stage", example: "lead" },
     { key: "tags", label: "Tags", hint: "Separated by ; or ,", example: "trucking; referral" },
+    // KS_SERVER_MARKETING_CONTACTS_v1
+    { key: "marketing_contact", label: "Marketing contact", hint: "Yes = gets campaign emails and texts. Blank = no for new contacts (or the import's setting)", example: "Yes" },
     { key: "address_street", label: "Street" },
     { key: "address_city", label: "City", example: "Calgary" },
     { key: "address_state", label: "Province / state", example: "AB" },
@@ -187,6 +189,7 @@ const COMMON: Aliases = {
     lead_status: ["lead status", "status"],
     lifecycle_stage: ["lifecycle stage", "stage"],
     tags: ["tags", "labels", "label"],
+    marketing_contact: ["marketing contact", "marketing", "marketing contact status", "marketable"],
     address_street: ["street", "street address", "address", "address 1", "address line 1"],
     address_city: ["city", "town"],
     address_state: ["province", "state", "region", "state/region", "state/province"],

@@ -4,7 +4,7 @@
 //   GET    /mappings  POST /mappings  DELETE /mappings/:id      saved column mappings
 //   POST   /uploads                     multipart file + source + record_type -> a batch, its columns, a suggested mapping
 //   GET    /batches  GET /batches/:id   history and progress
-//   PUT    /batches/:id/mapping         { mapping, options: { stage_map } }
+//   PUT    /batches/:id/mapping         { mapping, options: { stage_map, marketing_contacts } }
 //   GET    /batches/:id/preview         the first rows as they will be imported, with each row's problems
 //   POST   /batches/:id/dry-run | /run | /undo     queue a background job
 //   GET    /batches/:id/errors.csv      ?phase=dry_run|run|undo
@@ -244,7 +244,8 @@ router.put("/batches/:id/mapping", safeHandler(async (req: any, res: any) => {
   } else {
     mapping = {};
   }
-  const options = { ...(b.options ?? {}), stage_map: stageMap };
+  // KS_SERVER_MARKETING_CONTACTS_v1 - options.marketing_contacts: true makes imported contacts marketing contacts.
+  const options = { ...(b.options ?? {}), stage_map: stageMap, marketing_contacts: req.body?.options?.marketing_contacts === true };
   const r = await pool.query(
     `UPDATE import_batches SET mapping = $2::jsonb, options = $3::jsonb, status = 'uploaded', dry_run = NULL, processed_rows = 0, last_error = NULL, updated_at = now()
       WHERE id = $1 RETURNING *`, [b.id, JSON.stringify(mapping), JSON.stringify(options)]);
