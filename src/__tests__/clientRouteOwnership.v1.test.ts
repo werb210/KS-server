@@ -27,6 +27,8 @@ const EXEMPT: Record<string, string> = {
     "This IS the guarded router (src/routes/client/index.ts). The guard lives inside it.",
   "/client/issues":
     "Write-only bug report. applicationId is optional metadata, nothing is read back.",
+  "/client/extra-questions":
+    "The brokerage's extra wizard question wording only (KS_SERVER_LICENSEE_DOCUMENTS); takes no application id and returns no client data.",
 };
 
 const APP_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";

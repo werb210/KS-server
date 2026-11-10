@@ -158,7 +158,8 @@ export async function loadApplicationForPdf(applicationId: string): Promise<Appl
 export async function sendApplicationForSignature(ctx: OrchestratorContext): Promise<SendResult> {
   if (!ctx?.applicationId) return { ok: false, mode: "skipped", reason: "missing_application_id" };
   const inputs = await loadApplicationForPdf(ctx.applicationId);
-  const pdfBytes = await buildApplicationPdf(inputs);
+  const { licenseeApplicationPdf } = await import("../licenseeDocs/service.js"); // KS_SERVER_LICENSEE_DOCUMENTS
+  const pdfBytes = (await licenseeApplicationPdf(inputs)) ?? await buildApplicationPdf(inputs);
   const buffer = Buffer.from(pdfBytes);
   let blobName: string, blobUrl: string;
   try { const upload = await uploadSignedApplicationPdf(ctx.applicationId, buffer); blobName = upload.blobName; blobUrl = upload.url; }

@@ -165,7 +165,9 @@ export async function getOrCreateEmbeddedSigningSession(applicationId: string, v
     // can be stamped per document after completion (SignNow can't auto-fill a date field).
     const dateAnchorsByDoc: Record<string, import("./pdfBuilder.js").DateAnchor[]> = {};
     const borealAnchorsOut = { dateAnchors: [] as import("./pdfBuilder.js").DateAnchor[] };
-    const borealPdf = await buildApplicationPdf(inputs, borealAnchorsOut);
+    // KS_SERVER_LICENSEE_DOCUMENTS - the brokerage's own application form, filled, when it uploaded one.
+    const { licenseeApplicationPdf } = await import("../licenseeDocs/service.js");
+    const borealPdf = (await licenseeApplicationPdf(inputs)) ?? await buildApplicationPdf(inputs, borealAnchorsOut);
     // BF_SERVER_SIGNNOW_GROUP_BLOB_v1 — persist the formatted application PDF to blob so the
     // lender package keeps the real PDF (loadSignedApplicationPdf reads signed_application_blob_name;
     // without this it falls back to a plain-text field dump).
