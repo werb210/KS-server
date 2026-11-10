@@ -193,6 +193,8 @@ import watchDataRoutes from "../watch/dataRoutes.js";
 import brokerToolsRoutes from "./brokerTools.js"; // KS_BROKER_TOOLS
 import clientBrokerRoutes from "./clientBroker.js"; // KS_BROKER_TOOLS
 import dealDeskRoutes from "./dealDesk.js"; // KS_BROKER_TOOLS_2
+import licenseeDocumentsRoutes from "./licenseeDocuments.js"; // KS_SERVER_LICENSEE_DOCUMENTS
+import clientExtraQuestionsRoutes from "./clientExtraQuestions.js";
 import vendorPortalRoutes from "./vendorPortal.js"; // KS_BROKER_TOOLS_VENDORS
 import clientCreditRoutes from "./clientCredit.js"; // KS_BROKER_TOOLS_CREDIT_BUREAU
 import lenderUpdatesRoutes from "./lenderUpdates.js"; // BF_SERVER_v890_MAYA_LENDER_UPDATES (KS port)
@@ -350,6 +352,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/messages", router: messagesRoutes },
   // BF_SERVER_BLOCK_53_v1
   { path: "/client/voice", router: clientVoiceRoutes },
+  { path: "/client/extra-questions", router: clientExtraQuestionsRoutes }, // KS_SERVER_LICENSEE_DOCUMENTS
   { path: "/client/documents-needed", router: clientDocumentsNeededRoutes },
   // KS_BROKER_TOOLS - deal tools (each route gates its own plan feature) and the client app's side of them.
   { path: "/broker-tools", router: brokerToolsRoutes },
@@ -357,6 +360,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/client-broker", router: clientBrokerRoutes },
   // KS_BROKER_TOOLS_2 - invoices, credit lines, rate cards and structuring, scorecards, contracts, vendors, bureau.
   { path: "/deal-desk", router: dealDeskRoutes },
+  { path: "/licensee-documents", router: licenseeDocumentsRoutes }, // KS_SERVER_LICENSEE_DOCUMENTS - Settings > Your documents
   { path: "/vendor-portal", router: vendorPortalRoutes }, // KS_BROKER_TOOLS_VENDORS - vendor / dealer portal (its own login check)
   { path: "/client-credit", router: clientCreditRoutes }, // KS_BROKER_TOOLS_CREDIT_BUREAU - client consent to a credit check
   { path: "/reporting", router: reportingRoutes, feature: "full_reports" }, // KS_SERVER_v7_NO_REPORTS_ON_STARTER
