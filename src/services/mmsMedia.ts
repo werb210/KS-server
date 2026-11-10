@@ -5,6 +5,7 @@
 // (Twilio purges media; its URLs eventually 404 -> "broken image").
 import { randomUUID } from "node:crypto";
 import { BlobServiceClient } from "@azure/storage-blob";
+import { brokerageContainer } from "../lib/storage/containers.js";
 
 function extFromContentType(ct: string): string {
   const m = (ct || "").toLowerCase();
@@ -81,7 +82,7 @@ export async function uploadInboundMmsBlob(
   const conn = process.env.AZURE_STORAGE_CONNECTION_STRING;
   if (!conn) return null;
   try {
-    const containerName = process.env.AZURE_STORAGE_CONTAINER_MMS || "mms-inbound";
+    const containerName = brokerageContainer(process.env.AZURE_STORAGE_CONTAINER_MMS || "mms-inbound"); // KS_SERVER_BROKERAGE_CONTAINERS_v1
     const svc = BlobServiceClient.fromConnectionString(conn);
     const container = svc.getContainerClient(containerName);
     await container.createIfNotExists({ access: "blob" });

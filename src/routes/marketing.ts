@@ -26,6 +26,7 @@ import adSpendAnalysisRoutes from "./marketing/adSpendAnalysis.js"; // BF_SERVER
 import adClicksRoutes from "./marketing/adClicks.js"; // BF_SERVER_BLOCK_v614_AD_CLICKS
 import customerMatchRoutes from "./marketing/customerMatch.js"; // BF_SERVER_CUSTOMER_MATCH_LISTS_v711
 import adsStoryRoutes from "./marketing/adsStory.js"; // BF_SERVER_ADS_STORY_v707
+import { brokerageContainer } from "../lib/storage/containers.js";
 // BF_EMAIL_TEMPLATE_IMPORTS_v1
 import multer from "multer";
 import path from "node:path";
@@ -1206,7 +1207,7 @@ const emailAssetUpload = multer({ storage: multer.memoryStorage(), limits: { fil
 async function uploadMarketingImage(buf: Buffer, contentType: string, ext: string): Promise<string | null> {
   const conn = process.env.AZURE_STORAGE_CONNECTION_STRING;
   if (!conn) return null;
-  const containerName = process.env.AZURE_STORAGE_CONTAINER_MARKETING || "marketing-assets";
+  const containerName = brokerageContainer(process.env.AZURE_STORAGE_CONTAINER_MARKETING || "marketing-assets"); // KS_SERVER_BROKERAGE_CONTAINERS_v1
   const svc = BlobServiceClient.fromConnectionString(conn);
   const container = svc.getContainerClient(containerName);
   await container.createIfNotExists({ access: "blob" });

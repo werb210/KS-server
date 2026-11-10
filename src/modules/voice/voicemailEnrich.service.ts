@@ -7,18 +7,19 @@ import { createContact } from "../../services/contacts.js";
 import { logCrmEvent } from "../crm/crmTimeline.service.js";
 import { sendSms } from "../notifications/sms.service.js";
 import { AzureBlobBackend } from "../../lib/storage/azureBlob.js";
+import { brokerageContainer } from "../../lib/storage/containers.js"; // KS_SERVER_BROKERAGE_CONTAINERS_v1
 import { sharedOpenAI } from "../../lib/sharedClients.js"; // BF_SERVER_SNAT_REUSE_v784
 import { brandName } from "../../licensee/brand.js"; // KS_SERVER_v4_BRANDING
 
-const VM_CONTAINER = process.env.VOICEMAIL_BLOB_CONTAINER || "voicemails";
-let blob: AzureBlobBackend | null = null;
+const vmBackends = new Map<string, AzureBlobBackend>();
 
 function blobBackend(): AzureBlobBackend | null {
-  if (blob) return blob;
   const conn = process.env.AZURE_STORAGE_CONNECTION_STRING;
   if (!conn) return null;
-  blob = new AzureBlobBackend(VM_CONTAINER, conn);
-  return blob;
+  const container = brokerageContainer(process.env.VOICEMAIL_BLOB_CONTAINER || "voicemails");
+  let b = vmBackends.get(container);
+  if (!b) { b = new AzureBlobBackend(container, conn); vmBackends.set(container, b); }
+  return b;
 }
 
 async function downloadRecording(recordingUrl: string): Promise<Buffer | null> {
