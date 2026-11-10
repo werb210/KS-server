@@ -6,6 +6,7 @@ import type { StorageBackend, PutResult } from "./types.js";
 
 export class AzureBlobBackend implements StorageBackend {
   private client: ContainerClient;
+  private ready: Promise<unknown> | null = null; // KS_SERVER_BROKERAGE_CONTAINERS_v1 - container created on first write
   constructor(private container: string, connectionString: string) {
     const svc = BlobServiceClient.fromConnectionString(connectionString);
     this.client = svc.getContainerClient(container);
@@ -15,6 +16,8 @@ export class AzureBlobBackend implements StorageBackend {
     const ext = path.extname(p.filename) || "";
     const id = randomUUID();
     const blobName = `${p.pathPrefix ? p.pathPrefix.replace(/^\/+|\/+$/g, "") + "/" : ""}${id}${ext}`;
+    if (!this.ready) this.ready = this.client.createIfNotExists().catch((e) => { this.ready = null; throw e; });
+    await this.ready;
     const blob = this.client.getBlockBlobClient(blobName);
     await blob.uploadData(p.buffer, {
       blobHTTPHeaders: { blobContentType: p.contentType || "application/octet-stream" },

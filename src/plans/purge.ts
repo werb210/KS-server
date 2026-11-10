@@ -27,6 +27,7 @@ import { brandName, supportEmail } from "../licensee/brand.js";
 import { bodies, sendPlanMail, type PlanMailer } from "./email.js";
 import { readPlanRow, clearPlanCache, type Q } from "./state.js";
 import { adminEmails } from "./storage.js";
+import { brokerageContainer } from "../lib/storage/containers.js"; // KS_SERVER_BROKERAGE_CONTAINERS_v1
 
 export const PURGE_AFTER_DAYS = 180;
 const DAY = 86_400_000;
@@ -36,11 +37,12 @@ export const PURGE_KEEP_TABLES: ReadonlySet<string> = new Set(["schema_migration
 /** The blob containers this server writes to (same settings and defaults as the code that writes them). */
 export function purgeContainers(env: NodeJS.ProcessEnv = process.env): string[] {
   return [...new Set([
-    env.AZURE_STORAGE_CONTAINER_BF || "bf-documents",
-    env.VOICEMAIL_BLOB_CONTAINER || "voicemails",
-    env.SIGNNOW_BLOB_CONTAINER || "signed-applications",
-    env.AZURE_STORAGE_CONTAINER_MMS || "mms-inbound",
-    env.AZURE_STORAGE_CONTAINER_MARKETING || "marketing-assets",
+    // On the shared server these resolve to this brokerage's own containers, so a purge never touches another's files.
+    env.AZURE_STORAGE_CONTAINER_BF ? brokerageContainer(env.AZURE_STORAGE_CONTAINER_BF) : brokerageContainer("bf-documents", "documents"),
+    brokerageContainer(env.VOICEMAIL_BLOB_CONTAINER || "voicemails"),
+    brokerageContainer(env.SIGNNOW_BLOB_CONTAINER || "signed-applications"),
+    brokerageContainer(env.AZURE_STORAGE_CONTAINER_MMS || "mms-inbound"),
+    brokerageContainer(env.AZURE_STORAGE_CONTAINER_MARKETING || "marketing-assets"),
   ].map((c) => String(c).trim()).filter(Boolean))];
 }
 
