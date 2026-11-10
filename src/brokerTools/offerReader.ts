@@ -34,6 +34,9 @@ const PROMPT = [
   '"conditions": [{"title": short imperative line, e.g. "Signed personal guarantee from each owner",',
   '"description": string or null, "owner": "client" | "staff" | "lender", "requires_document": boolean}]}',
   "Conditions are the things that must happen before funding (documents to provide, guarantees, insurance, site visits, verifications).",
+  // BF_SERVER_v936_CLIENT_OFFER_CLEANUP
+  "Leave out ongoing covenants that apply after funding (regular reporting, keeping insurance in force, financial ratios): they are not conditions to clear before funding.",
+  'Use owner "lender" for things only the lender decides or checks (no material adverse change, lender due diligence, credit or legal approval); "client" only for what the borrower must do or provide.',
   "Use only what the document says. Do not invent figures. Amounts are plain numbers without $ or commas.",
 ].join("\n");
 
@@ -104,6 +107,12 @@ export type OfferReaderDeps = {
 
 export const defaultOfferReaderDeps = (): OfferReaderDeps => ({
   text: async (buffer, mime) => {
+    // BF_SERVER_v934_OFFER_READER_WORD - a Word term sheet (.docx) is read as text.
+    if (mime === DOCX_MIME) {
+      const mammoth = await import("mammoth");
+      const extract = (mammoth as any).extractRawText ?? (mammoth as any).default?.extractRawText;
+      return String((await extract({ buffer }))?.value ?? "");
+    }
     const { documentText } = await import("../services/brokerImport/extract.js");
     return String((await documentText(buffer, mime)) ?? "");
   },
@@ -118,6 +127,8 @@ export const defaultOfferReaderDeps = (): OfferReaderDeps => ({
   },
 });
 
+export const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
 export class OfferReadError extends Error {
   constructor(public readonly code: "no_text" | "ai_not_set_up" | "unsupported", message: string) {
     super(message);
@@ -126,8 +137,8 @@ export class OfferReadError extends Error {
 }
 
 export async function readOfferDocument(buffer: Buffer, mime: string, deps: OfferReaderDeps = defaultOfferReaderDeps()): Promise<{ offer: ReadOffer; textChars: number }> {
-  if (!/^application\/pdf$|^image\/|^text\//.test(mime)) {
-    throw new OfferReadError("unsupported", "Upload the offer as a PDF or a photo to read it.");
+  if (!/^application\/pdf$|^image\/|^text\//.test(mime) && mime !== DOCX_MIME) { // BF_SERVER_v934_OFFER_READER_WORD
+    throw new OfferReadError("unsupported", "Upload the offer as a PDF, a Word file (.docx) or a photo to read it.");
   }
   const text = await deps.text(buffer, mime);
   if (text.replace(/\s/g, "").length < 40) {
