@@ -87,6 +87,9 @@ router.post("/:id/preview", ...staff, safeHandler(async (req: Request, res: Resp
   const doc = UUID_RE.test(id) ? await getDocument(db(), id) : null;
   if (!doc) return bad(res, "Document not found.", 404, "not_found");
   if (!UUID_RE.test(applicationId)) return bad(res, "Choose a file to preview with.");
+  // Review fix: a preview shows the file's data, so the caller must be able to see that file.
+  const { canSeeApplication } = await import("../brokerTools/platform.js");
+  if (!(await canSeeApplication(req, applicationId))) return bad(res, "Application not found.", 404, "not_found");
   const { loadApplicationForPdf } = await import("../signnow/sendApplicationForSignature.js");
   const inputs = await loadApplicationForPdf(applicationId);
   const x = (await db().query(`SELECT metadata->'extra_answers' AS x FROM applications WHERE id::text = $1`, [applicationId])).rows[0]?.x ?? {};
@@ -120,7 +123,7 @@ router.post("/offers/:offerId/term-sheet", ...staff, safeHandler(async (req: Req
     const put = await getStorage().put({ buffer: Buffer.from(pdf), filename: `${name.replace(/[^\w.\- ]/g, "")}.pdf`, contentType: "application/pdf", pathPrefix: `applications/${applicationId}/term-sheets` });
     await db().query(
       `UPDATE offers SET
-          metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('lender_term_sheet_blob_name', COALESCE(metadata->>'lender_term_sheet_blob_name', term_sheet_blob_name)),
+          lender_term_sheet_blob_name = COALESCE(lender_term_sheet_blob_name, term_sheet_blob_name),
           term_sheet_blob_name = $2, term_sheet_filename = $3, term_sheet_size_bytes = $4, document_url = $5, updated_at = now()
         WHERE id::text = $1`,
       [offerId, put.blobName, `${name}.pdf`, put.sizeBytes, put.url],

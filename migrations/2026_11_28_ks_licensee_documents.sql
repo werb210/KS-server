@@ -30,3 +30,6 @@ CREATE TABLE IF NOT EXISTS licensee_wizard_questions (
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (document_id, key)
 );
+
+-- The lender's own term sheet is kept when the brokerage re-issues the offer on its own term sheet.
+ALTER TABLE offers ADD COLUMN IF NOT EXISTS lender_term_sheet_blob_name text;

@@ -21,14 +21,15 @@ async function extrasOf(q: Q, applicationId: string): Promise<Record<string, unk
 const ownerSigners = (inputs: ApplicationPdfInputs, howMany: number): SignerRole[] =>
   inputs.owners.slice(0, Math.max(1, howMany)).map((o, i) => ({ role: `Owner ${i + 1}`, name: [o.firstName, o.lastName].filter(Boolean).join(" "), email: String(o.email ?? "") }));
 
-/** The licensee's application form, filled, for the applicant (Owner 1) - and Owner 2 when the form has a box for them. */
+/** The licensee's application form, filled, for every owner on the file (roles "Owner 1", "Owner 2", ...). */
 export async function licenseeApplicationPdf(inputs: ApplicationPdfInputs, q: Q = db()): Promise<Uint8Array | null> {
   const doc = await activeDocument(q, "application_form");
   if (!doc) return null;
   try {
     const values = valuesFor({ app: inputs, brokerName: brandName(), extras: await extrasOf(q, inputs.applicationId) });
-    const sigBoxes = doc.fields.filter((f) => f.type === "signature").length;
-    return await fillDocument({ name: doc.name, format: doc.format, file: doc.file, fields: doc.fields }, values, ownerSigners(inputs, Math.min(2, Math.max(1, sigBoxes))), `${brandName()} - ${doc.name}`);
+    // Every owner on the file signs (review fix): boxes on the form are used where they exist, and anyone without one
+    // gets a line on the signature page added at the end.
+    return await fillDocument({ name: doc.name, format: doc.format, file: doc.file, fields: doc.fields }, values, ownerSigners(inputs, inputs.owners.length), `${brandName()} - ${doc.name}`);
   } catch (err) {
     console.warn("[licensee-docs] application form not filled; using the built-in application", { applicationId: inputs.applicationId, message: err instanceof Error ? err.message : String(err) });
     return null;
@@ -56,12 +57,12 @@ export async function licenseeTermSheetPdf(offerId: string, q: Q = db()): Promis
   const doc = await activeDocument(q, "term_sheet");
   if (!doc) throw Object.assign(new Error("Upload your term sheet template in Settings > Your documents first."), { status: 409 });
   const r = await q.query(
-    `SELECT application_id::text AS application_id, lender_name, amount, rate_factor, term, payment_frequency, expiry_date, metadata FROM offers WHERE id::text = $1 LIMIT 1`, [offerId]);
+    `SELECT application_id::text AS application_id, lender_name, amount, rate_factor, term, payment_frequency, expiry_date FROM offers WHERE id::text = $1 LIMIT 1`, [offerId]);
   const o = r.rows[0];
   if (!o?.application_id) throw Object.assign(new Error("Offer not found."), { status: 404 });
   const { loadApplicationForPdf } = await import("../signnow/sendApplicationForSignature.js");
   const inputs = await loadApplicationForPdf(o.application_id);
-  const offer: OfferValues = { lender: o.lender_name, amount: o.amount, rate: o.rate_factor, term: o.term, payment_frequency: o.payment_frequency, payment: o.metadata?.payment ?? null, expiry: o.expiry_date ? new Date(o.expiry_date).toISOString() : null };
+  const offer: OfferValues = { lender: o.lender_name, amount: o.amount, rate: o.rate_factor, term: o.term, payment_frequency: o.payment_frequency, payment: null, expiry: o.expiry_date ? new Date(o.expiry_date).toISOString() : null };
   const values = valuesFor({ app: inputs, brokerName: brandName(), extras: await extrasOf(q, o.application_id), offer });
   const pdf = await fillDocument({ name: doc.name, format: doc.format, file: doc.file, fields: doc.fields }, values, [], `${brandName()} - ${doc.name}`);
   return { pdf, applicationId: o.application_id, name: doc.name };
