@@ -52,6 +52,11 @@ export async function startBackgroundWorkers(
   try { const { ensureSignnowWebhook } = await import("../signnow/ensureWebhookSubscription.js"); void ensureSignnowWebhook(); console.log("[startup] signnow webhook subscription ensured"); }
   catch (err) { console.error("[startup] signnow webhook subscription failed:", err); }
 
+  // KS_SERVER_SOCIAL_POSTING - scheduled social posts.
+  const { startSocialPostsWorker } = await import("../workers/socialPostsWorker.js");
+  await workerStagger();
+  try { const w = startSocialPostsWorker(pool); workerStops.push(w.stop); console.log("[startup] social-posts worker started"); }
+  catch (err) { console.error("[startup] social-posts worker failed to start:", err); }
   // BF_SERVER_BLOCK_v706_READ_RECEIPTS — stamp opened_at from inbox read receipts.
   const { startReadReceiptWorker } = await import("../workers/readReceiptWorker.js");
   await workerStagger();
