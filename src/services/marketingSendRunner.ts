@@ -33,8 +33,9 @@ export const EMAIL_CONSENT_SQL = `(c.email_consent_basis IN ('express', 'marketi
 // KS_SERVER_EMAIL_ALL_CONTACTS_v1 - Todd's rule (Nov 9, same as BF-Server v917 and BI): every CRM contact with an
 // email address gets campaign email. Only people who unsubscribed / opted out of marketing are left out (and, per
 // campaign type, people who opted out of that type). EMAIL_CONSENT_SQL is kept for reports only.
+// KS_SERVER_MARKETING_CONTACTS_v1 - and only contacts marked "Marketing contact".
 export const EMAIL_BLAST_ELIGIBLE_SQL = `
-      COALESCE(c.email,'') <> '' AND COALESCE(c.marketing_opt_out,false) = false`;
+      COALESCE(c.email,'') <> '' AND COALESCE(c.marketing_opt_out,false) = false AND COALESCE(c.marketing_contact, true) = true`;
 
 export async function countEmailRecipients(pool: Pool, silo: string, tag: string | null, tags: string[] | null = null, excludeTags: string[] | null = null, subscriptionTypeId: string | null = null, skipTextedDays: number | null = null): Promise<number> {
   const r = await pool.query<{ n: number }>(
@@ -166,13 +167,8 @@ export async function sendCampaignEmailTo(
 }
 
 export async function runEmailSend(pool: Pool, job: EmailJob, onProgress?: SendProgress, shouldAbort?: ShouldAbort): Promise<EmailSendResult> { // BF_SERVER_EMAIL_FAIL_VISIBILITY_v1 BF_SERVER_SEND_KILL_SWITCH_v1
-  // BF_SERVER_v789_EMAIL_BLAST_CONSENT - a job with no tag and no include tags would
-  // reach the whole silo; refuse it here too so a queued or Maya job cannot bypass the
-  // route-level audience_required check.
-  if (!emailAudienceGiven(job)) {
-    console.warn("marketing_email_send_refused_no_audience", { silo: job.silo });
-    return { total: 0, sent: 0, failed: 0, rejectStatus: 400, rejectError: "audience_required" };
-  }
+  // KS_SERVER_EMAIL_NO_TAG_ALL_v1 - a job with no include tag goes to every contact (Todd: "ALL CRM CONTACTS GET
+  // EMAILS"); excluded tags, unsubscribes and non-marketing contacts are still left out. Maya still has to name a tag.
   const rows = await emailRecipients(pool, job);
   const budget: CampaignBudget = rows.length ? await startBudget(pool) : { remaining: null, spent: 0 }; // KS_SERVER_MARKETING_ADDON
   let sent = 0, failed = 0, skipped = 0, notSent = 0, i = 0;

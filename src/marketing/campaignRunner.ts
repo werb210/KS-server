@@ -15,7 +15,7 @@ import type { Pool } from "pg";
 import { brokerageTimeZone, zonedParts } from "../lib/brokerageTime.js";
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js";
 import {
-  EMAIL_BLAST_ELIGIBLE_SQL, emailAudienceGiven, emailRecipients, sendCampaignEmailTo, startBudget,
+  EMAIL_BLAST_ELIGIBLE_SQL, emailRecipients, sendCampaignEmailTo, startBudget,
   type CampaignBudget, type EmailJob, type EmailRecipient, type SendProgress, type ShouldAbort,
 } from "../services/marketingSendRunner.js";
 
@@ -198,7 +198,7 @@ export async function runCampaignEmailJob(
   pool: Pool, row: CampaignJobRow, onProgress?: SendProgress, shouldAbort?: ShouldAbort, now: Date = new Date(),
 ): Promise<CampaignStep> {
   const job = jobOf(row);
-  if (!emailAudienceGiven(job)) return { status: "done", total: 0, sent: 0, failed: 0, error: "audience_required" };
+  // KS_SERVER_EMAIL_NO_TAG_ALL_v1 - no include tag = every contact; no longer refused.
   const p = row.payload ?? {};
   const ab = p.ab as AbPlan | undefined;
   const best = p.sendTime === "best";

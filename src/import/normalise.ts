@@ -198,6 +198,7 @@ export function normalise(type: RecordType, input: Record<string, string>, opts:
       const p = phone("phone"); phone("secondary_phone");
       if (!e && !p && !first && !last && !full) errors.push({ field: "email", message: "needs a name, an email or a phone number" });
       text("company_name", 300); text("job_title", 200); text("lead_status", 100); text("lifecycle_stage", 100); tagList("tags");
+      bool("marketing_contact"); // KS_SERVER_MARKETING_CONTACTS_v1
       text("address_street"); text("address_city", 200); text("address_state", 100); text("address_zip", 20); text("address_country", 100);
       email("owner_email"); date("created_at");
       break;

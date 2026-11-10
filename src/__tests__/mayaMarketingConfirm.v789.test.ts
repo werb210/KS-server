@@ -180,12 +180,12 @@ describe("v789 maya email blast audience", () => {
   });
 });
 
-describe("v789 runEmailSend refuses a job with no audience", () => {
-  it("returns audience_required without querying recipients", async () => {
+describe("KS_SERVER_EMAIL_NO_TAG_ALL_v1 runEmailSend with no include tag", () => {
+  it("looks up every contact instead of refusing", async () => {
     const { runEmailSend } = await vi.importActual<typeof import("../services/marketingSendRunner.js")>("../services/marketingSendRunner.js");
     const query = vi.fn(async () => ({ rows: [], rowCount: 0 }));
     const out = await runEmailSend({ query } as any, { silo: "BF", tag: null, tags: [], subject: "s", html: "h" });
-    expect(out.rejectError).toBe("audience_required");
-    expect(query).not.toHaveBeenCalled();
+    expect(out.rejectError).toBeUndefined();
+    expect(query).toHaveBeenCalled();
   });
 });

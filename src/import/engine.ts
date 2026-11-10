@@ -126,6 +126,8 @@ export class Importer {
     return this.users.get(String(email).toLowerCase()) ?? null;
   }
 
+  /** KS_SERVER_MARKETING_CONTACTS_v1 - the import's "Make these marketing contacts" setting (default no). */
+  private marketingDefault(): boolean { return this.batch.options?.marketing_contacts === true; }
   private get importer(): string | null { return isUuid(this.batch.created_by) ? this.batch.created_by : null; }
 
   // KS_SERVER_v20_CRM_FIELDS - custom field definitions per record type (read once per batch).
@@ -316,6 +318,8 @@ export class Importer {
       job_title: v.job_title, lead_status: v.lead_status, lifecycle_stage: v.lifecycle_stage, tags: v.tags,
       address_street: v.address_street, address_city: v.address_city, address_state: v.address_state, address_zip: v.address_zip,
       address_country: v.address_country,
+      // KS_SERVER_MARKETING_CONTACTS_v1 - an existing contact keeps its setting unless the row (or the import) says.
+      marketing_contact: typeof v.marketing_contact === "boolean" ? v.marketing_contact : (this.marketingDefault() ? true : undefined),
     };
     const ownerId = await this.owner(v, "owner_email", w);
     if (existing) {
@@ -327,6 +331,8 @@ export class Importer {
       ...desired, first_name: v.first_name ?? "", last_name: v.last_name ?? "", name: display, lead_status: v.lead_status ?? "New",
       silo: this.batch.silo, owner_id: ownerId, created_at: v.created_at ?? undefined, tags: v.tags ?? undefined,
       custom_fields: this.customFieldsFor(null, v),
+      // KS_SERVER_MARKETING_CONTACTS_v1 - new contacts from an import are not marketing contacts unless marked.
+      marketing_contact: typeof v.marketing_contact === "boolean" ? v.marketing_contact : this.marketingDefault(),
     });
     await this.rememberExternal("contacts", v.external_id, "contacts", id);
     return "created";

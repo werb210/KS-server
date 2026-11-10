@@ -981,7 +981,7 @@ router.post("/email/send", safeHandler(async (req: any, res: any) => {
   // silently dropped here and the blast targeted the whole silo.
   const includeTags = tagArr(b.tags);
   const excludeTags = tagArr(b.excludeTags);
-  if (emailAudienceMissing(tag, includeTags)) { res.status(400).json({ error: "audience_required", message: "Choose at least one tag to send to." }); return; } // BF_SERVER_v789_EMAIL_BLAST_CONSENT
+  // KS_SERVER_EMAIL_NO_TAG_ALL_v1 - no include tag = every contact (minus excluded tags and opt-outs), as the screen says.
   // BF_SERVER_BLOCK_v782_VIEW_IN_BROWSER: host a public copy, inject the link.
   // BF_SERVER_EMAIL_HARDENING_v1 - landing hosting is best-effort; a failed
   // insert must not 500 the whole blast.
@@ -1342,7 +1342,7 @@ router.post("/email/send-template", safeHandler(async (req: any, res: any) => {
   // BF_SERVER_EMAIL_AUDIENCE_INCL_EXCL_v1 - multi-tag include/exclude audience.
   const includeTags = tagArr(b.tags);
   const excludeTags = tagArr(b.excludeTags);
-  if (emailAudienceMissing(tag, includeTags)) { res.status(400).json({ error: "audience_required", message: "Choose at least one tag to send to." }); return; } // BF_SERVER_v789_EMAIL_BLAST_CONSENT
+  // KS_SERVER_EMAIL_NO_TAG_ALL_v1 - no include tag = every contact (minus excluded tags and opt-outs), as the screen says.
   // BF_SERVER_BLOCK_v782_VIEW_IN_BROWSER
   // BF_SERVER_EMAIL_HARDENING_v1 - landing hosting is best-effort here too.
   let htmlOut = html;
