@@ -39,4 +39,12 @@ describe("QA sign-in for test brokerages", () => {
     expect(m.isQaPhone("+14035550101", TEST)).toBe(false);
     expect(m.qaCodeMatches("+14035550101", "48213977", TEST)).toBe(false);
   });
+
+  it("KS_SERVER_STORE_REVIEW_SEED_v1: qaLoginEnabled follows the same rules", async () => {
+    expect((await load(true)).qaLoginEnabled(TEST)).toBe(true);
+    vi.resetModules();
+    expect((await load(true)).qaLoginEnabled({ KS_TEST_BROKERAGE: "false", KS_QA_LOGIN_CODE: "48213977" })).toBe(false);
+    vi.resetModules();
+    expect((await load(false)).qaLoginEnabled(TEST)).toBe(false);
+  });
 });

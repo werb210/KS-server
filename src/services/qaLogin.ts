@@ -31,3 +31,8 @@ export function qaCodeMatches(phone: string, code: string, env: NodeJS.ProcessEn
   const b = Buffer.from(want);
   return a.length === b.length && timingSafeEqual(a, b);
 }
+
+/** KS_SERVER_STORE_REVIEW_SEED_v1 - whether this brokerage is a test brokerage with QA sign-in switched on. */
+export function qaLoginEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return qaCode(env) !== null;
+}

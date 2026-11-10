@@ -23,6 +23,12 @@ export async function startBackgroundWorkers(
   try { const w = startBankingAutoWorker(pool); workerStops.push(w.stop); console.log("[startup] banking auto-worker started"); }
   catch (err) { console.error("[startup] banking auto-worker failed to start:", err); }
 
+  // KS_SERVER_STORE_REVIEW_SEED_v1 - a test brokerage gets the app-store reviewer's sign-in and sample data (no-op elsewhere).
+  void import("../storeReview/seed.js")
+    .then((m) => m.seedStoreReview(pool as any))
+    .then((r) => { if (r.ran) console.log(`[startup] store-review sign-in ready (${r.files} sample file(s) added)`); })
+    .catch((err) => console.warn("[startup] store-review seed failed:", (err as Error)?.message ?? err));
+
   // BF_SERVER_v856_CRM_UNIFY - once per database: every application's partners, guarantors and advisors become CRM
   // contacts linked to the application and the company (crm_backfill_runs records the run).
   void import("../modules/crmUnify/peopleSync.js")
