@@ -47,6 +47,7 @@ import marketingRoutes from "./marketing.js";
 import socialRoutes from "./social.js"; // KS_SERVER_SOCIAL_POSTING
 import offersRoutes from "./offers.js";
 import offerAcceptanceRoutes from "./offerAcceptance.js";
+import dealsRoutes from "./deals.js"; // BF_SERVER_v942_DEAL_CLOSE_REVENUE - Close tab, Revenue tab, broker pay
 // BF_MINI_PORTAL_NOTES_v47 - application-scoped notes
 import applicationNotesRoutes from "./applicationNotes.js";
 // BF_NOTIFICATIONS_v50
@@ -341,6 +342,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   // BF_NOTIFICATIONS_v50 - mounted at /api/notifications
   { path: "/notifications", router: notificationsRoutes },
   { path: "/team", router: teamRoutes }, // BF_SERVER_BLOCK_v750_TEAM_CHAT
+  { path: "/deals", router: dealsRoutes }, // BF_SERVER_v942_DEAL_CLOSE_REVENUE
   { path: "/documents", router: documentsRoutes },
   { path: "/accountant", router: accountantRoutes }, // BF_SERVER_ACCOUNTANT_UPLOAD_v1
   // BF_SERVER_BLOCK_v335_AUTH_HARDENING_AND_DEAD_CODE_v1 -- Edit 5
