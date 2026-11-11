@@ -100,7 +100,6 @@ export const FEATURES: readonly FeatureDef[] = [
   { key: "id_verification", label: "ID and selfie verification of applicants and guarantors (some checks included each month)", plan: "growth" },
   // KS_SERVER_v23_QUOTES - quotes: an offer summary built from the lender offers on a file, a branded PDF and client
   // acceptance in the client app, growth and up.
-  { key: "quotes", label: "Quotes: compare lender offers for the client, branded PDF and acceptance in the client app", plan: "growth" },
   // KS_SERVER_v23_FORECAST - revenue forecast from the pipeline (stage odds, close dates, categories) per rep and team
   // against Goals, growth and up.
   { key: "forecasting", label: "Revenue forecast: weighted pipeline, commit and best case per rep and team, against goals", plan: "growth" },
@@ -109,13 +108,10 @@ export const FEATURES: readonly FeatureDef[] = [
   // KS_SERVER_LENDER_API - send the lender package by API and pull status, offers and conditions back, growth and up.
   { key: "lender_api", label: "Lender API connections (submit by API, sync status, offers and conditions)", plan: "growth" },
   // KS_BROKER_TOOLS_CREDIT_LINES - approved credit lines per client (limit, used, available, expiry reminders), growth and up.
-  { key: "credit_lines", label: "Approved credit lines per client: limit, used, available and expiry reminders", plan: "growth" },
   // KS_BROKER_TOOLS_RATE_CARDS - lender rate cards and the structuring tool (payment options side by side), growth and up.
-  { key: "rate_cards", label: "Rate cards and deal structuring: payment options across lenders side by side, with sales tax", plan: "growth" },
+  { key: "rate_cards", label: "Lender rate cards for the vendor and dealer portal's point-of-sale quotes", plan: "growth" },
   // KS_BROKER_TOOLS_SCORECARDS - admin-weighted credit scorecard, pre-decision rules and lender ranking (signals only), growth and up.
-  { key: "credit_scorecards", label: "Credit scorecards and pre-decision rules: grade, rule hits and lender ranking on each application", plan: "growth" },
   // KS_BROKER_TOOLS_CONTRACTS - contracts from Word templates with merge fields, Word + PDF, sent for e-signature, growth and up.
-  { key: "contract_templates", label: "Contracts from Word templates: merge fields, Word and PDF, sent for e-signature", plan: "growth" },
   // KS_BROKER_TOOLS_CREDIT_BUREAU - Equifax Canada / TransUnion Canada pulls with client consent, growth and up. Each real pull is
   // one usage event (credit_pull), billed by Keystone operations at the bureau's cost.
   // pro
