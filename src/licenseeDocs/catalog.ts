@@ -64,6 +64,11 @@ export const DATA_FIELDS: DataField[] = [
   { key: "offer.payment_frequency", label: "Offer: payment frequency", words: ["payment frequency", "frequency", "payments"] },
   { key: "offer.payment", label: "Offer: payment amount", words: ["payment", "payment amount", "monthly payment", "weekly payment"] },
   { key: "offer.expiry", label: "Offer: expiry date", words: ["expiry", "expiration", "expires", "valid until"] },
+  // OFFER_PRICING_v1 - our own term sheet: the fees and what the client actually receives and repays.
+  { key: "offer.setup_fee", label: "Offer: set-up fee", words: ["setup fee", "set-up fee", "set up fee", "origination fee", "admin fee"] },
+  { key: "offer.proceeds_fee", label: "Offer: fee from proceeds", words: ["fee from proceeds", "deducted from proceeds", "holdback"] },
+  { key: "offer.funds_to_client", label: "Offer: funds to the client", words: ["net proceeds", "net funding", "funds to client", "amount advanced"] },
+  { key: "offer.total_repaid", label: "Offer: total repaid", words: ["total repayment", "total repaid", "total payback", "repayment amount"] },
   { key: "fee.percent", label: "Broker fee %", words: ["fee percent", "broker fee %", "fee %", "commission %"] },
   { key: "fee.amount", label: "Broker fee amount", words: ["fee", "broker fee", "fee amount", "commission"] },
 ];
@@ -89,7 +94,8 @@ function ownerValues(n: 1 | 2, o: PdfOwner | undefined): Record<string, string> 
   };
 }
 
-export type OfferValues = { lender?: unknown; amount?: unknown; rate?: unknown; term?: unknown; payment_frequency?: unknown; payment?: unknown; expiry?: unknown };
+export type OfferValues = { lender?: unknown; amount?: unknown; rate?: unknown; term?: unknown; payment_frequency?: unknown; payment?: unknown; expiry?: unknown;
+  setup_fee?: unknown; proceeds_fee?: unknown; funds_to_client?: unknown; total_repaid?: unknown };
 
 /** Every value we have for a file, by key. Empty strings for what we do not have. */
 export function valuesFor(input: {
@@ -118,6 +124,8 @@ export function valuesFor(input: {
   if (o) Object.assign(out, {
     "offer.lender": s(o.lender), "offer.amount": money(o.amount), "offer.rate": s(o.rate), "offer.term": s(o.term),
     "offer.payment_frequency": s(o.payment_frequency), "offer.payment": money(o.payment), "offer.expiry": s(o.expiry).slice(0, 10),
+    "offer.setup_fee": money(o.setup_fee), "offer.proceeds_fee": money(o.proceeds_fee), "offer.funds_to_client": money(o.funds_to_client),
+    "offer.total_repaid": money(o.total_repaid),
   });
   if (input.fee) Object.assign(out, { "fee.percent": input.fee.percent === null || input.fee.percent === undefined || input.fee.percent === "" ? "" : `${input.fee.percent}%`, "fee.amount": money(input.fee.amount) });
   for (const [k, v] of Object.entries(input.extras ?? {})) out[`extra.${k}`] = typeof v === "boolean" ? (v ? "Yes" : "No") : s(v);
