@@ -7,7 +7,7 @@ vi.mock("../../services/qaLogin.js", () => ({ qaLoginEnabled: (env: NodeJS.Proce
 import { pool } from "../../db.js";
 import { REVIEW_STAFF, SAMPLE_FILES, SAMPLE_LENDERS, seedStoreReview } from "../seed.js";
 
-const TEST_ENV = { KS_TEST_BROKERAGE: "true", KS_QA_LOGIN_CODE: "123456" } as NodeJS.ProcessEnv;
+const TEST_ENV = { KS_TEST_BROKERAGE: "true", KS_QA_LOGIN_CODE: "123456", KS_STORE_REVIEW: "true" } as NodeJS.ProcessEnv;
 
 async function cleanup() {
   await pool.query(`DELETE FROM application_contacts WHERE application_id IN (SELECT id FROM applications WHERE metadata->>'sample_data' = 'true')`);
@@ -44,5 +44,12 @@ describe("store-review seed (real Postgres)", () => {
     expect(await seedStoreReview(pool as any, TEST_ENV)).toEqual({ ran: true, files: 0 });
     expect((await pool.query(`SELECT 1 FROM users WHERE phone_number = $1`, [REVIEW_STAFF.phone])).rows).toHaveLength(1);
     expect((await pool.query(`SELECT 1 FROM applications WHERE metadata->>'sample_data' = 'true'`)).rows).toHaveLength(SAMPLE_FILES.length);
+  });
+
+  it("KS_SERVER_STORE_REVIEW_SEED_v2: another test brokerage switches the reviewer off and adds nothing", async () => {
+    const other = { KS_TEST_BROKERAGE: "true", KS_QA_LOGIN_CODE: "123456" } as NodeJS.ProcessEnv;
+    expect(await seedStoreReview(pool as any, other)).toEqual({ ran: false, files: 0 });
+    const u = await pool.query(`SELECT active, disabled FROM users WHERE phone_number = $1`, [REVIEW_STAFF.phone]);
+    expect(u.rows).toEqual([{ active: false, disabled: true }]);
   });
 });
