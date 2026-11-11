@@ -1,8 +1,9 @@
 // KS_SERVER_STORE_REVIEW_SEED_v1 - the sign-in Apple and Google reviewers use for the Keystone iPad portal and the
 // Keystone dialler, with sample data to look at.
 //
-// It runs only on a TEST brokerage (KS_TEST_BROKERAGE=true with a QA code, see src/services/qaLogin.ts), never on a
-// real licensee. It makes sure that brokerage has:
+// It runs only on the ONE test brokerage KS-Ops marks for store review (KS_TEST_BROKERAGE=true with a QA code, see
+// src/services/qaLogin.ts, plus KS_STORE_REVIEW=true - v2), never on a real licensee. On other test brokerages the
+// reviewer user is switched off, so the reviewer's number finds exactly one brokerage. It makes sure that brokerage has:
 //   - a staff user "App Review", mobile (403) 555-0100 - a reserved fictional number that signs in with the
 //     brokerage's QA code, no text sent - and
 //   - a few sample companies, contacts, lenders and applications (fictional names, 555-01xx numbers, example.com
@@ -45,7 +46,11 @@ export async function ensureReviewStaff(q: Q): Promise<string> {
       LIMIT 1`,
     [digits10(REVIEW_STAFF.phone)],
   );
-  if (found.rows[0]) return String(found.rows[0].id);
+  if (found.rows[0]) {
+    const id = String(found.rows[0].id);
+    await q.query(`UPDATE users SET active = true, is_active = true, disabled = false WHERE id = $1`, [id]); // v2: back on
+    return id;
+  }
   const id = randomUUID();
   await q.query(
     `INSERT INTO users (id, email, phone_number, phone, role, active, is_active, disabled, phone_verified, status, first_name, last_name)
@@ -99,9 +104,24 @@ export async function ensureSampleData(q: Q, ownerId: string): Promise<number> {
   return added;
 }
 
-/** Runs both steps when this is a test brokerage with QA sign-in; does nothing otherwise. */
+/** KS_SERVER_STORE_REVIEW_SEED_v2 - switches the reviewer user off (left in place, no longer in the staff directory). */
+export async function disableReviewStaff(q: Q): Promise<number> {
+  const r = await q.query(
+    `UPDATE users SET active = false, is_active = false, disabled = true
+      WHERE email = $1 AND (COALESCE(active, true) = true OR COALESCE(disabled, false) = false)
+      RETURNING id`,
+    [REVIEW_STAFF.email],
+  );
+  return r.rows.length;
+}
+
+/** Runs both steps on the store-review test brokerage; switches the reviewer off on any other test brokerage. */
 export async function seedStoreReview(q: Q, env: NodeJS.ProcessEnv = process.env): Promise<{ ran: boolean; files: number }> {
   if (!qaLoginEnabled(env)) return { ran: false, files: 0 };
+  if (String(env.KS_STORE_REVIEW ?? "").trim().toLowerCase() !== "true") {
+    await disableReviewStaff(q);
+    return { ran: false, files: 0 };
+  }
   const ownerId = await ensureReviewStaff(q);
   const files = await ensureSampleData(q, ownerId);
   return { ran: true, files };
