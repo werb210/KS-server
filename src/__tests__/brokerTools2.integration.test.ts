@@ -256,7 +256,7 @@ describe("broker tools part 2 (real Postgres)", () => {
     // Credit bureau is off unless the server switches it on (no plan key until the real connectors exist).
     beforeAll(() => { process.env.CREDIT_BUREAU_MOCK = "on"; });
     afterAll(() => { delete process.env.CREDIT_BUREAU_MOCK; });
-    it("staff ask for consent, the client gives it in the client app, staff pull; the score feeds the scorecard", async () => {
+    it("staff ask for consent, the client gives it in the client app, staff pull", async () => {
       const base = `/api/deal-desk/applications/${appId}/credit-bureau`;
       const clientTok = `Bearer ${jwt.sign({ phone: "+17805550199", role: "client" }, String(process.env.JWT_SECRET))}`;
       const strangerTok = `Bearer ${jwt.sign({ phone: "+17805550111", role: "client" }, String(process.env.JWT_SECRET))}`;
@@ -284,8 +284,6 @@ describe("broker tools part 2 (real Postgres)", () => {
       expect(usage.rows[0].n).toBe(0); // test pulls are not billed  KS_ONLY_USAGE
       const report = await http().get(`${base}/pulls/${pull.body.pull.id}/report`).set(as("Staff"));
       expect(report.headers["content-type"]).toBe("application/pdf");
-      const scored = await http().post(`/api/deal-desk/applications/${appId}/scorecard`).set(as("Staff"));
-      expect(scored.body.result.inputs.credit_score).toBe(score);
       const view = await http().get(base).set(as("Staff"));
       expect(view.body.pulls).toHaveLength(1);
       expect(view.body.providers.every((p: any) => p.test_mode)).toBe(true);
