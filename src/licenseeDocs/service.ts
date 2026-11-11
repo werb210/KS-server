@@ -57,13 +57,21 @@ export async function licenseeTermSheetPdf(offerId: string, q: Q = db()): Promis
   const doc = await activeDocument(q, "term_sheet");
   if (!doc) throw Object.assign(new Error("Upload your term sheet template in Settings > Your documents first."), { status: 409 });
   const r = await q.query(
-    `SELECT application_id::text AS application_id, lender_name, amount, rate_factor, term, payment_frequency, expiry_date FROM offers WHERE id::text = $1 LIMIT 1`, [offerId]);
+    `SELECT application_id::text AS application_id, lender_name, amount, rate_factor, term, payment_frequency, expiry_date,
+            client_rate, term_months, broker_fee, setup_fee, proceeds_fee, lender_commission FROM offers WHERE id::text = $1 LIMIT 1`, [offerId]);
   const o = r.rows[0];
   if (!o?.application_id) throw Object.assign(new Error("Offer not found."), { status: 404 });
   const { loadApplicationForPdf } = await import("../signnow/sendApplicationForSignature.js");
   const inputs = await loadApplicationForPdf(o.application_id);
-  const offer: OfferValues = { lender: o.lender_name, amount: o.amount, rate: o.rate_factor, term: o.term, payment_frequency: o.payment_frequency, payment: null, expiry: o.expiry_date ? new Date(o.expiry_date).toISOString() : null };
-  const values = valuesFor({ app: inputs, brokerName: brandName(), extras: await extrasOf(q, o.application_id), offer });
+  // OFFER_PRICING_v1 - our term sheet means we buy the deal: no lender name, the client's rate (not the lender's) and our fees.
+  const { revenueFor, clientRateText } = await import("../offers/pricing.js");
+  const rev = revenueFor({ amount: o.amount, lender_rate: o.rate_factor, client_rate: o.client_rate, term: o.term, term_months: o.term_months,
+    broker_fee: o.broker_fee, setup_fee: o.setup_fee, proceeds_fee: o.proceeds_fee, lender_commission: o.lender_commission });
+  const offer: OfferValues = { lender: "", amount: o.amount, rate: clientRateText(o.rate_factor, o.client_rate), term: o.term || (rev.term_months ? `${rev.term_months} months` : null),
+    payment_frequency: o.payment_frequency, payment: rev.client_payment, expiry: o.expiry_date ? new Date(o.expiry_date).toISOString() : null,
+    setup_fee: o.setup_fee, proceeds_fee: o.proceeds_fee, funds_to_client: rev.funds_to_client, total_repaid: rev.client_total_repaid };
+  const fee = o.broker_fee === null || o.broker_fee === undefined ? null : { amount: o.broker_fee };
+  const values = valuesFor({ app: inputs, brokerName: brandName(), extras: await extrasOf(q, o.application_id), offer, fee });
   const pdf = await fillDocument({ name: doc.name, format: doc.format, file: doc.file, fields: doc.fields }, values, [], `${brandName()} - ${doc.name}`);
   return { pdf, applicationId: o.application_id, name: doc.name };
 }
