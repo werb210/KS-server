@@ -3,19 +3,15 @@
 // silo and record visibility.
 import { Router } from "express";
 import invoices from "./dealDesk/invoices.js"; // KS_BROKER_TOOLS_INVOICES
-import creditLines from "./dealDesk/creditLines.js"; // KS_BROKER_TOOLS_CREDIT_LINES
 import rateCards from "./dealDesk/rateCards.js"; // KS_BROKER_TOOLS_RATE_CARDS
-import scorecards from "./dealDesk/scorecards.js"; // KS_BROKER_TOOLS_SCORECARDS
-import contracts from "./dealDesk/contracts.js"; // KS_BROKER_TOOLS_CONTRACTS
 import vendors from "./dealDesk/vendors.js"; // KS_BROKER_TOOLS_VENDORS
 import creditBureau from "./dealDesk/creditBureau.js"; // KS_BROKER_TOOLS_CREDIT_BUREAU
 
+// KS_SERVER_REMOVED_DEAL_TOOLS - approved credit lines, credit scorecards and contract templates were removed
+// (Todd and Andrew, Nov 11 2026); their routers are no longer mounted. Their tables and data stay.
 const router = Router();
 router.use(invoices);
-router.use(creditLines);
 router.use(rateCards);
-router.use(scorecards);
-router.use(contracts);
 router.use(vendors);
 router.use(creditBureau);
 

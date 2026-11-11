@@ -155,52 +155,6 @@ describe("broker tools part 2 (real Postgres)", () => {
   });
 
   // KS_BROKER_TOOLS_CREDIT_LINES
-  describe("4 approved credit lines", () => {
-    it("records a line, draws reduce what is available, a funded linked deal draws once, and expiry makes one task", async () => {
-      const base = `/api/deal-desk/applications/${appId}`;
-      // KS_ONLY_PLAN_START
-      await setPlan("starter");
-      expect((await http().get(`${base}/credit-lines`).set(as("Staff"))).status).toBe(402);
-      await setPlan("pro");
-      // KS_ONLY_PLAN_END
-      const expiry = new Date(Date.now() + 20 * 86_400_000).toISOString().slice(0, 10);
-      const made = await http().post(`${base}/credit-lines`).set(as("Staff"))
-        .send({ lender_name: `Northern ${tag}`, limit_amount: "250,000", expiry_date: expiry, conditions: "Annual financials", reminder_days: 30 });
-      expect(made.status).toBe(201);
-      const line = made.body.line;
-      expect(line).toMatchObject({ limit_amount: 250000, used: 0, available: 250000, expiring_soon: true });
-
-      const d1 = await http().post(`/api/deal-desk/credit-lines/${line.id}/draws`).set(as("Staff")).send({ amount: 100000, note: "first unit" });
-      expect(d1.body.line).toMatchObject({ used: 100000, available: 150000 });
-      expect((await http().post(`/api/deal-desk/credit-lines/${line.id}/draws`).set(as("Staff")).send({ amount: 200000 })).status).toBe(409);
-
-      expect((await http().put(`${base}/credit-line`).set(as("Staff")).send({ credit_line_id: line.id })).body.linked_line_id).toBe(line.id);
-      await pool.query(`UPDATE applications SET funded_amount = 60000 WHERE id = $1`, [appId]);
-      await afterFunded(appId);
-      await afterFunded(appId); // once only
-      const list = await http().get(`${base}/credit-lines`).set(as("Staff"));
-      expect(list.body.linked_line_id).toBe(line.id);
-      const after = list.body.lines.find((l: any) => l.id === line.id);
-      expect(after).toMatchObject({ used: 160000, available: 90000 });
-      expect(after.draws.filter((d: any) => d.source === "funded")).toHaveLength(1);
-
-      const firstDraw = after.draws.find((d: any) => d.note === "first unit");
-      const rev = await http().delete(`/api/deal-desk/credit-lines/${line.id}/draws/${firstDraw.id}`).set(as("Staff"));
-      expect(rev.body.line.available).toBe(190000);
-
-      await pool.query(`UPDATE credit_lines SET lender_name = $2 WHERE id = $1`, [line.id, `Northern ${tag}`]);
-      expect(await creditLineReminders(pool as any)).toBeGreaterThanOrEqual(1);
-      await creditLineReminders(pool as any);
-      const tasks = await pool.query(`SELECT title FROM tasks WHERE title LIKE $1`, [`%Northern ${tag}%`]);
-      expect(tasks.rows).toHaveLength(1);
-
-      expect((await http().get("/api/deal-desk/credit-lines?expiring_within=30").set(as("Staff"))).body.lines.some((l: any) => l.id === line.id)).toBe(true);
-      expect((await http().patch(`/api/deal-desk/credit-lines/${line.id}`).set(as("Staff")).send({ status: "closed" })).body.line.status).toBe("closed");
-      expect((await http().post(`/api/deal-desk/credit-lines/${line.id}/draws`).set(as("Staff")).send({ amount: 1 })).status).toBe(409);
-    });
-  });
-
-  // KS_BROKER_TOOLS_RATE_CARDS
   describe("5 rate cards and structuring", () => {
     it("an Admin loads a card by CSV; staff compare payment options on the deal with Alberta GST, and save one", async () => {
       const made = await http().post("/api/deal-desk/rate-cards").set(as("Admin"))
@@ -231,71 +185,6 @@ describe("broker tools part 2 (real Postgres)", () => {
   });
 
   // KS_BROKER_TOOLS_SCORECARDS
-  describe("7 credit scorecards", () => {
-    it("scores the deal from the application and banking analysis, an Admin's rule shows as a hit, and the grade seeds the structuring tier", async () => {
-      await pool.query(
-        `INSERT INTO banking_analyses (application_id, total_avg_monthly_deposits, average_daily_balance, average_monthly_nsfs, negative_balance_days,
-           months_profitable_numerator, months_profitable_denominator, status) VALUES ($1, 100000, 30000, 0.5, 2, 5, 6, 'completed')`, [appId]);
-      const base = `/api/deal-desk/applications/${appId}/scorecard`;
-      expect((await http().get(base).set(as("Staff"))).body.result).toBeNull();
-      const scored = await http().post(base).set(as("Staff"));
-      expect(scored.status).toBe(200);
-      expect(scored.body.result).toMatchObject({ grade: "A", outcome: "clear", coverage: 85 }); // no credit score yet: coverage drops, the score does not
-      expect(scored.body.result.missing).toContain("Credit score (lowest principal)");
-      expect(Array.isArray(scored.body.result.lenders)).toBe(true);
-
-      const cfg = (await http().get("/api/deal-desk/scorecard").set(as("Staff"))).body.config;
-      expect((await http().put("/api/deal-desk/scorecard").set(as("Staff")).send(cfg)).status).toBe(403);
-      const strict = { ...cfg, rules: [...cfg.rules, { id: "nsf", factor: "nsf_per_month", op: ">=", value: 0.5, outcome: "refer", message: "Any NSFs: refer" }] };
-      expect((await http().put("/api/deal-desk/scorecard").set(as("Admin")).send(strict)).status).toBe(200);
-      const again = await http().post(base).set(as("Staff"));
-      expect(again.body.result.outcome).toBe("refer");
-      expect(again.body.result.hits.map((h: any) => h.message)).toContain("Any NSFs: refer");
-      expect((await http().get(base).set(as("Staff"))).body.result.grade).toBe("A");
-      expect((await http().get(`/api/deal-desk/applications/${appId}/structure`).set(as("Staff"))).body.defaults.tier).toBe("A");
-      expect((await http().post("/api/deal-desk/scorecard/reset").set(as("Admin"))).status).toBe(200);
-    });
-  });
-
-  // KS_BROKER_TOOLS_CONTRACTS
-  describe("8 contracts from Word templates", () => {
-    it("an Admin uploads a .docx; staff make the contract with the deal's values and a typed-over value; it waits for e-signing set-up", async () => {
-      const tpl = simpleDocx(["# Equipment Lease", "Lessee: {{business.legal_name}}", "Equipment: {{equipment.description}} ({{equipment.serial_numbers}})", "Guarantor: {{guarantor.name}}"]);
-      expect((await http().post("/api/deal-desk/contract-templates").set(as("Staff")).attach("file", tpl, "lease.docx").field("name", `Lease ${tag}`)).status).toBe(403);
-      expect((await http().post("/api/deal-desk/contract-templates").set(as("Admin")).attach("file", Buffer.from("not a docx"), "x.docx")).status).toBe(400);
-      const up = await http().post("/api/deal-desk/contract-templates").set(as("Admin")).attach("file", tpl, "lease.docx").field("name", `Lease ${tag}`);
-      expect(up.status).toBe(201);
-      expect(up.body.template).toMatchObject({ fields: ["business.legal_name", "equipment.description", "equipment.serial_numbers", "guarantor.name"], unknown_fields: ["guarantor.name"] });
-
-      const base = `/api/deal-desk/applications/${appId}/contracts`;
-      const preview = await http().get(base).set(as("Staff"));
-      expect(preview.body.values["business.legal_name"]).toBe(`Dig ${tag} Ltd.`);
-      const made = await http().post(base).set(as("Staff")).send({ template_id: up.body.template.id, values: { "guarantor.name": "Ann Client" }, signers: [{ name: "Ann Client", email: "ann@example.com" }] });
-      expect(made.status).toBe(201);
-      expect(made.body.contract).toMatchObject({ status: "generated", missing: [] });
-      const docx = await http().get(`${base}/${made.body.contract.id}/docx`).set(as("Staff")).buffer(true).parse((res, cb) => { const c: Buffer[] = []; res.on("data", (d: Buffer) => c.push(d)); res.on("end", () => cb(null, Buffer.concat(c))); });
-      const xml = unzip(docx.body as Buffer).find((f) => f.name === "word/document.xml")!.data.toString();
-      expect(xml).toContain(`Lessee: Dig ${tag} Ltd.`);
-      expect(xml).toContain("KX040-55123");
-      expect(xml).toContain("Guarantor: Ann Client");
-      expect(preview.body.values["business.address"]).toContain("Edmonton");
-      const pdf = await http().get(`${base}/${made.body.contract.id}/pdf`).set(as("Staff"));
-      expect(pdf.headers["content-type"]).toBe("application/pdf");
-
-      const prev = process.env.SIGNNOW_API_KEY;
-      delete process.env.SIGNNOW_API_KEY;
-      try {
-        const send = await http().post(`${base}/${made.body.contract.id}/send`).set(as("Staff")).send({});
-        expect(send.status).toBe(409);
-        expect(send.body.message).toContain("E-signing is not set up");
-      } finally {
-        if (prev !== undefined) process.env.SIGNNOW_API_KEY = prev;
-      }
-      expect((await http().post(`${base}/${made.body.contract.id}/cancel`).set(as("Staff"))).status).toBe(200);
-    });
-  });
-
-  // KS_BROKER_TOOLS_VENDORS
   describe("9 vendor and dealer portal", () => {
     it("an Admin adds a vendor; the vendor quotes from the rate cards, sees the deal from its link, and is owed a fee when it funds", async () => {
       const phoneDigits = String(Math.floor(1000000 + Math.random() * 8999999));
