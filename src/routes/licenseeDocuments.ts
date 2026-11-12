@@ -152,4 +152,45 @@ router.post("/offers/:offerId/term-sheet", ...staff, safeHandler(async (req: Req
   }
 }));
 
+// BF_SERVER_v952_INVOICE_TEMPLATES
+//   GET  /applications/:applicationId/invoices   the invoices already made for this file
+//   POST /applications/:applicationId/invoice    { amount, description, tax_percent?, due_days? } -> the invoice (PDF)
+router.get("/applications/:applicationId/invoices", ...staff, safeHandler(async (req: Request, res: Response) => {
+  const applicationId = String(req.params.applicationId);
+  const { canSeeApplication } = await import("../brokerTools/platform.js");
+  if (!UUID_RE.test(applicationId) || !(await canSeeApplication(req, applicationId))) return bad(res, "Application not found.", 404, "not_found");
+  const { listClientInvoices } = await import("../licenseeDocs/service.js");
+  const { activeDocument } = await import("../licenseeDocs/repo.js");
+  res.json({ ok: true, has_template: Boolean(await activeDocument(db(), "invoice")), invoices: await listClientInvoices(applicationId) });
+}));
+
+router.post("/applications/:applicationId/invoice", ...staff, safeHandler(async (req: Request, res: Response) => {
+  const applicationId = String(req.params.applicationId);
+  const { canSeeApplication } = await import("../brokerTools/platform.js");
+  if (!UUID_RE.test(applicationId) || !(await canSeeApplication(req, applicationId))) return bad(res, "Application not found.", 404, "not_found");
+  const b = req.body ?? {};
+  const num = (v: unknown): number => Number(String(v ?? "").replace(/[$,\s]/g, ""));
+  const amount = num(b.amount);
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 100_000_000) return bad(res, "Enter the invoice amount.");
+  const description = String(b.description ?? "").trim().slice(0, 300);
+  if (!description) return bad(res, "Say what the invoice is for.");
+  const taxPercent = b.tax_percent === undefined || b.tax_percent === null || b.tax_percent === "" ? 0 : num(b.tax_percent);
+  if (!Number.isFinite(taxPercent) || taxPercent < 0 || taxPercent > 30) return bad(res, "Tax must be between 0 and 30 percent.");
+  const dueDays = b.due_days === undefined || b.due_days === null || b.due_days === "" ? null : Math.round(num(b.due_days));
+  if (dueDays !== null && (!Number.isFinite(dueDays) || dueDays < 0 || dueDays > 365)) return bad(res, "Due in must be between 0 and 365 days.");
+  try {
+    const { licenseeInvoicePdf } = await import("../licenseeDocs/service.js");
+    const out = await licenseeInvoicePdf(applicationId, { amount, description, taxPercent, dueDays }, actor(req));
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${out.number}.pdf"`);
+    res.setHeader("X-Invoice-Number", out.number);
+    res.setHeader("Access-Control-Expose-Headers", "X-Invoice-Number, Content-Disposition");
+    res.end(Buffer.from(out.pdf));
+  } catch (err: any) {
+    const status = Number(err?.status) || 500;
+    if (status >= 500) console.warn("[licensee-docs] invoice not made", { applicationId, message: String(err?.message ?? err) });
+    return bad(res, status >= 500 ? "The invoice could not be made. Try again." : String(err.message), status, status === 409 ? "no_template" : "not_made");
+  }
+}));
+
 export default router;
