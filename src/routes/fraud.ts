@@ -25,6 +25,7 @@ import { allowedChecks, enqueueFraudRun, getFraudSettings, listResults, queueSta
 import { bankStatementIds, computeScore, prescreenText } from "../fraud/score.js"; // BF_SERVER_v906_FRAUD_FLOOR
 import { buildNetwork, loadProfile } from "../fraud/engine.js";
 import { fraudProviders, providerStatus } from "../fraud/providers/index.js";
+import { SCANNED_DOCUMENT_SQL } from "../fraud/documents.js";
 import { watchlistReady } from "../fraud/watchlist.js";
 import { postToOps } from "../plans/opsLink.js";
 import { brandName } from "../licensee/brand.js";
@@ -55,8 +56,8 @@ router.get("/applications/:id", ...staff, safeHandler(async (req: any, res) => {
   const rows = await listResults(db(), app.id);
   const docs = await db().query(
     `SELECT id::text AS id, COALESCE(display_name, filename, title) AS filename, COALESCE(category, document_type) AS category,
-            (COALESCE(uploaded_by, '') = 'system') AS generated
-       FROM documents WHERE application_id::text = $1 ORDER BY created_at ASC`,
+            (NOT ${SCANNED_DOCUMENT_SQL}) AS generated
+       FROM documents d WHERE application_id::text = $1 ORDER BY created_at ASC`,
     [app.id],
   );
   // KS_SERVER_BANK_CONNECT_ADDON - an add-on check is left out entirely (not "locked") while its add-on is off.

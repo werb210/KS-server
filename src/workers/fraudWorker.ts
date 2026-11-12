@@ -10,6 +10,7 @@ import type { Q } from "../plans/state.js";
 import { runFraudChecks, loadProfile, type EngineDeps } from "../fraud/engine.js";
 import { allowedChecks, getFraudSettings } from "../fraud/store.js";
 import { alertAdmins } from "../fraud/insider.js";
+import { SCANNED_DOCUMENT_SQL } from "../fraud/documents.js";
 import { applicationRef, watchlistEntries, watchlistReady } from "../fraud/watchlist.js";
 import { accountNumbersFor } from "../fraud/network.js";
 import { postToOps, type OpsFetch } from "../plans/opsLink.js";
@@ -23,7 +24,7 @@ export async function queueNewWork(db: Q): Promise<number> {
     `INSERT INTO fraud_queue (application_id, requested_at, reason)
      SELECT DISTINCT d.application_id::text, now(), 'new_document'
        FROM documents d LEFT JOIN document_fingerprints f ON f.document_id = d.id::text
-      WHERE f.document_id IS NULL AND d.created_at > now() - interval '60 days' AND COALESCE(d.uploaded_by, '') <> 'system'
+      WHERE f.document_id IS NULL AND d.created_at > now() - interval '60 days' AND ${SCANNED_DOCUMENT_SQL}
       LIMIT 50
      ON CONFLICT (application_id) DO UPDATE SET requested_at = now(), reason = 'new_document'
       WHERE fraud_queue.done_at IS NOT NULL AND fraud_queue.done_at >= fraud_queue.requested_at
