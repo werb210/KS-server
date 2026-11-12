@@ -17,8 +17,12 @@ import { DATA_FIELDS, DATA_FIELD_KEYS, valuesFor } from "../licenseeDocs/catalog
 import { readDocumentFields } from "../licenseeDocs/readFields.js";
 import { matchFields, type MatchedField } from "../licenseeDocs/match.js";
 import { fillDocument } from "../licenseeDocs/fill.js";
-import { DOC_KINDS, KIND_LABEL, addDocument, getDocument, listDocuments, listQuestions, saveFields, setActive, updateQuestion, type DocKind } from "../licenseeDocs/repo.js";
+import { DOC_KINDS, KIND_LABEL, addDocument, getDocument, listDocuments, listQuestions, saveFields, setActive, setFinancingType, updateQuestion, type DocKind } from "../licenseeDocs/repo.js";
 import { brandName } from "../licensee/brand.js";
+import { PRODUCT_CATEGORIES } from "../modules/applications/productCategoryChange.js";
+// BF_SERVER_v948_TERM_SHEET_BY_TYPE - "" / missing means the general template.
+const FINANCING_TYPES = new Set(PRODUCT_CATEGORIES.map((c) => c.value));
+const financingTypeOf = (v: unknown): string | null | undefined => { const t = String(v ?? "").trim(); return !t ? null : FINANCING_TYPES.has(t) ? t : undefined; };
 
 const router = Router();
 const actor = (req: Request): string | null => { const id = (req as any).user?.userId ?? (req as any).user?.id; return typeof id === "string" && UUID_RE.test(id) ? id : null; };
@@ -28,6 +32,7 @@ router.get("/", ...staff, safeHandler(async (_req: Request, res: Response) => {
   res.json({
     ok: true,
     kinds: DOC_KINDS.map((k) => ({ key: k, label: KIND_LABEL[k] })),
+    financingTypes: PRODUCT_CATEGORIES.map((c) => ({ key: c.value, label: c.label })),
     dataFields: DATA_FIELDS.map(({ key, label }) => ({ key, label })),
     documents: await listDocuments(q),
     questions: await listQuestions(q),
@@ -38,6 +43,8 @@ router.post("/", ...admin, upload.single("file"), safeHandler(async (req: Reques
   const file = (req as any).file as { buffer: Buffer; originalname: string } | undefined;
   const kind = String(req.body?.kind ?? "") as DocKind;
   if (!DOC_KINDS.includes(kind)) return bad(res, "Choose what this document is.");
+  const financing_type = kind === "term_sheet" ? financingTypeOf(req.body?.financing_type) : null;
+  if (financing_type === undefined) return bad(res, "Choose a type of financing from the list.");
   if (!file?.buffer?.length) return bad(res, "Choose the file to upload.");
   const read = await readDocumentFields(file.buffer, file.originalname);
   if (read.format === "none") {
@@ -45,7 +52,7 @@ router.post("/", ...admin, upload.single("file"), safeHandler(async (req: Reques
   }
   const fields = await matchFields(read.fields);
   const name = String(req.body?.name ?? "").trim().slice(0, 120) || file.originalname.replace(/\.[a-z0-9]+$/i, "");
-  const doc = await addDocument(db(), { kind, name, file_name: file.originalname, format: read.format, file: file.buffer, fields }, actor(req));
+  const doc = await addDocument(db(), { kind, name, file_name: file.originalname, format: read.format, file: file.buffer, fields, financing_type }, actor(req));
   res.status(201).json({ ok: true, document: doc, questions: await listQuestions(db()) });
 }));
 
@@ -75,8 +82,16 @@ router.put("/:id/fields", ...admin, safeHandler(async (req: Request, res: Respon
 
 router.patch("/:id", ...admin, safeHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);
-  if (!UUID_RE.test(id) || typeof req.body?.active !== "boolean") return bad(res, "Say whether the document is in use.");
-  const doc = await setActive(db(), id, req.body.active);
+  const hasType = Object.prototype.hasOwnProperty.call(req.body ?? {}, "financing_type");
+  if (!UUID_RE.test(id) || (typeof req.body?.active !== "boolean" && !hasType)) return bad(res, "Say whether the document is in use.");
+  let doc = null;
+  if (hasType) {
+    const t = financingTypeOf(req.body.financing_type);
+    if (t === undefined) return bad(res, "Choose a type of financing from the list.");
+    doc = await setFinancingType(db(), id, t);
+    if (!doc) return bad(res, "Document not found.", 404, "not_found");
+  }
+  if (typeof req.body?.active === "boolean") doc = await setActive(db(), id, req.body.active);
   if (!doc) return bad(res, "Document not found.", 404, "not_found");
   res.json({ ok: true, document: doc });
 }));
