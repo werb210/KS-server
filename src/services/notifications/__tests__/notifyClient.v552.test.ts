@@ -121,23 +121,21 @@ describe("the client notices use it (no second push, no second SMS)", () => {
     expect(h.sendSMS).not.toHaveBeenCalled();
   });
 
-  it("term sheet from the Lenders tab: one notice", async () => {
+  it("term sheet added on the Offer tab: no notice until staff send it for signature (v950)", async () => {
     const app = await mount("/api/applications", "../../../modules/applications/applications.routes.js");
     const res = await request(app).post(`/api/applications/${APP_ID}/lenders/${LENDER_ID}/files`).set("Authorization", `Bearer ${token()}`)
       .attach("file", Buffer.from("%PDF"), { filename: "terms.pdf", contentType: "application/pdf" });
     expect(res.status).toBe(201);
-    expect(kinds()).toEqual(["term_sheet"]);
-    expect(spy.mock.calls[0][0]).toMatchObject({ phone: PHONE, applicationId: APP_ID });
+    expect(kinds()).toEqual([]); // v950: told when staff send it for signature, not on upload
     expect(h.sendSMS).not.toHaveBeenCalled();
   });
 
-  it("term sheet from the portal: one notice, no direct SMS", async () => {
+  it("term sheet uploaded in the portal: no notice until staff send it for signature (v947)", async () => {
     const app = await mount("/api/portal", "../../../routes/portal.js");
     const res = await request(app).post(`/api/portal/applications/${APP_ID}/term-sheet`).set("Authorization", `Bearer ${token()}`)
       .field("lender_name", "Acme Capital").attach("file", Buffer.from("%PDF"), { filename: "terms.pdf", contentType: "application/pdf" });
     expect(res.status).toBe(201);
-    expect(kinds()).toEqual(["term_sheet"]);
-    expect(String(spy.mock.calls[0][0].sms)).toContain("Your term sheet from Acme Capital");
+    expect(kinds()).toEqual([]);
     expect(h.sendSMS).not.toHaveBeenCalled();
   });
 
