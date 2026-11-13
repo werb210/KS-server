@@ -177,7 +177,7 @@ describe("lender match, credit summary and package", () => {
     expect(creditSummaryGoesToLenders(SAMPLE_REQUEST.amount, true)).toBe(false);
     const biz = SAMPLE_BUSINESS.legal_name;
     expect(sub.entries).toEqual([
-      "signed-application.pdf", "credit-summary.pdf", "application-fields.json", "application-fields.pdf",
+      "application-signed.pdf", "credit-summary.pdf", "application-fields.json", "application-fields.pdf",
       `bank_statements_6_months/${biz} - Bank Statement - August 2026.pdf`,
       `bank_statements_6_months/${biz} - Bank Statement - July 2026.pdf`,
       // KS_SERVER_DEMO_FULL_FILE - the broker's reports in their own folder
@@ -201,7 +201,7 @@ describe("lender match, credit summary and package", () => {
     });
     expect(real.manifest.entries).toEqual(sub.entries);
     // The signed application is the real application form, signed, dated and footed SAMPLE.
-    const signed = await zip.file("signed-application.pdf")!.async("nodebuffer");
+    const signed = await zip.file("application-signed.pdf")!.async("nodebuffer");
     const text = (await pdfTextLines(signed)).join("\n");
     expect(text).toMatch(/BUSINESS FUNDING APPLICATION/);
     expect(text).toMatch(/ACME-BROKERS/);
@@ -304,7 +304,7 @@ describe("lender match, credit summary and package", () => {
       accepted, submittedAt: new Date("2026-10-24T16:00:00Z"), documents: docs,
     });
     const folder = (f: string) => sub.entries.filter((e) => e.startsWith(`${f}/`));
-    expect(sub.entries.slice(0, 4)).toEqual(["signed-application.pdf", "credit-summary.pdf", "application-fields.json", "application-fields.pdf"]);
+    expect(sub.entries.slice(0, 4)).toEqual(["application-signed.pdf", "credit-summary.pdf", "application-fields.json", "application-fields.pdf"]);
     expect(folder("bank_statements_6_months")).toHaveLength(6);
     expect(folder("financial_statements").map((e) => e.replace(/^.* - /, ""))).toEqual(["FY2024.pdf", "FY2025.pdf"]);
     expect(folder("equipment_quote")).toHaveLength(1);

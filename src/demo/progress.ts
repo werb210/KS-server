@@ -138,7 +138,7 @@ export async function flushCompletions(pool: Pool, post: OpsPoster = postToKsOps
           started_at: new Date(row.created_at).toISOString(), completed_at: new Date(row.completed_at).toISOString(),
           lenders: row.selected_lenders,
         },
-        package_filename: row.package_zip ? "signed-application.pdf" : "Lender-Submission-Package-SAMPLE.pdf",
+        package_filename: row.package_zip ? "application-signed.pdf" : "Lender-Submission-Package-SAMPLE.pdf",
         package_pdf_base64: Buffer.from(row.package_pdf).toString("base64"),
         ...(row.package_zip && row.package_mail ? { lender_email: lenderEmailPayload(row.package_mail, row.package_zip) } : {}),
       });
