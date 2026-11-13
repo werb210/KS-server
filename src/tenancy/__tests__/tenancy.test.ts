@@ -168,6 +168,16 @@ describe("how a request finds its brokerage", () => {
     expect(r.body).toEqual({ status: "ok", tenant: null });
   });
 
+  it("answers a health check from a brokerage's portal inside that brokerage (its allowed addresses apply)", async () => {
+    const r = await request(app()).get("/health").set("Host", "northwind.api.example.test").set("Origin", "https://northwind.portal.example.test");
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ status: "ok", tenant: "northwind" });
+    setRegistryLoaderForTests(async () => { throw new Error("control database down"); });
+    const down = await request(app()).get("/health").set("Host", "northwind.api.example.test").set("Origin", "https://northwind.portal.example.test");
+    expect(down.status).toBe(200);
+    expect(down.body).toEqual({ status: "ok", tenant: null });
+  });
+
   it("answers 503 while a brokerage's migrations have failed", async () => {
     setTenantMigratorForTests(async () => { throw new Error("relation exploded"); });
     const r = await request(app()).get("/api/whoami").set("Host", "northwind.api.example.test");

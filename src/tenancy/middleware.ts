@@ -62,7 +62,16 @@ type WithCtx = Request & { [REQ_CTX]?: TenantContext; ksTenant?: string };
 
 export function tenantMiddleware() {
   return async (req: Request, res: Response, next: NextFunction) => {
-    if (answersWithoutBrokerage(req.path)) return next();
+    if (answersWithoutBrokerage(req.path)) {
+      // A browser asking from a brokerage's portal (Settings > System check reads /api/health) needs that brokerage's
+      // allowed addresses for the cross-site check. Best effort: health still answers when no brokerage is found.
+      if (!req.headers.origin) return next();
+      const h = await resolveTenant(req.headers as Record<string, string | string[] | undefined>);
+      if (!h.ok || !tenantJwtSecretOk(h.tenant)) return next();
+      const hctx = contextFor(h.tenant);
+      (req as WithCtx)[REQ_CTX] = hctx;
+      return runWithTenant(hctx, () => next());
+    }
     const r = await resolveTenant(req.headers as Record<string, string | string[] | undefined>);
     if (!r.ok) {
       res.setHeader("Cache-Control", "no-store");
