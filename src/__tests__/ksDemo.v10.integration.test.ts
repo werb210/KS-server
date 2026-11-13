@@ -193,7 +193,7 @@ describe("KS v10 demo (real Postgres)", () => {
     expect((await request(app()).post("/api/demo/staff/financials/review").set(h)).status).toBe(200);
     const cs = await request(app()).post("/api/demo/staff/credit-summary").set(h);
     expect(cs.body.credit_summary.documents.flagged[0]).toMatchObject({ label: "Bank statement - September 2026", decision: "rejected" });
-    expect(cs.body.credit_summary.banking.statements_used).toHaveLength(2);
+    expect(cs.body.credit_summary.banking.statements_used).toHaveLength(5); // April to August; September was rejected
     expect((await request(app()).post("/api/demo/staff/submit").set(h)).status).toBe(400); // no lenders yet
     expect((await request(app()).post("/api/demo/staff/lenders").set(h).send({ lender_ids: ["made-up"] })).status).toBe(400);
     expect((await request(app()).post("/api/demo/staff/lenders").set(h).send({ lender_ids: ["aspen-ridge", "northgate", "granite-peak"] })).status).toBe(200);
@@ -211,10 +211,12 @@ describe("KS v10 demo (real Postgres)", () => {
     const zip = await JSZip.loadAsync(pkg.body as Buffer);
     const names = Object.keys(zip.files).filter((n) => !zip.files[n]!.dir);
     // KS_SERVER_v13_DEMO_SHOW_EVERYTHING - the demo package also carries the walkthrough's pages and the credit summary.
-    expect(names.slice(0, 8)).toEqual([
-      "signed-application.pdf", "fraud-prescreen.pdf", "client-intake-call-note.pdf", "bank-summary.pdf", "financials-summary.pdf",
-      "credit-summary.pdf", "application-fields.json", "application-fields.pdf",
-    ]);
+    expect(names.filter((n) => !n.includes("/"))).toEqual(["signed-application.pdf", "credit-summary.pdf", "application-fields.json", "application-fields.pdf"]);
+    // KS_SERVER_DEMO_FULL_FILE - the broker's reports sit in their own folder, and the file is a full one.
+    expect(names.filter((n) => n.startsWith("broker_reports/")).sort()).toEqual(["bank-summary.pdf", "client-intake-call-note.pdf", "financials-summary.pdf", "fraud-prescreen.pdf"].map((f) => `broker_reports/${f}`));
+    expect(names.filter((n) => n.startsWith("bank_statements_6_months/"))).toHaveLength(5);
+    expect(names.filter((n) => n.startsWith("financial_statements/"))).toHaveLength(2);
+    expect(names.filter((n) => n.startsWith("equipment_quote/"))).toHaveLength(1);
     expect(names.filter((n) => n.includes("/")).length).toBeGreaterThanOrEqual(4); // the accepted sample files, by category
     expect(names.some((n) => n.startsWith("bank_statements_6_months/"))).toBe(true);
     const signed = await PDFDocument.load(await zip.file("signed-application.pdf")!.async("nodebuffer"));
@@ -232,13 +234,13 @@ describe("KS v10 demo (real Postgres)", () => {
     expect((await request(app()).post("/api/demo/staff/guided-submit").set(h).send({ accepted: ["nope"], lenders: ["aspen-ridge"] })).status).toBe(400);
     expect((await request(app()).post("/api/demo/staff/guided-submit").set(h).send({ accepted: [], lenders: [] })).status).toBe(400);
     expect((await request(app()).post("/api/demo/staff/guided-submit").set(h).send({ lenders: ["made-up"] })).status).toBe(400);
-    const all = ["bank_2026_07", "bank_2026_08", "bank_2026_09", "financials_2025", "void_cheque", "photo_id"];
+    const all = SAMPLE_DOCS.map((d) => d.key);
     const r = await request(app()).post("/api/demo/staff/guided-submit").set(h)
       .send({ accepted: all, rejected: [], lenders: ["aspen-ridge", "granite-peak"], call_answered: true });
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ emailed_to: "cara@prospect.example", lenders: expect.arrayContaining(["Aspen Ridge Capital", "Granite Peak Credit Union"]) });
     const st = (await request(app()).get("/api/demo/staff/state").set(h)).body;
-    expect(st.documents).toHaveLength(6);
+    expect(st.documents).toHaveLength(SAMPLE_DOCS.length);
     expect(st.documents.every((d: { status: string }) => d.status === "accepted")).toBe(true);
     expect(st.documents.find((d: { sample_key: string }) => d.sample_key === "bank_2026_09").fraud_status).toBe("red");
     expect(st.application.call.status).toBe("completed");
@@ -250,6 +252,17 @@ describe("KS v10 demo (real Postgres)", () => {
     expect(again.body.emailed_to).toBe("cara@prospect.example");
     // Another prospect's token cannot see Cara's file.
     expect((await request(app()).get("/api/demo/staff/package").set(auth(B.staff))).status).toBe(404);
+  });
+
+  it("KS_SERVER_DEMO_FULL_FILE a portal that only knows the first six documents still submits; the newer ones stay pending", async () => {
+    const D = await makeSession("Dora");
+    const h = auth(D.staff);
+    const six = ["bank_2026_07", "bank_2026_08", "bank_2026_09", "financials_2025", "void_cheque", "photo_id"];
+    const r = await request(app()).post("/api/demo/staff/guided-submit").set(h).send({ accepted: six, rejected: [], lenders: ["aspen-ridge"], call_answered: false });
+    expect(r.status).toBe(200);
+    const docs = (await request(app()).get("/api/demo/staff/state").set(h)).body.documents as Array<{ sample_key: string; status: string }>;
+    expect(docs.filter((d) => d.status === "accepted").map((d) => d.sample_key).sort()).toEqual([...six].sort());
+    expect(docs.filter((d) => d.status === "pending")).toHaveLength(SAMPLE_DOCS.length - six.length);
   });
 
   it("KS_SERVER_v11_LIVE_DEMO serves the sample PDFs publicly (same bytes as the uploads check), and 404s anything else", async () => {

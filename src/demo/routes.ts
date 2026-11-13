@@ -368,7 +368,7 @@ export function demoRouter(deps: DemoDeps): Router {
   }));
 
   // KS_SERVER_v11_LIVE_DEMO - the guided demo runs the real portal in the browser on sample data and sends everything
-  // the prospect decided in one call when they press Send: the six sample documents arrive (fraud-scanned), their
+  // the prospect decided in one call when they press Send: the sample documents arrive (fraud-scanned), their
   // decisions, the call, the credit summary and the lenders, then the package is built and emailed like /staff/submit.
   router.post("/staff/guided-submit", staff, safeHandler(async (req: DemoReq, res: Response) => {
     const s = sess(req);

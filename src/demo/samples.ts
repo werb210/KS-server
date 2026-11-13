@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { degrees, PDFDocument, rgb, StandardFonts, type PDFFont, type PDFPage } from "pdf-lib";
 import {
-  DEMO_BANK, DOCTORED, SAMPLE_BUSINESS, SAMPLE_CONTACT, SAMPLE_DOCS, SAMPLE_FINANCIALS, SAMPLE_STATEMENTS,
+  DEMO_BANK, DOCTORED, SAMPLE_BUSINESS, SAMPLE_CONTACT, SAMPLE_DOCS, SAMPLE_FINANCIALS, SAMPLE_REQUEST, SAMPLE_STATEMENTS,
   type SampleStatement,
 } from "./fixture.js";
 
@@ -92,7 +92,8 @@ async function statementPdf(s: SampleStatement, doctored: boolean): Promise<Buff
   return bytes;
 }
 
-async function financialsPdf(): Promise<Buffer> {
+async function financialsPdf(year = SAMPLE_FINANCIALS.years[0]!.year): Promise<Buffer> {
+  if (year !== SAMPLE_FINANCIALS.years[0]!.year) return priorYearFinancialsPdf(year);
   const doc = await newDoc({ title: "Financial statements FY2025", producer: "Sample accounting suite", creator: "Sample accounting suite", created: ISSUED, modified: ISSUED });
   const reg = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -126,6 +127,77 @@ async function financialsPdf(): Promise<Buffer> {
   line("Total liabilities", cur.total_liabilities, prev.total_liabilities);
   line("Shareholder equity", cur.equity, prev.equity, true);
   page.drawText("SAMPLE financial statements made for a software demo. Not a real company.", { x: 50, y: 60, size: 9, font: reg, color: grey });
+  return save(doc);
+}
+
+/** KS_SERVER_DEMO_FULL_FILE - the year before, as its own set (a lender asks for two years). */
+async function priorYearFinancialsPdf(year: number): Promise<Buffer> {
+  const y0 = SAMPLE_FINANCIALS.years.find((f) => f.year === year)!;
+  const issued = new Date(Date.UTC(year + 1, 2, 18, 15, 30, 0));
+  const doc = await newDoc({ title: `Financial statements FY${year}`, producer: "Sample accounting suite", creator: "Sample accounting suite", created: issued, modified: issued });
+  const reg = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const page = doc.addPage([612, 792]);
+  watermark(page, bold);
+  page.drawText(`${SAMPLE_BUSINESS.legal_name} (sample business)`, { x: 50, y: 740, size: 14, font: bold, color: ink });
+  page.drawText(`Financial statements - ${SAMPLE_FINANCIALS.basis} - ${SAMPLE_FINANCIALS.prepared_by}`, { x: 50, y: 722, size: 10, font: reg, color: grey });
+  let y = 690;
+  const line = (label: string, a: number | string, strong = false) => {
+    const f = strong ? bold : reg;
+    page.drawText(label, { x: 50, y, size: 10, font: f, color: ink });
+    page.drawText(typeof a === "number" ? money(a) : a, { x: 420, y, size: 10, font: f, color: ink });
+    y -= 17;
+  };
+  line("Income statement", `FY${year}`, true);
+  line("Revenue", y0.revenue);
+  line("Cost of goods sold", -y0.cogs);
+  line("Gross profit", y0.gross_profit, true);
+  line("Operating expenses", -y0.operating_expenses);
+  line("EBITDA", y0.ebitda, true);
+  line("Depreciation", -y0.depreciation);
+  line("Interest", -y0.interest);
+  line("Net income before tax", y0.net_income, true);
+  y -= 12;
+  line("Balance sheet", `FY${year}`, true);
+  line("Current assets", y0.current_assets);
+  line("Total assets", y0.total_assets);
+  line("Current liabilities", y0.current_liabilities);
+  line("Total liabilities", y0.total_liabilities);
+  line("Shareholder equity", y0.equity, true);
+  page.drawText("SAMPLE financial statements made for a software demo. Not a real company.", { x: 50, y: 60, size: 9, font: reg, color: grey });
+  return save(doc);
+}
+
+/** KS_SERVER_DEMO_FULL_FILE - the supplier's quote for the equipment being financed. */
+async function equipmentQuotePdf(): Promise<Buffer> {
+  const doc = await newDoc({ title: "Equipment quote", producer: "Sample quoting tool", creator: "Sample quoting tool", created: ISSUED, modified: ISSUED });
+  const reg = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const page = doc.addPage([612, 792]);
+  watermark(page, bold);
+  page.drawText("Timberline Machinery (SAMPLE - fictional supplier)", { x: 50, y: 740, size: 14, font: bold, color: ink });
+  page.drawText("Quote Q-2026-0417   Valid 60 days", { x: 50, y: 722, size: 10, font: reg, color: grey });
+  page.drawText(`Prepared for: ${SAMPLE_BUSINESS.legal_name} (sample business)`, { x: 50, y: 700, size: 11, font: reg, color: ink });
+  let y = 660;
+  const row = (desc: string, amount: number | string, strong = false) => {
+    const f = strong ? bold : reg;
+    page.drawText(desc, { x: 50, y, size: 10, font: f, color: ink });
+    page.drawText(typeof amount === "number" ? `${amount < 0 ? "-" : ""}$${money(Math.abs(amount))}` : amount, { x: 450, y, size: 10, font: f, color: ink });
+    y -= 18;
+  };
+  const cost = SAMPLE_REQUEST.equipment_cost, down = SAMPLE_REQUEST.down_payment;
+  const router = Math.round(cost * 0.78), dust = Math.round(cost * 0.14), install = cost - router - dust;
+  row("Item", "Price", true);
+  row("5x10 CNC router, new (2026 model), automatic tool changer", router);
+  row("Dust collection system, new, ducted to the router", dust);
+  row("Delivery, installation and operator training", install);
+  y -= 6;
+  row("Total (before tax)", cost, true);
+  row("Deposit received", -down);
+  row("Balance to be financed", cost - down, true);
+  y -= 10;
+  page.drawText("Delivery about 6 weeks from order. 2-year parts and labour warranty.", { x: 50, y, size: 10, font: reg, color: grey });
+  page.drawText("SAMPLE quote made for a software demo. Not a real supplier.", { x: 50, y: 60, size: 9, font: reg, color: grey });
   return save(doc);
 }
 
@@ -174,6 +246,8 @@ async function build(): Promise<Map<string, SampleFile>> {
     add(`bank_${s.month.replace("-", "_")}`, await statementPdf(s, s.month === DOCTORED.month));
   }
   add("financials_2025", await financialsPdf());
+  add("financials_2024", await financialsPdf(2024));
+  add("equipment_quote", await equipmentQuotePdf());
   add("void_cheque", await voidChequePdf());
   add("photo_id", await idPlaceholderPdf());
   return out;

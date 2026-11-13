@@ -43,6 +43,8 @@ export function readableCategory(category: string, count: number): string {
     case "financial_statements": return "Financial statements";
     case "government_id": return "Government ID";
     case "void_cheque": return "Void cheque";
+    case "equipment_quote": return "Equipment quote";
+    case REPORTS_FOLDER: return "";
     default: {
       const t = category.replace(/_/g, " ").trim();
       return t.charAt(0).toUpperCase() + t.slice(1);
@@ -50,12 +52,17 @@ export function readableCategory(category: string, count: number): string {
   }
 }
 
+/** KS_SERVER_DEMO_FULL_FILE - the broker's own reports (fraud pre-screen, call note, bank and financials summaries) go in
+ *  one folder, beside the document folders, not loose at the top of the package. */
+export const REPORTS_FOLDER = "broker_reports";
+
 /** The real document category each sample is filed under (the folder name in the package). */
 export const REAL_CATEGORY: Record<string, string> = {
   bank_statement: "bank_statements_6_months",
   accountant_financials: "financial_statements",
   void_cheque: "void_cheque",
   photo_id: "government_id",
+  equipment_quote: "equipment_quote",
 };
 
 export type DemoAcceptedFile = { category: string; label: string; filename: string; content: Buffer; mime_type: string };
@@ -278,12 +285,13 @@ export async function buildDemoLenderSubmission(input: {
     if (!groups.has(category)) groups.set(category, []);
     groups.get(category)!.push({ filename, content: f.content });
   }
+  groups.set(REPORTS_FOLDER, extras.map((e) => ({ filename: e.filename, content: e.content })));
   const documents: CategoryGroup[] = [...groups.keys()].sort().map((category) => ({
     category,
     files: groups.get(category)!.sort((a, b) => a.filename.localeCompare(b.filename)),
   }));
 
-  const pkg = await buildApplicationPackage({ applicationId, signedApplicationPdf, additionalSignedDocs: extras, creditSummaryPdf, fields, documents });
+  const pkg = await buildApplicationPackage({ applicationId, signedApplicationPdf, creditSummaryPdf, fields, documents });
 
   const field = (label: string) => fields.find((f) => f.label === label)?.value ?? null;
   const amount = Number(field("Requested Amount"));
@@ -293,7 +301,7 @@ export async function buildDemoLenderSubmission(input: {
     productCategory: field("Product Category") == null ? null : String(field("Product Category")),
     contents: [
       "Signed application", "Credit summary", ...extras.map((e) => EXTRA_NAMES[e.filename] ?? e.filename),
-      ...documents.filter((g) => g.files.length > 0).map((g) => readableCategory(g.category, g.files.length)),
+      ...documents.filter((g) => g.files.length > 0 && g.category !== REPORTS_FOLDER).map((g) => readableCategory(g.category, g.files.length)),
     ],
   };
   const opts = { brand: broker.company, logoUrl: null, formatSize: formatPackageSize };

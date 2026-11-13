@@ -101,9 +101,66 @@ export type SampleStatement = { month: string; label: string; opening: number; t
 
 const tx = (date: string, description: string, amount: number): SampleTx => ({ date, description, amount });
 
+// KS_SERVER_DEMO_FULL_FILE - six months of statements (a lender asks for six). April's opening is worked out below so
+// June closes exactly on July's opening; July to September are unchanged.
+const JULY_OPENING = 84_216.42;
 export const SAMPLE_STATEMENTS: SampleStatement[] = [
   {
-    month: "2026-07", label: "July 2026", opening: 84_216.42,
+    month: "2026-04", label: "April 2026", opening: 0, // set below
+    tx: [
+      tx("2026-04-02", "Customer payment - Lakeside Builders", 31_240.0),
+      tx("2026-04-03", "Payroll", -31_410.6),
+      tx("2026-04-07", "Lumber supplier - Aurora Wood Supply", -23_905.4),
+      tx("2026-04-09", "Customer payment - Westfield Homes", 38_760.0),
+      tx("2026-04-12", "Equipment loan payment", -5_400.0),
+      tx("2026-04-15", "Customer payment - Kestrel Developments", 34_115.0),
+      tx("2026-04-17", "Payroll", -31_388.25),
+      tx("2026-04-21", "Hardware and finishes - Northline Supply", -11_764.9),
+      tx("2026-04-24", "Customer payment - Riverbend Interiors", 36_890.0),
+      tx("2026-04-27", "Corporate income tax instalment", -38_000.0),
+      tx("2026-04-28", "Shop rent", -9_500.0),
+      tx("2026-04-29", "Customer payment - Westfield Homes", 29_480.0),
+      tx("2026-04-30", "Payroll", -15_702.15),
+    ],
+  },
+  {
+    month: "2026-05", label: "May 2026", opening: 0,
+    tx: [
+      tx("2026-05-04", "Customer payment - Riverbend Interiors", 35_420.0),
+      tx("2026-05-05", "Payroll", -31_512.8),
+      tx("2026-05-08", "Lumber supplier - Aurora Wood Supply", -26_318.75),
+      tx("2026-05-11", "Customer payment - Westfield Homes", 40_875.0),
+      tx("2026-05-12", "Equipment loan payment", -5_400.0),
+      tx("2026-05-14", "Customer payment - Lakeside Builders", 27_330.0),
+      tx("2026-05-19", "Payroll", -31_640.45),
+      tx("2026-05-21", "Utilities", -3_288.6),
+      tx("2026-05-25", "Customer payment - Kestrel Developments", 41_960.0),
+      tx("2026-05-26", "Shareholder dividend", -45_000.0),
+      tx("2026-05-27", "Shop rent", -9_500.0),
+      tx("2026-05-28", "Customer payment - Westfield Homes", 26_745.0),
+      tx("2026-05-29", "Payroll", -15_820.3),
+    ],
+  },
+  {
+    month: "2026-06", label: "June 2026", opening: 0,
+    tx: [
+      tx("2026-06-02", "Customer payment - Kestrel Developments", 39_610.0),
+      tx("2026-06-03", "Payroll", -31_705.5),
+      tx("2026-06-08", "Lumber supplier - Aurora Wood Supply", -25_112.35),
+      tx("2026-06-10", "Customer payment - Lakeside Builders", 30_285.0),
+      tx("2026-06-12", "Equipment loan payment", -5_400.0),
+      tx("2026-06-15", "Customer payment - Westfield Homes", 37_940.0),
+      tx("2026-06-17", "Payroll", -31_798.1),
+      tx("2026-06-22", "Hardware and finishes - Northline Supply", -12_046.8),
+      tx("2026-06-24", "Customer payment - Riverbend Interiors", 38_205.0),
+      tx("2026-06-25", "Deposit on CNC router - Timberline Machinery", -18_000.0),
+      tx("2026-06-26", "Shop rent", -9_500.0),
+      tx("2026-06-29", "Customer payment - Lakeside Builders", 28_660.0),
+      tx("2026-06-30", "Payroll", -15_911.4),
+    ],
+  },
+  {
+    month: "2026-07", label: "July 2026", opening: JULY_OPENING,
     tx: [
       tx("2026-07-02", "Customer payment - Westfield Homes", 42_300.0),
       tx("2026-07-03", "Payroll", -31_884.12),
@@ -157,6 +214,11 @@ export const SAMPLE_STATEMENTS: SampleStatement[] = [
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+// April's opening: July's opening less everything that moved in April, May and June.
+{
+  const before = SAMPLE_STATEMENTS.filter((st) => st.month < "2026-07");
+  SAMPLE_STATEMENTS[0]!.opening = round2(JULY_OPENING - before.reduce((a, st) => a + st.tx.reduce((b, t) => b + t.amount, 0), 0));
+}
 // Openings chain from the previous month's closing.
 for (let i = 1; i < SAMPLE_STATEMENTS.length; i++) {
   const prev = SAMPLE_STATEMENTS[i - 1]!;
@@ -176,10 +238,15 @@ export type SampleDoc = {
 };
 
 export const SAMPLE_DOCS: SampleDoc[] = [
+  { key: "bank_2026_04", label: "Bank statement - April 2026", category: "bank_statement", filename: "Bank-Statement-2026-04-SAMPLE.pdf", hint: "Business chequing" },
+  { key: "bank_2026_05", label: "Bank statement - May 2026", category: "bank_statement", filename: "Bank-Statement-2026-05-SAMPLE.pdf", hint: "Business chequing" },
+  { key: "bank_2026_06", label: "Bank statement - June 2026", category: "bank_statement", filename: "Bank-Statement-2026-06-SAMPLE.pdf", hint: "Business chequing" },
   { key: "bank_2026_07", label: "Bank statement - July 2026", category: "bank_statement", filename: "Bank-Statement-2026-07-SAMPLE.pdf", hint: "Business chequing" },
   { key: "bank_2026_08", label: "Bank statement - August 2026", category: "bank_statement", filename: "Bank-Statement-2026-08-SAMPLE.pdf", hint: "Business chequing" },
   { key: "bank_2026_09", label: "Bank statement - September 2026", category: "bank_statement", filename: "Bank-Statement-2026-09-SAMPLE.pdf", hint: "Business chequing" },
   { key: "financials_2025", label: "Financial statements - FY2025", category: "accountant_financials", filename: "Financials-FY2025-SAMPLE.pdf", hint: "Prepared by the accountant" },
+  { key: "financials_2024", label: "Financial statements - FY2024", category: "accountant_financials", filename: "Financials-FY2024-SAMPLE.pdf", hint: "Prepared by the accountant" },
+  { key: "equipment_quote", label: "Equipment quote - CNC router", category: "equipment_quote", filename: "Equipment-Quote-SAMPLE.pdf", hint: "From the supplier" },
   { key: "void_cheque", label: "Void cheque", category: "void_cheque", filename: "Void-Cheque-SAMPLE.pdf", hint: "For the lender's payments" },
   { key: "photo_id", label: "Photo ID (placeholder)", category: "photo_id", filename: "Photo-ID-PLACEHOLDER-SAMPLE.pdf", hint: "A placeholder - not a real ID" },
 ];
