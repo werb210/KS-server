@@ -9,6 +9,14 @@ const DEV = {
   client: "https://wonderful-island-0b68ae310.5.azurestaticapps.net",
 };
 
+/** KS_DEMO_DOMAIN - the demo portal's own Keystone address. The demo copy accepts it alongside the development
+ *  address, so the demo keeps working while the address is switched over. */
+export const DEMO_PORTAL_DOMAIN = "https://demo.keystonecrm.online";
+/** Extra origins the demo copy's portal may be opened from (empty for a brokerage with its own portal address). */
+export function portalAliases(): string[] {
+  return portalUrl() === DEV.portal || portalUrl() === DEMO_PORTAL_DOMAIN ? [DEV.portal, DEMO_PORTAL_DOMAIN].filter((u) => u !== portalUrl()) : [];
+}
+
 function first(...names: string[]): string {
   for (const name of names) {
     const v = String(process.env[name] ?? "").trim();

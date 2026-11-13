@@ -20,7 +20,7 @@ import { requireAuth } from "./middleware/auth.js";
 import { errorHandler } from "./middleware/errors.js";
 import { listRoutes } from "./debug/printRoutes.js";
 import { stripForwardedPort } from "./middleware/stripForwardedPort.js"; // BF_SERVER_v885_IP_NO_PORT (KS port)
-import { clientUrl, portalUrl, serverUrl, websiteUrl } from "./licensee/urls.js"; // KS_SERVER_v1_LICENSEE
+import { clientUrl, portalAliases, portalUrl, serverUrl, websiteUrl } from "./licensee/urls.js"; // KS_SERVER_v1_LICENSEE
 import { pool as demoPool } from "./db.js"; // KS_SERVER_v10_DEMO
 import { demoMode } from "./demo/config.js"; // KS_SERVER_v10_DEMO
 import { demoGate, mountDemo } from "./demo/index.js"; // KS_SERVER_v10_DEMO
@@ -49,6 +49,7 @@ export function createApp(opts: { tenantOps?: TenantOpsHooks } = {}) {
    */
   const defaultOrigins = [
     portalUrl(),
+    ...portalAliases(), // KS_DEMO_DOMAIN - demo.keystonecrm.online alongside the development address
     clientUrl(),
     websiteUrl(),
     "http://localhost:3000",
@@ -65,7 +66,7 @@ export function createApp(opts: { tenantOps?: TenantOpsHooks } = {}) {
     const cors = process.env.CORS_ALLOWED_ORIGINS;
     const list = typeof cors === "string" && cors.length > 0
       ? cors.split(",").map((o) => o.trim()).filter(Boolean)
-      : [portalUrl(), clientUrl(), websiteUrl()];
+      : [portalUrl(), ...portalAliases(), clientUrl(), websiteUrl()];
     return list.includes(origin);
   };
   // BF_SERVER_CORS_LOCAL_PREVIEW_v1 - allow the native app (capacitor://localhost)
