@@ -8,7 +8,7 @@ import { PDFDocument } from "pdf-lib";
 import { buildSampleFilesUncached, sampleFiles } from "../samples.js";
 import { scanDemoDocument } from "../fraud.js";
 import { pdfTextLines, statementRowsFromLines } from "../pdfText.js";
-import { DEMO_STEPS, DOCTORED, SAMPLE_DOCS, SAMPLE_FINANCIALS, SAMPLE_BUSINESS, SAMPLE_CONTACT, SAMPLE_REQUEST } from "../fixture.js";
+import { DEMO_STEPS, DOCTORED, SAMPLE_DOCS, SAMPLE_STATEMENTS, SAMPLE_FINANCIALS, SAMPLE_BUSINESS, SAMPLE_CONTACT, SAMPLE_REQUEST } from "../fixture.js";
 import { applyWalkthrough, completeByAction } from "../walkthrough.js";
 import type { ApplicationRow, DocumentRow, Walkthrough } from "../repo.js";
 import { matchLenders } from "../lenders.js";
@@ -154,7 +154,7 @@ describe("lender match, credit summary and package", () => {
     expect(s.banking.statements_used).toHaveLength(2);
     expect(s.banking.avg_monthly_deposits).toBeGreaterThan(150_000);
     expect(s.documents.flagged.map((f) => f.label)).toEqual(["Bank statement - September 2026"]);
-    expect(s.documents.missing).toEqual(["Void cheque", "Photo ID (placeholder)"]);
+    expect(s.documents.missing).toEqual(["Bank statement - April 2026", "Bank statement - May 2026", "Bank statement - June 2026", "Financial statements - FY2024", "Equipment quote - CNC router", "Void cheque", "Photo ID (placeholder)"]);
     expect(s.recommendation).toMatch(/subject to the original September statement/);
     const accepted = buildCreditSummary(app(), await docRows({ bank_2026_09: "accepted" }));
     expect(accepted.recommendation).toMatch(/^Hold/);
@@ -177,9 +177,11 @@ describe("lender match, credit summary and package", () => {
     expect(creditSummaryGoesToLenders(SAMPLE_REQUEST.amount, true)).toBe(false);
     const biz = SAMPLE_BUSINESS.legal_name;
     expect(sub.entries).toEqual([
-      "signed-application.pdf", ...DEMO_EXTRAS, "credit-summary.pdf", "application-fields.json", "application-fields.pdf",
+      "signed-application.pdf", "credit-summary.pdf", "application-fields.json", "application-fields.pdf",
       `bank_statements_6_months/${biz} - Bank Statement - August 2026.pdf`,
       `bank_statements_6_months/${biz} - Bank Statement - July 2026.pdf`,
+      // KS_SERVER_DEMO_FULL_FILE - the broker's reports in their own folder
+      ...[...DEMO_EXTRAS].sort().map((f) => `broker_reports/${f}`),
       `financial_statements/${biz} - Financial Statements - FY2025.pdf`,
       `government_id/${biz} - Government ID.pdf`,
     ]);
@@ -189,7 +191,6 @@ describe("lender match, credit summary and package", () => {
     expect(fields).toMatchObject({ "Application ID": appId, "Application Name": biz, "Requested Amount": 250_000, "Product Category": "EQUIPMENT", "business.legalName": biz, "applicant.firstName": "Sam", "kyc.lookingFor": "EQUIPMENT" });
     const real = await buildApplicationPackage({
       applicationId: appId, signedApplicationPdf: Buffer.from("%PDF-"), creditSummaryPdf: Buffer.from("%PDF-"),
-      additionalSignedDocs: DEMO_EXTRAS.map((filename) => ({ filename, content: Buffer.from("%PDF-") })),
       fields: Object.entries(fields).map(([label, value]) => ({ label, value: value as string })),
       documents: Object.values(zip.files).filter((f) => f.name.includes("/")).reduce<Array<{ category: string; files: { filename: string; content: Buffer }[] }>>((acc, f) => {
         const [category, filename] = f.name.split("/") as [string, string];
@@ -263,25 +264,25 @@ describe("lender match, credit summary and package", () => {
     expect(cs).toMatch(/Juniper Hollow Millwork Ltd\./);
     expect(cs).toContain("Big Broker");
     expect(cs).toMatch(/DSCR/);
-    const pre = await text("fraud-prescreen.pdf");
+    const pre = await text("broker_reports/fraud-prescreen.pdf");
     expect(pre).toContain(`Fraud score: ${DEMO_FRAUD_SCORE} / 100 (high risk)`);
     expect(pre).toMatch(/Bank statement - September 2026/);
     expect(pre).toContain(SAMPLE_FOOTER);
-    const note = await text("client-intake-call-note.pdf");
+    const note = await text("broker_reports/client-intake-call-note.pdf");
     expect(note).toMatch(/Client intake call note/);
     expect(note).toContain(CALL_SUMMARY.headline);
     expect(note).toMatch(/Dana Broker: Hi Sam, thanks for calling/);
     expect(note).toMatch(/Sam Carter: Great\./);
-    const bank = await text("bank-summary.pdf");
+    const bank = await text("broker_reports/bank-summary.pdf");
     expect(bank).toMatch(/Bank summary/);
     expect(bank).toMatch(/September 2026.*rejected, failed fraud check/);
     expect(bank).toMatch(/July 2026.*accepted, passed/);
-    const fin = await text("financials-summary.pdf");
+    const fin = await text("broker_reports/financials-summary.pdf");
     expect(fin).toMatch(/Revenue\s+\$2,140,000\s+\$1,860,000/);
     expect(fin).toMatch(/Debt service coverage/);
     // Every demo-made page is dark text at 10 pt or more (the real application fields page is 10 pt as well).
     for (const name of DEMO_EXTRAS) {
-      const raw = Buffer.from(await PDFDocument.load(await zip.file(name)!.async("nodebuffer")).then((d) => d.save({ useObjectStreams: false }))).toString("latin1");
+      const raw = Buffer.from(await PDFDocument.load(await zip.file(`broker_reports/${name}`)!.async("nodebuffer")).then((d) => d.save({ useObjectStreams: false }))).toString("latin1");
       expect(raw).not.toMatch(/\b1 1 1 rg\b/);
     }
     // The email: readable names, in package order, and a KB size.
@@ -291,6 +292,35 @@ describe("lender match, credit summary and package", () => {
     expect(formatPackageSize(36_000)).toBe("35 KB");
     expect(formatPackageSize(100)).toBe("1 KB");
     expect(formatPackageSize(3 * 1024 * 1024)).toBe("3.0 MB");
+  });
+
+  it("KS_SERVER_DEMO_FULL_FILE a fully accepted file makes a full package: six statements, two years, the quote, every report", async () => {
+    const docs = await docRows(Object.fromEntries(SAMPLE_DOCS.map((d) => [d.key, "accepted"])) as Record<string, "accepted">);
+    const files = await sampleFiles();
+    const accepted = docs.map((d) => ({ category: d.category, label: d.label, filename: d.filename, content: files.get(d.sample_key)!.bytes, mime_type: d.mime_type }));
+    const sub = await buildDemoLenderSubmission({
+      applicationId: "0b6c1f0e-6666-4666-8666-666666666666", app: app(), summary: buildCreditSummary(app(), docs),
+      broker: { name: "Dana Broker", company: "Prairie Capital", email: "dana@prairie.example" }, lenderName: "Aspen Ridge Capital",
+      accepted, submittedAt: new Date("2026-10-24T16:00:00Z"), documents: docs,
+    });
+    const folder = (f: string) => sub.entries.filter((e) => e.startsWith(`${f}/`));
+    expect(sub.entries.slice(0, 4)).toEqual(["signed-application.pdf", "credit-summary.pdf", "application-fields.json", "application-fields.pdf"]);
+    expect(folder("bank_statements_6_months")).toHaveLength(6);
+    expect(folder("financial_statements").map((e) => e.replace(/^.* - /, ""))).toEqual(["FY2024.pdf", "FY2025.pdf"]);
+    expect(folder("equipment_quote")).toHaveLength(1);
+    expect(folder("government_id")).toHaveLength(1);
+    expect(folder("void_cheque")).toHaveLength(1);
+    expect(folder("broker_reports")).toHaveLength(4);
+    expect(sub.entries.filter((e) => !e.includes("/"))).toHaveLength(4); // nothing else loose at the top
+    expect(sub.email.text).toContain("- Bank statements (6 months)");
+    expect(sub.email.text).toContain("- Equipment quote");
+    // The statements run on from one another, and never below zero.
+    for (let i = 1; i < SAMPLE_STATEMENTS.length; i++) {
+      const p = SAMPLE_STATEMENTS[i - 1]!;
+      expect(SAMPLE_STATEMENTS[i]!.opening).toBeCloseTo(p.opening + p.tx.reduce((a, t) => a + t.amount, 0), 2);
+    }
+    expect(SAMPLE_STATEMENTS.map((st) => st.month)).toEqual(["2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"]);
+    for (const st of SAMPLE_STATEMENTS) { let b = st.opening; for (const t of st.tx) { b += t.amount; expect(b).toBeGreaterThan(0); } }
   });
 
   it("KS_SERVER_v13 the demo fraud score is the walkthrough's 72 only when a document failed", async () => {
