@@ -211,7 +211,7 @@ describe("KS v10 demo (real Postgres)", () => {
     const zip = await JSZip.loadAsync(pkg.body as Buffer);
     const names = Object.keys(zip.files).filter((n) => !zip.files[n]!.dir);
     // KS_SERVER_v13_DEMO_SHOW_EVERYTHING - the demo package also carries the walkthrough's pages and the credit summary.
-    expect(names.filter((n) => !n.includes("/"))).toEqual(["signed-application.pdf", "credit-summary.pdf", "application-fields.json", "application-fields.pdf"]);
+    expect(names.filter((n) => !n.includes("/"))).toEqual(["application-signed.pdf", "credit-summary.pdf", "application-fields.json", "application-fields.pdf"]);
     // KS_SERVER_DEMO_FULL_FILE - the broker's reports sit in their own folder, and the file is a full one.
     expect(names.filter((n) => n.startsWith("broker_reports/")).sort()).toEqual(["bank-summary.pdf", "client-intake-call-note.pdf", "financials-summary.pdf", "fraud-prescreen.pdf"].map((f) => `broker_reports/${f}`));
     expect(names.filter((n) => n.startsWith("bank_statements_6_months/"))).toHaveLength(5);
@@ -219,7 +219,7 @@ describe("KS v10 demo (real Postgres)", () => {
     expect(names.filter((n) => n.startsWith("equipment_quote/"))).toHaveLength(1);
     expect(names.filter((n) => n.includes("/")).length).toBeGreaterThanOrEqual(4); // the accepted sample files, by category
     expect(names.some((n) => n.startsWith("bank_statements_6_months/"))).toBe(true);
-    const signed = await PDFDocument.load(await zip.file("signed-application.pdf")!.async("nodebuffer"));
+    const signed = await PDFDocument.load(await zip.file("application-signed.pdf")!.async("nodebuffer"));
     expect(signed.getPageCount()).toBeGreaterThanOrEqual(1);
     expect((await request(app()).get("/api/demo/staff/package").set(auth(B.staff))).status).toBe(404);
     const st = (await request(app()).get("/api/demo/staff/state").set(h)).body;

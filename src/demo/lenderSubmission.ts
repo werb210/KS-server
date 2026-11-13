@@ -2,7 +2,7 @@
 // submission code, so the prospect gets exactly what their lender would:
 //
 //   the package    buildApplicationPackage() (src/services/lenders/buildApplicationPackage.ts): one .zip holding
-//                  signed-application.pdf, [credit-summary.pdf], application-fields.json, application-fields.pdf and
+//                  application-signed.pdf, [credit-summary.pdf], application-fields.json, application-fields.pdf and
 //                  the accepted documents filed in one folder per document category.
 //   the email      lenderEmailSubject() + lenderEmail() (src/services/lenders/lenderEmail.ts), the body Graph sends
 //                  (graphMessageBody: the HTML, then the deal owner's signature), and the zip attached as
