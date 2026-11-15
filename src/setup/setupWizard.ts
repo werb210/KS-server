@@ -42,6 +42,7 @@ export type Facts = {
   sender: boolean; // the company's mailing address and reply email (the marketing email footer)
   websiteKit: boolean; // a lead form, or the website addresses for the kit
   campaign: boolean; // a campaign this person sent
+  ssoOn: boolean; // KS_SETUP_SIGN_IN_STEP_v1 - Sign in with Google or Microsoft is switched on for the team
   clientLanguages: boolean; // KS_CLIENT_LANGUAGES_v1 - the client app offers French or Spanish as well as English
 };
 
@@ -61,7 +62,7 @@ export type StepDef = {
   externalUrl?: () => string;
 };
 
-type Ctx = { payments: boolean };
+type Ctx = { payments: boolean; sso?: boolean };
 
 export function adminSteps(ctx: Ctx): StepDef[] {
   return [
@@ -104,6 +105,13 @@ export function adminSteps(ctx: Ctx): StepDef[] {
       why: "Approve it once for your company, then connect your own email and calendar.",
       detect: (f) => f.ownGoogle || (f.ownMicrosoft && f.companyMicrosoft),
     },
+    // KS_SETUP_SIGN_IN_STEP_v1 - one-click sign-in for the team, offered in set-up (never at sign-up). Shown when the
+    // plan includes single sign-on; optional, and a text code always still works.
+    ...(ctx.sso ? [{
+      key: "sign_in", title: "Let your team sign in with Google or Microsoft", link: "/settings/sign-in", help: "sign-in-to-keystone", optional: true,
+      why: "Optional. Your team can sign in with the Google or Microsoft account they already use, as well as a text code.",
+      detect: (f: Facts) => f.ssoOn, manual: true,
+    } as StepDef] : []),
     {
       key: "lenders", title: "Add your lenders and products", link: "/lenders", help: "add-lenders-and-products",
       why: "Applications are matched to the lenders and products you add.",
@@ -217,7 +225,7 @@ export function stepsFor(role: WizardRole, ctx: Ctx): StepDef[] {
 }
 
 const NO_FACTS: Facts = {
-  profile: false, signature: false, bookingLink: false, ownMicrosoft: false, ownGoogle: false, companyMicrosoft: false,
+  profile: false, signature: false, bookingLink: false, ownMicrosoft: false, ownGoogle: false, companyMicrosoft: false, ssoOn: false,
   brand: false, clientLanguages: false, team: false, phoneNumber: false, lender: false, imported: false, myContacts: 0, stripe: false,
   quickbooks: false, application: false, myApplication: false, dialler: false, sender: false, websiteKit: false, campaign: false,
 };
@@ -235,7 +243,7 @@ const yes = (rows: any[]) => rows.length > 0 && rows[0]?.ok === true;
 
 /** Which facts a role's list needs, so a Broker does not read company-wide tables it never shows. */
 const FACTS_FOR: Record<WizardRole, ReadonlyArray<keyof Facts>> = {
-  admin: ["profile", "brand", "clientLanguages", "team", "phoneNumber", "ownMicrosoft", "ownGoogle", "companyMicrosoft", "lender", "imported", "stripe", "quickbooks", "application"],
+  admin: ["profile", "brand", "clientLanguages", "team", "phoneNumber", "ownMicrosoft", "ownGoogle", "companyMicrosoft", "ssoOn", "lender", "imported", "stripe", "quickbooks", "application"],
   broker: ["profile", "signature", "bookingLink", "ownMicrosoft", "ownGoogle", "dialler", "myContacts", "myApplication"],
   marketing: ["profile", "ownMicrosoft", "ownGoogle", "sender", "websiteKit", "imported", "myContacts", "campaign"],
 };
@@ -259,6 +267,8 @@ export async function detectFacts(db: Q, userId: string, role: WizardRole): Prom
     companyMicrosoft: () => fact(db, "companyMicrosoft",
       `SELECT (COALESCE(btrim(office365_tenant_id), '') <> '' OR COALESCE(m365_consent->>'tenant_id', '') <> '') AS ok
          FROM licensee_settings WHERE id = 1`, [], yes, false),
+    ssoOn: () => fact(db, "ssoOn",
+      `SELECT (microsoft_enabled OR google_enabled) AS ok FROM sso_settings WHERE id = 1`, [], yes, false),
     clientLanguages: () => fact(db, "clientLanguages",
       `SELECT (COALESCE(client_languages, '') LIKE '%,%') AS ok FROM licensee_settings WHERE id = 1`, [], yes, false),
     brand: () => fact(db, "brand",
@@ -331,7 +341,7 @@ async function readProgress(db: Q, userId: string): Promise<Map<string, "done" |
 async function contextFor(db: Q, role: WizardRole): Promise<Ctx> {
   if (role !== "admin") return { payments: false };
   const state = await getPlanState(db);
-  return { payments: checkFeature(state, "payment_links").allowed };
+  return { payments: checkFeature(state, "payment_links").allowed, sso: checkFeature(state, "sso").allowed };
 }
 
 export async function buildWizard(db: Q, userId: string, rawRole: unknown): Promise<Wizard> {
