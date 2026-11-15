@@ -1,7 +1,7 @@
 // KS_SERVER_SSO_API_KEYS - the brokerage's SSO settings (sso_settings, one row) and what is actually offered.
 //
-// A provider is offered on the sign-in page only when all three hold: the plan (or a running trial) includes "sso",
-// the server has that provider's app registration (env vars), and an Admin has switched it on. "Require SSO" only
+// A provider is offered on the sign-in page when the server has that provider's app registration (env vars) and it has
+// not been switched off (on by default, on every plan - KS_SERVER_SSO_EVERY_PLAN_v1). "Require SSO" only
 // bites while at least one provider is offered - so a plan downgrade or a missing env var can never lock staff out.
 // Admins can always still sign in with a text code or a passkey (break-glass).
 import { logWarnSwallowed } from "../lib/logWarnSwallowed.js";
@@ -17,9 +17,15 @@ export type SsoSettings = {
   require_sso: boolean;
 };
 
+// KS_SERVER_SSO_EVERY_PLAN_v1 - a brokerage that has never saved a choice offers "Sign in with Google" and "Sign in
+// with Microsoft" on every plan (like the sign-up page does). Signing in still needs the email to be one of the
+// brokerage's own staff, verified by the provider. Limiting to a domain or tenant, and requiring single sign-on, stay
+// with the plan feature.
 export const DEFAULT_SSO_SETTINGS: SsoSettings = {
-  microsoft_enabled: false, google_enabled: false, microsoft_tenant_id: "", google_hosted_domain: "", require_sso: false,
+  microsoft_enabled: true, google_enabled: true, microsoft_tenant_id: "", google_hosted_domain: "", require_sso: false,
 };
+/** Everything off: used when the settings cannot be read, so a failure never opens or locks anything. */
+export const SSO_OFF: SsoSettings = { ...DEFAULT_SSO_SETTINGS, microsoft_enabled: false, google_enabled: false };
 
 export function rowToSsoSettings(row: Record<string, unknown> | null | undefined): SsoSettings {
   if (!row) return { ...DEFAULT_SSO_SETTINGS };
@@ -92,10 +98,10 @@ export function ssoAvailability(planAllows: boolean, settings: SsoSettings, e: N
   for (const p of SSO_PROVIDERS) {
     const configured = providerConfig(p, e) !== null;
     const enabled = p === "microsoft" ? settings.microsoft_enabled : settings.google_enabled;
-    providers[p] = { configured, enabled, available: planAllows && configured && enabled };
+    providers[p] = { configured, enabled, available: configured && enabled };
   }
   const anyAvailable = SSO_PROVIDERS.some((p) => providers[p].available);
-  return { plan_allows: planAllows, providers, require_sso: settings.require_sso && anyAvailable, settings };
+  return { plan_allows: planAllows, providers, require_sso: planAllows && settings.require_sso && anyAvailable, settings };
 }
 
 /** Reads the plan and the settings. Any read failure is logged and treated as "SSO off" (never locks anyone out). */
@@ -107,7 +113,7 @@ export async function loadSsoAvailability(db: Q, e: NodeJS.ProcessEnv = process.
     settings = await readSsoSettings(db);
   } catch (err) {
     logWarnSwallowed(err, "sso/settings.ts:loadSsoAvailability");
-    return ssoAvailability(false, { ...DEFAULT_SSO_SETTINGS }, e);
+    return ssoAvailability(false, { ...SSO_OFF }, e);
   }
   return ssoAvailability(planAllows, settings, e);
 }

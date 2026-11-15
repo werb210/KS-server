@@ -116,14 +116,16 @@ async function startAndCallback() {
 }
 
 describe("GET /api/auth/sso/config", () => {
-  it("shows a provider only when the plan, the server set-up and the Admin switch all allow it", async () => {
+  it("shows a provider on every plan when the server is set up for it and it has not been switched off", async () => {
     expect((await request(app).get("/api/auth/sso/config")).body).toMatchObject({ google: true, microsoft: false });
     delete process.env.GOOGLE_OAUTH_CLIENT_ID;
     expect((await request(app).get("/api/auth/sso/config")).body).toMatchObject({ google: false });
     process.env.GOOGLE_OAUTH_CLIENT_ID = "g-client";
     clearPlanCache();
     db.plan = "growth";
-    expect((await request(app).get("/api/auth/sso/config")).body).toMatchObject({ google: false, require_sso: false });
+    expect((await request(app).get("/api/auth/sso/config")).body).toMatchObject({ google: true, require_sso: false });
+    db.settings.google_enabled = false;
+    expect((await request(app).get("/api/auth/sso/config")).body).toMatchObject({ google: false });
   });
   it("a growth brokerage on its trial gets Pro features, SSO included", async () => {
     db.plan = "growth";
@@ -190,10 +192,13 @@ describe("sign-in flow", () => {
     expect(cb.headers.location).toContain("sso_error=wrong_domain");
   });
 
-  it("refuses once the plan drops below Pro", async () => {
+  it("works on every plan; refuses once an Admin switches the provider off", async () => {
     db.plan = "starter";
     const r = await request(app).get("/api/auth/sso/google/start");
-    expect(r.headers.location).toContain("sso_error=sso_off");
+    expect(new URL(r.headers.location).origin).toBe("https://accounts.google.com");
+    db.settings.google_enabled = false;
+    const off = await request(app).get("/api/auth/sso/google/start");
+    expect(off.headers.location).toContain("sso_error=sso_off");
   });
 });
 
@@ -204,6 +209,13 @@ describe("require SSO for staff", () => {
     expect(await ssoRequiredFor(pool as any, "Admin")).toBe(false);
     delete process.env.GOOGLE_OAUTH_CLIENT_ID;
     expect(await ssoRequiredFor(pool as any, "Staff")).toBe(false);
+  });
+  it("requiring single sign-on stays a plan feature: off below Pro even though the buttons still show", async () => {
+    db.settings.require_sso = true;
+    clearPlanCache();
+    db.plan = "growth";
+    expect(await ssoRequiredFor(pool as any, "Staff")).toBe(false);
+    expect((await request(app).get("/api/auth/sso/config")).body).toMatchObject({ google: true, require_sso: false });
   });
   it("staffRefusal: deactivated, disabled, deleted and non-staff users are refused", () => {
     const base = { id: "u", role: "Staff", active: true, disabled: false, deleted_at: null, status: "ACTIVE" };
