@@ -67,6 +67,7 @@ export const INTEGRATION_TEST_FILES: string[] = [
   "src/__tests__/dialerPolish.v831.integration.test.ts", // BF_SERVER_v831_DIALER_POLISH - needs Postgres
   "src/__tests__/importFixes.v834.integration.test.ts", // BF_SERVER_v834_IMPORT_FIXES - needs Postgres
   "src/__tests__/marketingUnsubscribe.ks.integration.test.ts", // KS_SERVER_MARKETING_UNSUBSCRIBE - needs Postgres
+  "src/__tests__/starterCatalogue.ks.integration.test.ts", // KS_SERVER_STARTER_CATALOGUE - needs Postgres
   "src/__tests__/activeContracts.ks.integration.test.ts", // KS_SERVER_ACTIVE_CONTRACTS - needs Postgres
   "src/__tests__/aiChatFlow.v784.integration.test.ts", // BF_SERVER_v784_CHAT_SCHEMA - needs Postgres
   "src/__tests__/workflowEngine.v786.integration.test.ts", // BF_SERVER_v786_WORKFLOW_GRAPH - needs Postgres

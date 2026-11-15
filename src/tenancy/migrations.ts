@@ -16,6 +16,14 @@ const defaultMigrator: Migrator = async (pool) => {
   const { runMigrations } = await import("../startup/runMigrations.js");
   await runMigrations(pool);
   await prepareDatabase(pool, { beforeMigrations: false });
+  // KS_SERVER_STARTER_CATALOGUE - a brokerage with no lenders gets the starter list once, so its clients can apply.
+  try {
+    const { seedStarterCatalogue } = await import("./starterCatalogue.js");
+    const n = await seedStarterCatalogue(pool as any);
+    if (n) console.log("[tenancy] starter list added", { products: n });
+  } catch (err) {
+    console.warn("[tenancy] starter list not added", { message: err instanceof Error ? err.message : String(err) });
+  }
 };
 let migrator: Migrator = defaultMigrator;
 
