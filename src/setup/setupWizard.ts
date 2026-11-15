@@ -88,7 +88,7 @@ export function adminSteps(ctx: Ctx): StepDef[] {
     },
     {
       key: "phone", title: "Get your phone number", link: "/settings/phone", help: "get-phone-numbers",
-      why: "Calls and texts to clients come from your business number.",
+      why: "Add your business address, then calls and texts to clients come from your business number.",
       detect: (f) => f.phoneNumber,
     },
     // KS_SERVER_NUMBER_PORTING_v1 - each person keeps the new Keystone number (the default: nothing to do) or keeps the
