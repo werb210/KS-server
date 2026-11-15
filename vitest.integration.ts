@@ -19,6 +19,7 @@
 // rots. Adding a file here has to be a decision someone makes on purpose.
 export const INTEGRATION_TEST_FILES: string[] = [
   "src/storeReview/__tests__/storeReviewSeed.integration.test.ts", // KS_SERVER_STORE_REVIEW_SEED_v1 - needs Postgres
+  "src/__tests__/pipelineNames.ks.integration.test.ts", // PIPELINE_NAME_FROM_APPLICATION - needs Postgres
   "src/__tests__/idAskedOnce.integration.test.ts", // an identity check covers the Government ID item - needs Postgres
   "src/__tests__/requestedDocAfterDrop.integration.test.ts", // a hand-requested document survives the rule that dropped it - needs Postgres
   "src/__tests__/mayaReports.ks1.integration.test.ts", // KS_SERVER_MAYA_REPORTS_v1 - needs Postgres
