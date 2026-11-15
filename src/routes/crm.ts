@@ -546,7 +546,8 @@ router.get("/contacts", safeHandler(async (req: any, res: any) => {
       c.created_at,
       c.silo,
       c.custom_fields,
-      COALESCE(c.marketing_contact, true) AS marketing_contact
+      COALESCE(c.marketing_contact, true) AS marketing_contact,
+      COALESCE(c.marketing_opt_out, false) AS marketing_opt_out
     FROM contacts c
     LEFT JOIN companies co ON ${hasCompanyId ? "c.company_id = co.id" : "false"}
     LEFT JOIN users u ON ${hasOwnerId ? "c.owner_id = u.id" : "false"}
@@ -1133,13 +1134,14 @@ router.get('/contacts/marketing-summary', safeHandler(async (req: any, res: any)
   const c = await pool.query(
     `SELECT count(*)::int AS total,
             count(*) FILTER (WHERE COALESCE(c.marketing_contact, true))::int AS marketing,
+            count(*) FILTER (WHERE COALESCE(c.marketing_opt_out, false))::int AS unsubscribed,
             count(*) FILTER (WHERE ${EMAIL_BLAST_ELIGIBLE_SQL})::int AS emailable
        FROM contacts c WHERE c.silo = $1 AND coalesce(c.status, 'active') <> 'archived' AND c.merged_into_id IS NULL`,
     [silo]);
   const { campaignEmailBudget } = await import("../plans/marketingGate.js");
   const budget = await campaignEmailBudget(pool as any);
   const row = c.rows[0] ?? {};
-  res.json({ ok: true, total: Number(row.total ?? 0), marketing: Number(row.marketing ?? 0), emailable: Number(row.emailable ?? 0), budget });
+  res.json({ ok: true, total: Number(row.total ?? 0), marketing: Number(row.marketing ?? 0), unsubscribed: Number(row.unsubscribed ?? 0), emailable: Number(row.emailable ?? 0), budget });
 }));
 
 router.get("/contacts/:id", safeHandler(async (req: any, res: any) => {
@@ -1198,6 +1200,11 @@ router.patch("/contacts/:id", requireCrmWrite, safeHandler(async (req: any, res:
   }
   // KS_SERVER_MARKETING_CONTACTS_v1 - the "Marketing contact" yes/no.
   if (typeof req.body?.marketing_contact === "boolean") {
+    // KS_SERVER_MARKETING_UNSUBSCRIBE - someone who unsubscribed cannot be put back.
+    if (req.body.marketing_contact === true && /^[0-9a-f-]{36}$/i.test(id)) {
+      const o = await pool.query(`SELECT COALESCE(marketing_opt_out, false) AS out FROM contacts WHERE id = $1`, [id]);
+      if (o.rows[0]?.out === true) return res.status(409).json({ error: "unsubscribed", message: "This contact unsubscribed from marketing, so they cannot be made a marketing contact." });
+    }
     updates.push(`marketing_contact = $${i++}`);
     params.push(req.body.marketing_contact);
   }
@@ -1807,6 +1814,7 @@ router.post('/contacts/bulk-marketing', requireCrmWrite, safeHandler(async (req:
     const out = await pool.query(
       `UPDATE contacts c SET marketing_contact = $2, updated_at = now()
         WHERE c.silo = $1 AND COALESCE(c.marketing_contact, true) <> $2
+          AND ($2 = false OR COALESCE(c.marketing_opt_out, false) = false)
           AND EXISTS (SELECT 1 FROM unnest(coalesce(c.tags, '{}'::text[])) t WHERE bf_norm_tag(t) = ANY(SELECT bf_norm_tag(x) FROM unnest($3::text[]) x))
           AND ${scopeSql}`,
       values);
@@ -1814,8 +1822,11 @@ router.post('/contacts/bulk-marketing', requireCrmWrite, safeHandler(async (req:
   }
   const selected = await visibleSelection(req, "contact");
   if (!selected.length) return res.json({ updated: 0 });
-  const out = await pool.query(`UPDATE contacts SET marketing_contact = $2, updated_at = now() WHERE id = ANY($1::uuid[]) AND silo = $3`, [selected, marketing, silo]);
-  res.json({ updated: out.rowCount ?? 0 });
+  const out = await pool.query(
+    `UPDATE contacts SET marketing_contact = $2, updated_at = now()
+      WHERE id = ANY($1::uuid[]) AND silo = $3 AND ($2 = false OR COALESCE(marketing_opt_out, false) = false)`,
+    [selected, marketing, silo]);
+  res.json({ updated: out.rowCount ?? 0, skipped_unsubscribed: marketing ? selected.length - (out.rowCount ?? 0) : 0 });
 }));
 
 router.post('/companies/bulk-delete', safeHandler(async (req: any, res: any) => {
