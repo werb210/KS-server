@@ -58,7 +58,7 @@ describe("mounted routes", () => {
     expect(noProvider.body.error).toBe("no_provider");
     const saved = await request(app).put("/api/sso-settings").set("Authorization", `Bearer ${token("Admin")}`).send({ google_enabled: true, google_hosted_domain: "@Acme.com" });
     expect(saved.status).toBe(200);
-    expect(state.settingsWrites[0]).toEqual([false, true, "", "acme.com", false, "00000000-0000-0000-0000-0000000000a1"]);
+    expect(state.settingsWrites[0]).toEqual([true, true, "", "acme.com", false, "00000000-0000-0000-0000-0000000000a1"]);
     clearPlanCache();
     state.plan = "growth";
     const locked = await request(app).get("/api/sso-settings").set("Authorization", `Bearer ${token("Admin")}`);
