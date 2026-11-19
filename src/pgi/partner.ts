@@ -9,7 +9,7 @@
 // derived from JWT_SECRET.
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
-export const PGI_PARTNER_NAME = "Boreal Insurance";
+export const PGI_PARTNER_NAME = "Boreal Risk Management"; // the insurance brand never says "insure"
 export const PGI_REFERRAL_FEE_RATE = 0.2;
 
 function key(env: NodeJS.ProcessEnv = process.env): Buffer {
