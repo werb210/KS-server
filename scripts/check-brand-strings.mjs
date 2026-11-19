@@ -31,7 +31,7 @@ export const ALLOW = {
   // notification category identifier the Boreal-built mobile apps register
   "src/services/push/pushCategories.ts": ["BOREAL_NOTIFICATION_CLICK"],
   // KS_SERVER_v11_PGI - the insurance partner Keystone refers PGI to, named on purpose (one constant)
-  "src/pgi/partner.ts": ["Boreal Insurance"],
+  "src/pgi/partner.ts": ["Boreal Risk Management"],
 };
 
 const TEST_FILE = /(^|\/)(__tests__|tests?)\/|\.(test|spec)\.[cm]?[jt]sx?$/;
