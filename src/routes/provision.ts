@@ -81,8 +81,8 @@ export async function createFirstAdmin(q: Q, input: { name?: unknown; email?: un
   if (existing.rows[0]) return { ok: true, created: false, user_id: String(existing.rows[0].id), role: existing.rows[0].role ?? null };
   const id = randomUUID();
   const inserted = await q.query(
-    `INSERT INTO users (id, email, phone_number, phone, role, active, is_active, disabled, phone_verified, status, first_name, last_name)
-     VALUES ($1, $2, $3, $3, $4, true, true, false, false, 'ACTIVE', $5, $6)
+    `INSERT INTO users (id, email, phone_number, phone, role, active, is_active, disabled, phone_verified, status, first_name, last_name, silo, silos)
+     VALUES ($1, $2, $3, $3, $4, true, true, false, false, 'ACTIVE', $5, $6, 'BF', ARRAY['BF']::text[])
      ON CONFLICT DO NOTHING
      RETURNING id`,
     [id, email, phone, ROLES.ADMIN, first || null, last || null],
@@ -130,8 +130,8 @@ export async function createTeamUser(q: Q, input: { name?: unknown; email?: unkn
   if (existing.rows[0]) return { email, status: "existing", user_id: String(existing.rows[0].id), role: existing.rows[0].role ?? null };
   const id = randomUUID();
   const inserted = await q.query(
-    `INSERT INTO users (id, email, phone_number, phone, role, active, is_active, disabled, phone_verified, status, first_name, last_name)
-     VALUES ($1, $2, $3, $3, $4, true, true, false, false, 'ACTIVE', $5, $6)
+    `INSERT INTO users (id, email, phone_number, phone, role, active, is_active, disabled, phone_verified, status, first_name, last_name, silo, silos)
+     VALUES ($1, $2, $3, $3, $4, true, true, false, false, 'ACTIVE', $5, $6, 'BF', ARRAY['BF']::text[])
      ON CONFLICT DO NOTHING
      RETURNING id`,
     [id, email, phone, role, first || null, last || null],

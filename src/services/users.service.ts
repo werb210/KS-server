@@ -69,6 +69,12 @@ const createUserSchema = z.object({
   lenderId: z.guid().optional(),
   silo: z.enum(["BF"]).optional(),
   silos: z.array(z.enum(["BF"])).optional(),
+  // KS_SERVER_TEAM_LIST_v1 - the portal's Add user sends the name; it was dropped here, so new people showed as their
+  // email address ("test.broker") until they finished their own profile.
+  first_name: z.string().trim().max(100).optional(),
+  last_name: z.string().trim().max(100).optional(),
+  firstName: z.string().trim().max(100).optional(),
+  lastName: z.string().trim().max(100).optional(),
 });
 
 type UserRecord = {
@@ -282,7 +288,9 @@ export async function listUsers(req: Request, res: Response) {
   const values: any[] = [];
   let idx = 1;
 
-  filters.push(`(silo = $${idx} OR $${idx} = ANY(silos))`);
+  // KS_SERVER_TEAM_LIST_v1 - an Admin sees every silo, and a person with no silo yet (the brokerage owner made at
+  // set-up) still belongs to the team: the owner was missing from their own Team and roles list.
+  filters.push(`(silo = $${idx} OR $${idx} = ANY(silos) OR silo IS NULL OR role = 'Admin')`);
   values.push(silo);
   idx++;
 
@@ -493,7 +501,12 @@ export async function createUser(req: Request, res: Response) {
     };
     const user = await createUserAccount(createPayload);
 
-    await db.query(`UPDATE users SET silo = $1, silos = $2 WHERE id = $3`, [requestedSilo, requestedSilos, (user as any).id]);
+    const firstName = (parsed.first_name ?? parsed.firstName ?? "").trim() || null; // KS_SERVER_TEAM_LIST_v1
+    const lastName = (parsed.last_name ?? parsed.lastName ?? "").trim() || null;
+    await db.query(
+      `UPDATE users SET silo = $1, silos = $2, first_name = COALESCE($4, first_name), last_name = COALESCE($5, last_name) WHERE id = $3`,
+      [requestedSilo, requestedSilos, (user as any).id, firstName, lastName],
+    );
     if (assigned?.customRoleId) {
       // KS_SERVER_CUSTOM_ROLES
       await db.query(`UPDATE users SET custom_role_id = $1 WHERE id = $2`, [assigned.customRoleId, (user as any).id]);
