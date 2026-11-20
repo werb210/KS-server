@@ -36,7 +36,9 @@ const router = Router();
 const lenderTermSheetUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 
-router.get('/:publicId/required-documents', safeHandler(async (req: any, res: any) => {
+// SECURITY_SWEEP_2026_11_19 - was public: anyone with the id could read the file's document statuses and rejection
+// reasons. Nothing outside staff calls it.
+router.get('/:publicId/required-documents', requireAuth, safeHandler(async (req: any, res: any) => {
   const publicId = String(req.params.publicId ?? '').trim();
   const appRes = await pool.query<{ id: string; product_type: string; requested_amount: number | null; metadata: unknown | null; lender_product_id: string | null }>(
     `SELECT id, product_type, requested_amount, metadata, lender_product_id
