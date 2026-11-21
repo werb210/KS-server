@@ -323,6 +323,7 @@ export async function listUsers(req: Request, res: Response) {
       created_at,
       updated_at,
       last_login_at,
+      invited_at, -- KS_SERVER_TEAM_IMPORT_v1
       -- BF_SERVER_BLOCK_v104_USER_MGMT_FIX_v1
       disabled,
       active,

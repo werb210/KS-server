@@ -25,6 +25,11 @@ function fakeDb(sql: string, params: unknown[] = []) {
     users.push({ id: params[0], email: params[1], phone_number: params[2], role: params[3], first_name: params[4], last_name: params[5] });
     return ok([{ id: params[0] }]);
   }
+  // KS_SERVER_TEAM_IMPORT_v1 - KS-Ops emails these people next, so they are marked invited.
+  if (/^\s*UPDATE users SET invited_at/.test(sql)) {
+    for (const u of users) if ((params[0] as string[]).includes(String(u.id))) u.invited_at = "now";
+    return ok([]);
+  }
   if (/FROM licensee_plan WHERE id = 1/.test(sql)) return ok(plan ? [plan] : []);
   if (/to_regclass\('public.legal_holds'\)/.test(sql)) return ok([{ present: true }]);
   if (/FROM legal_holds WHERE released_at IS NULL/.test(sql)) return ok([{ n: holds }]);
@@ -101,6 +106,11 @@ describe("POST /api/provision/users", () => {
     expect(users.find((u) => u.email === "bea@acme.example")).toMatchObject({ phone_number: "+15875550101", role: "Staff", first_name: "Bea", last_name: "Broker" });
     expect(users.find((u) => u.email === "mo@acme.example")).toMatchObject({ role: "Marketing" });
     expect(users.find((u) => u.id === "owner-1")).toMatchObject({ role: "Admin" });
+    expect(users.find((u) => u.email === "bea@acme.example")?.invited_at).toBe("now"); // KS_SERVER_TEAM_IMPORT_v1
+    const held = await post({ users: [{ name: "Hal Held", email: "hal@acme.example", phone: "+15875550109", role: "Broker" }], invites_held: true });
+    expect(held.body.results[0].status).toBe("created");
+    expect(users.find((u) => u.email === "hal@acme.example")?.invited_at).toBeUndefined();
+    users = users.filter((u) => u.email !== "hal@acme.example");
     const again = await post(body);
     expect(again.body.results.map((r: Row) => r.status)).toEqual(["existing", "existing", "existing"]);
     expect(users).toHaveLength(3);
