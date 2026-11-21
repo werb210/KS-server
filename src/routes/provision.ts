@@ -191,6 +191,12 @@ router.post("/users", safeHandler(async (req: any, res) => {
   if (!opsAuthorized(req, res)) return;
   const r = await createTeamUsers(db(), req.body ?? {});
   if (!r.ok) return res.status(400).json({ ok: false, error: r.error });
+  // KS_SERVER_TEAM_IMPORT_v1 - KS-Ops emails these people their invite right after this call, unless the owner chose to
+  // set up first (invites_held), in which case Settings > Users shows them as not invited yet.
+  if (req.body?.invites_held !== true) {
+    const ids = r.results.filter((x) => x.status === "created" && x.user_id).map((x) => x.user_id);
+    if (ids.length) await db().query(`UPDATE users SET invited_at = COALESCE(invited_at, now()) WHERE id::text = ANY($1::text[])`, [ids]);
+  }
   const count = (s: string) => r.results.filter((x) => x.status === s).length;
   console.log(`[provision] team users: ${count("created")} created, ${count("existing")} already present, ${count("invalid")} refused (by ${String(req.headers["x-ks-ops-user"] ?? "ops").slice(0, 80)})`);
   return res.json(r);
