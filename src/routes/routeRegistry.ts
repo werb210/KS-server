@@ -174,6 +174,7 @@ import fraudRoutes from "./fraud.js"; // KS_SERVER_v9_FRAUD
 import kycRoutes from "./kyc.js"; // KS_SERVER_v22_KYC
 import clientKycRoutes from "./clientKyc.js"; // KS_SERVER_v22_KYC
 import forecastRoutes from "./forecast.js"; // KS_SERVER_v23_FORECAST
+import scoreboardRoutes from "./scoreboard.js"; // KS_SERVER_TV_SCOREBOARD_v1
 import retentionRoutes from "./retention.js"; // KS_SERVER_v14_RETENTION
 import activeContractsRoutes from "./activeContracts.js"; // KS_SERVER_ACTIVE_CONTRACTS
 import pgiRoutes from "./pgi.js"; // KS_SERVER_v11_PGI
@@ -452,6 +453,7 @@ export const API_ROUTE_MOUNTS: ApiRouteMount[] = [
   { path: "/fraud", router: fraudRoutes }, // KS_SERVER_v9_FRAUD - staff; individual checks gated per route
   { path: "/kyc", router: kycRoutes }, // KS_SERVER_v22_KYC - staff (growth+, id_verification), Admin settings, public vendor webhook
   { path: "/client/kyc", router: clientKycRoutes }, // KS_SERVER_v22_KYC - the applicant's own verifications (OTP phone)
+  { path: "/scoreboard", router: scoreboardRoutes }, // KS_SERVER_TV_SCOREBOARD_v1 - office TVs (screen token) and the Leaderboard report
   { path: "/forecast", router: forecastRoutes }, // KS_SERVER_v23_FORECAST - growth+ (forecasting); Admin all, others own
   { path: "/retention", router: retentionRoutes }, // KS_SERVER_v14_RETENTION - staff status; Admin holds and report
   { path: "/active-contracts", router: activeContractsRoutes }, // KS_SERVER_ACTIVE_CONTRACTS - contracts, renewals, compensation
